@@ -1,6 +1,6 @@
 # Easy Suite
 
-Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
+Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
 
 ## 版本
 
@@ -42,21 +42,12 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 详细说明见 [EasyNewMac README](easynewmac/README.md)。
 
-### [EasyNews](easynews/)
-
-用于新闻采集、关键词粗筛、语义判断校验、统计和 Excel 台账导出的纯 Python 工具。脚本负责准备全文分片、校验判断结果和导出，语义判断固定由当前 AI 会话完成。
-
-技术栈：Python 3.12、uv、Beautiful Soup、openpyxl。
-
-详细说明见 [EasyNews README](easynews/README.md)。
-
 ## 使用
 
-四个项目相互独立，所有命令都应在对应项目目录中执行：
+三个项目相互独立，所有命令都应在对应项目目录中执行：
 
 - EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本；部署凭据和初始账号均通过各自 README 规定的交互流程处理。
 - EasyNewMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyNewMac.app` 即可使用。
-- EasyNews 需要 Python 3.12 和 uv，使用 `uv sync --locked` 创建并使用项目专属环境。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
 
