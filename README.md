@@ -19,7 +19,7 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 为 Codex 与 Antigravity 打造的极简 Cloudflare Workers AI Jev 决策门禁集成工具。零第三方依赖自执行单文件，单 Token 模式，通过标准 MCP 协议将 Cloudflare 托管的 Jev 模型作为快速、低延迟、高确定性的快思考决策能力引入编码智能体。
 
-发布下载：[EasyJev v0.1.1 Release](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.1)
+发布下载：[EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.1)
 
 技术栈：JavaScript (Node.js 原生标准库)、MCP (Model Context Protocol)、Cloudflare Workers AI。
 
@@ -49,7 +49,7 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 用于从旧 Mac 扫描 Homebrew、Mac App Store 和普通应用，让用户搜索、筛选并选择需要迁移的项目，预览后导出新 Mac 安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境；扫描清单不上传，EasyNewMac 本身也不执行安装。
 
-发布下载：[EasyNewMac v0.3.1 Release](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-v0.3.1)
+发布下载：[EasyNewMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-v0.3.1)
 
 技术栈：AppleScript、Zsh、HTML、CSS、JavaScript。
 
