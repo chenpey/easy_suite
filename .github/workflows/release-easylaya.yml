@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -42,20 +43,37 @@ jobs:
       - name: Build standalone executable
         shell: bash
         run: |
-          mkdir -p dist_release
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            pyinstaller --onefile --collect-all laya easylaya/easylaya --name easylaya
-            cd dist
-            powershell Compress-Archive -Path easylaya.exe -DestinationPath ../dist_release/${{ matrix.asset_name }}.zip
-            cd ../dist_release
-            certutil -hashfile ${{ matrix.asset_name }}.zip SHA256 | findstr /v "hash" | findstr /v "CertUtil" | tr -d '\r\n ' > ${{ matrix.asset_name }}.zip.sha256
-          else
-            pyinstaller --onefile --collect-all laya easylaya/easylaya --name ${{ matrix.asset_name }}
-            cp dist/${{ matrix.asset_name }} dist_release/${{ matrix.asset_name }}
-            chmod +x dist_release/${{ matrix.asset_name }}
-            cd dist_release
-            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
-          fi
+          cp easylaya/easylaya easylaya/entry.py
+          pyinstaller --onefile --collect-all laya easylaya/entry.py --name "${{ matrix.asset_name }}"
+
+          python -c '
+          import os, sys, shutil, zipfile, hashlib
+
+          asset_name = "${{ matrix.asset_name }}"
+          archive_type = "${{ matrix.archive_type }}"
+          os.makedirs("dist_release", exist_ok=True)
+
+          if archive_type == "zip":
+              exe_src = os.path.join("dist", f"{asset_name}.exe")
+              zip_dest = os.path.join("dist_release", f"{asset_name}.zip")
+              with zipfile.ZipFile(zip_dest, "w", zipfile.ZIP_DEFLATED) as zf:
+                  zf.write(exe_src, arcname="easylaya.exe")
+              target_file = zip_dest
+          else:
+              bin_src = os.path.join("dist", asset_name)
+              bin_dest = os.path.join("dist_release", asset_name)
+              shutil.copy2(bin_src, bin_dest)
+              os.chmod(bin_dest, 0o755)
+              target_file = bin_dest
+
+          with open(target_file, "rb") as f:
+              digest = hashlib.sha256(f.read()).hexdigest()
+
+          with open(f"{target_file}.sha256", "w", encoding="utf-8") as f:
+              f.write(f"{digest}  {os.path.basename(target_file)}\n")
+
+          print(f"Artifact created: {target_file} with SHA256 {digest}")
+          '
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
