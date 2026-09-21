@@ -29,10 +29,10 @@ const projects = {
     readmePath: 'easynewmac/README.md',
     versionPath: 'easynewmac/VERSION',
   },
-  easyjev: {
-    title: 'EasyJev',
-    directory: 'easyjev',
-    readmePath: 'easyjev/README.md',
+  easylaya: {
+    title: 'EasyLaya',
+    directory: 'easylaya',
+    readmePath: 'easylaya/README.md',
   },
 };
 
@@ -41,7 +41,7 @@ function fail(message) {
 }
 
 function validateProject(name) {
-  if (!projects[name]) fail(`Unknown project "${name}". Use easynote, easydrop, easynewmac or easyjev.`);
+  if (!projects[name]) fail(`Unknown project "${name}". Use easynote, easydrop, easynewmac or easylaya.`);
   return projects[name];
 }
 
@@ -95,7 +95,7 @@ function rootReadmeBlock(versions) {
     '| 项目 | 当前版本 |',
     '| --- | --- |',
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
-    `| [EasyJev](easyjev/) | \`${versions.easyjev}\` |`,
+    `| [EasyLaya](easylaya/) | \`${versions.easylaya}\` |`,
     `| [EasyNewMac](easynewmac/) | \`${versions.easynewmac}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     '<!-- versions:end -->',

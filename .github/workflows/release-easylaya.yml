@@ -1,0 +1,111 @@
+name: Release EasyLaya
+
+on:
+  push:
+    tags:
+      - "easylaya-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            asset_name: easylaya-darwin-arm64
+            archive_type: binary
+          - os: ubuntu-latest
+            asset_name: easylaya-linux-x64
+            archive_type: binary
+          - os: windows-latest
+            asset_name: easylaya-windows-x64
+            archive_type: zip
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r easylaya/requirements.txt
+          pip install pyinstaller
+
+      - name: Build standalone executable
+        shell: bash
+        run: |
+          mkdir -p dist_release
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            pyinstaller --onefile --collect-all laya easylaya/easylaya --name easylaya
+            cd dist
+            powershell Compress-Archive -Path easylaya.exe -DestinationPath ../dist_release/${{ matrix.asset_name }}.zip
+            cd ../dist_release
+            certutil -hashfile ${{ matrix.asset_name }}.zip SHA256 | findstr /v "hash" | findstr /v "CertUtil" | tr -d '\r\n ' > ${{ matrix.asset_name }}.zip.sha256
+          else
+            pyinstaller --onefile --collect-all laya easylaya/easylaya --name ${{ matrix.asset_name }}
+            cp dist/${{ matrix.asset_name }} dist_release/${{ matrix.asset_name }}
+            chmod +x dist_release/${{ matrix.asset_name }}
+            cd dist_release
+            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist_release/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate version
+        run: |
+          tag_version="${GITHUB_REF_NAME#easylaya-v}"
+          node -e "
+            const versions = JSON.parse(require('fs').readFileSync('versions.json', 'utf8'));
+            if (versions.easylaya !== '$tag_version') {
+              console.error('Tag version $tag_version does not match versions.json: ' + versions.easylaya);
+              process.exit(1);
+            }
+          "
+          node scripts/version.mjs check
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#easylaya-v}"
+          files=(release_assets/*)
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "${files[@]}" \
+              --verify-tag \
+              --title "EasyLaya v${version}" \
+              --notes-file easylaya/RELEASE_NOTES.md
+          fi

@@ -1,0 +1,474 @@
+#!/usr/bin/env python3
+"""
+EasyLaya - Single-file CLI & MCP Server for Laya System 1 Decision Engine.
+Runs locally, 100% self-hosted, 0 API costs, 0 token consumption.
+"""
+
+import os
+import sys
+import json
+import shutil
+import platform
+import subprocess
+from pathlib import Path
+
+VERSION = "0.1.0"
+
+# Directories
+HOME_DIR = Path.home()
+HIDDEN_INSTALL_DIR = HOME_DIR / ".easylaya"
+IS_WINDOWS = platform.system() == "Windows"
+BIN_NAME = "easylaya.exe" if IS_WINDOWS else "easylaya"
+HIDDEN_BIN_PATH = HIDDEN_INSTALL_DIR / BIN_NAME
+CONFIG_PATH = HIDDEN_INSTALL_DIR / "config.json"
+
+# In-memory router instance
+_router_instance = None
+
+
+def get_router(preload: bool = True):
+    global _router_instance
+    if _router_instance is None:
+        try:
+            from laya import Router
+            _router_instance = Router(preload=preload)
+        except ImportError:
+            sys.stderr.write(
+                "Error: The 'laya' package is not installed in the current Python environment.\n"
+                "Please run 'pip install laya' or './easylaya --setup'.\n"
+            )
+            sys.exit(1)
+    return _router_instance
+
+
+def run_prediction(state, questions, model: str = None):
+    router = get_router(preload=True)
+    kwargs = {}
+    if model:
+        kwargs["model"] = model
+    return router.predict(state, questions, **kwargs)
+
+
+# ==========================================
+# Config Management
+# ==========================================
+
+def load_config():
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_config(data: dict):
+    HIDDEN_INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    try:
+        os.chmod(CONFIG_PATH, 0o600)
+    except Exception:
+        pass
+
+
+# ==========================================
+# CLI & Setup Mode
+# ==========================================
+
+def run_setup():
+    print("\n=========================================")
+    print("       EasyLaya 极简自托管配置引导        ")
+    print("=========================================\n")
+    print("Laya 是完全本地自托管的 System 1 决策引擎（Apache 2.0 协议）。")
+    print("无需任何 API Token，零费用，零外发数据，单前向传递 ~33ms 决策。\n")
+
+    # 1. Ensure directory
+    HIDDEN_INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 2. Copy binary to ~/.easylaya/ if needed
+    current_script = Path(sys.argv[0]).resolve()
+    target_bin = HIDDEN_BIN_PATH
+
+    if current_script != target_bin:
+        try:
+            shutil.copy2(current_script, target_bin)
+            try:
+                os.chmod(target_bin, 0o755)
+            except Exception:
+                pass
+            print(f"📦 已自动安装至隐藏目录: {target_bin}")
+            active_bin = str(target_bin)
+        except Exception as e:
+            print(f"⚠️ 自动安装至 ~/.easylaya 失败: {e}")
+            active_bin = str(current_script)
+    else:
+        active_bin = str(target_bin)
+
+    # 3. Pre-cache / test model
+    print("⏳ 正在初始化并预热 Laya 决策模型（首次运行会自动下载模型权重）...")
+    try:
+        router = get_router(preload=True)
+        res = router.predict(
+            "System operational verification.",
+            {
+                "is_operational": {
+                    "type": "noul",
+                    "instructions": "Is this system operational?",
+                }
+            },
+        )
+        print("✅ 模型加载与预热成功！测试推理完成。")
+    except Exception as e:
+        print(f"❌ 模型预热失败: {e}")
+        sys.exit(1)
+
+    # 4. Save config
+    save_config({
+        "version": VERSION,
+        "default_model": "auto",
+    })
+    print(f"✅ 配置已写入: {CONFIG_PATH}")
+
+    # 5. Codex CLI integration
+    codex_bin = shutil.which("codex")
+    if codex_bin:
+        print("\n检测到本机已安装 Codex CLI，正在自动注册 MCP Server...")
+        try:
+            subprocess.run(
+                ["codex", "mcp", "add", "easylaya", "--", active_bin],
+                check=True,
+            )
+            print("🎉 已成功自动注册到 Codex！")
+        except Exception:
+            print("⚠️ 自动注册失败，可手动执行以下命令接入：")
+            print(f"   codex mcp add easylaya -- {active_bin}")
+    else:
+        print("\n💡 接入 Codex CLI 方法：")
+        print(f"   codex mcp add easylaya -- {active_bin}")
+
+    # 6. Antigravity integration
+    print("\n💡 接入 Antigravity 方法：")
+    print("   在 mcp_config.json 的 mcpServers 中添加：")
+    print(f'   "easylaya": {{ "command": "{active_bin}" }}')
+
+    if current_script != target_bin:
+        print("\n✨ 提示：当前下载的安装文件现在可以安全删除了，Codex 将永久调用隐藏目录下的服务。")
+
+
+def run_test():
+    print("⏳ 正在调用本地 Laya 决策模型执行测试推理...")
+    try:
+        res = run_prediction(
+            "Refactor database connection pool to handle up to 50 concurrent queries safely.",
+            {
+                "is_refactor": {
+                    "type": "noul",
+                    "instructions": "Does this involve code refactoring?",
+                },
+                "risk_level": {
+                    "type": "choice",
+                    "instructions": "What is the risk level of this task?",
+                    "criteria": {
+                        "low": "Minor stylistic or documentation change",
+                        "medium": "Database query or optimization change",
+                        "high": "Destructive migration or schema drop",
+                    },
+                },
+            },
+        )
+        print("✅ 测试成功，Laya 返回结果：")
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+    except Exception as e:
+        print(f"❌ 测试失败: {e}")
+        sys.exit(1)
+
+
+# ==========================================
+# MCP Server (JSON-RPC 2.0 over stdio)
+# ==========================================
+
+MCP_TOOLS = [
+    {
+        "name": "laya_eval",
+        "description": "Fast structured decision making using local Laya System 1 decision engine. Evaluates state against typed questions (noul/boolean, choice, score) with calibrated confidence in ~33ms.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "state": {
+                    "type": ["string", "object", "array"],
+                    "description": "The input text, code snippet, or JSON state to evaluate.",
+                },
+                "questions": {
+                    "type": "object",
+                    "description": "Map of question objects. Each question defines type ('noul', 'choice', 'score'), instructions, and criteria.",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Optional model override: 'english', 'multilingual', or 'typed-decisions'. Defaults to auto-routing.",
+                },
+            },
+            "required": ["state", "questions"],
+        },
+    },
+    {
+        "name": "laya_label",
+        "description": "Classify or label text or records into categories using Laya decision engine.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "The text, ticket, or record to classify.",
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of possible labels/categories to choose from.",
+                },
+                "instructions": {
+                    "type": "string",
+                    "description": "Optional classification instructions or guidelines.",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Optional model override.",
+                },
+            },
+            "required": ["text", "labels"],
+        },
+    },
+    {
+        "name": "laya_relevance",
+        "description": "Evaluate relevance between an objective and candidate items or code snippets using Laya.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "objective": {
+                    "type": "string",
+                    "description": "The goal, question, or search target.",
+                },
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["id", "text"],
+                    },
+                    "description": "Candidate excerpts or code snippets to evaluate for relevance.",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Optional model override.",
+                },
+            },
+            "required": ["objective", "candidates"],
+        },
+    },
+]
+
+
+def handle_mcp_tool_call(name: str, args: dict):
+    if name == "laya_eval":
+        state = args.get("state")
+        questions = args.get("questions")
+        model = args.get("model")
+        if state is None or not questions:
+            raise ValueError("Missing required arguments: state and questions")
+        return run_prediction(state, questions, model=model)
+
+    if name == "laya_label":
+        text = args.get("text")
+        labels = args.get("labels")
+        instructions = args.get("instructions", "Select the most appropriate label.")
+        model = args.get("model")
+        if not text or not isinstance(labels, list) or len(labels) == 0:
+            raise ValueError("Missing required arguments: text and labels (non-empty list)")
+
+        criteria = {label: f"Classify as {label}" for label in labels}
+        questions = {
+            "label": {
+                "type": "choice",
+                "instructions": instructions,
+                "criteria": criteria,
+            }
+        }
+        return run_prediction(text, questions, model=model)
+
+    if name == "laya_relevance":
+        objective = args.get("objective")
+        candidates = args.get("candidates")
+        model = args.get("model")
+        if not objective or not isinstance(candidates, list):
+            raise ValueError("Missing required arguments: objective and candidates (list)")
+
+        results = []
+        for candidate in candidates:
+            cand_id = candidate.get("id", "")
+            cand_text = candidate.get("text", "")
+            state = f"Objective: {objective}\nCandidate [{cand_id}]:\n{cand_text}"
+            questions = {
+                "is_relevant": {
+                    "type": "noul",
+                    "instructions": "Is this candidate directly relevant and useful for achieving the objective?",
+                    "criteria": {
+                        "true": "Directly relevant and useful",
+                        "false": "Not relevant or noise",
+                    },
+                }
+            }
+            res = run_prediction(state, questions, model=model)
+            results.append({
+                "id": cand_id,
+                "decision": res,
+            })
+        return results
+
+    raise ValueError(f"Unknown tool: {name}")
+
+
+def start_mcp_server():
+    def send_response(response: dict):
+        sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+    for line in sys.stdin:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+
+        try:
+            request = json.loads(trimmed)
+        except Exception:
+            send_response({
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": "Parse error"},
+            })
+            continue
+
+        req_id = request.get("id")
+        method = request.get("method")
+        params = request.get("params", {})
+
+        # Notifications (no id)
+        if req_id is None:
+            if method == "notifications/initialized":
+                pass
+            continue
+
+        try:
+            if method == "initialize":
+                send_response({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {},
+                        },
+                        "serverInfo": {
+                            "name": "easylaya",
+                            "version": VERSION,
+                        },
+                    },
+                })
+                continue
+
+            if method == "ping":
+                send_response({"jsonrpc": "2.0", "id": req_id, "result": {}})
+                continue
+
+            if method == "tools/list":
+                send_response({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "tools": MCP_TOOLS,
+                    },
+                })
+                continue
+
+            if method == "tools/call":
+                tool_name = params.get("name")
+                tool_args = params.get("arguments", {})
+                tool_result = handle_mcp_tool_call(tool_name, tool_args)
+                send_response({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(tool_result, ensure_ascii=False, indent=2),
+                            }
+                        ],
+                        "isError": False,
+                    },
+                })
+                continue
+
+            send_response({
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32601,
+                    "message": f"Method not found: {method}",
+                },
+            })
+        except Exception as e:
+            sys.stderr.write(f"[EasyLaya Error] {method}: {e}\n")
+            sys.stderr.flush()
+            send_response({
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Error executing {params.get('name') or method}: {e}",
+                        }
+                    ],
+                    "isError": True,
+                },
+            })
+
+
+# ==========================================
+# Main Dispatcher
+# ==========================================
+
+def main():
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+
+    if arg in ("--setup", "setup"):
+        run_setup()
+        return
+
+    if arg in ("test", "--test"):
+        run_test()
+        return
+
+    if arg in ("--help", "-h"):
+        print("Usage:")
+        print("  ./easylaya --setup    初始化配置并安装至 ~/.easylaya/")
+        print("  ./easylaya test       测试本地 Laya 模型推理连通性")
+        print("  ./easylaya            启动 MCP Server (stdio 模式，供 Codex/Antigravity 调用)")
+        return
+
+    # If stdin is not a TTY or explicitly requested as mcp
+    if not sys.stdin.isatty() or arg == "mcp":
+        start_mcp_server()
+    else:
+        # Interactive terminal without arguments: show status or prompt setup
+        print(f"EasyLaya v{VERSION} - Local System 1 Decision Engine (MCP Server & CLI)")
+        print("执行 './easylaya --setup' 可完成初始化安装与 Codex 注册。")
+        print("执行 './easylaya test' 可测试本地推理能力。")
+
+
+if __name__ == "__main__":
+    main()

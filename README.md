@@ -8,22 +8,22 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.1.5` |
-| [EasyJev](easyjev/) | `0.1.4` |
+| [EasyLaya](easylaya/) | `0.1.0` |
 | [EasyNewMac](easynewmac/) | `0.3.1` |
 | [EasyNote](easynote/) | `0.3.2` |
 <!-- versions:end -->
 
 ## 项目目录
 
-### [EasyJev](easyjev/)
+### [EasyLaya](easylaya/)
 
-为 Codex 与 Antigravity 打造的极简 Cloudflare Workers AI Jev 决策门禁集成工具。零第三方依赖自执行单文件，单 Token 模式，通过标准 MCP 协议将 Cloudflare 托管的 Jev 模型作为快速、低延迟、高确定性的快思考决策能力引入编码智能体。
+为 Codex 与 Antigravity 打造的极简本地 System 1 决策引擎集成工具。基于开源 [NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)（Apache 2.0），通过标准 MCP 协议在本地运行非自回归决策模型，单前向传递 ~33ms，0 API 费用，0 数据外发，为智能体提供极速、高确定性的快思考决策能力。
 
-发布下载：[EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.4)
+发布下载：[EasyLaya Latest](https://github.com/chenpey/easy_suite/releases/tag/easylaya-v0.1.0)
 
-技术栈：JavaScript (Node.js 原生标准库)、MCP (Model Context Protocol)、Cloudflare Workers AI。
+技术栈：Python / PyTorch / Transformers / Laya、MCP (Model Context Protocol)。提供 macOS ARM64、Linux x64、Windows x64 独立可执行程序。
 
-详细说明见 [EasyJev README](easyjev/README.md)。
+详细说明见 [EasyLaya README](easylaya/README.md)。
 
 ### [EasyDrop](easydrop/)
 
@@ -59,7 +59,8 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 四个项目相互独立，所有命令都应在对应项目目录中执行：
 
-- EasyJev、EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本；EasyJev 无需安装依赖，直接通过 `./easyjev --setup` 完成配置。
+- EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
+- EasyLaya 提供独立单文件程序（macOS ARM64 / Linux x64 / Windows x64），亦可通过 Python 3.10+ 直接运行，通过 `./easylaya --setup` 完成配置。
 - EasyNewMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyNewMac.app` 即可使用。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
