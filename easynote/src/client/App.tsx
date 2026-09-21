@@ -1085,10 +1085,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <IconButton label="打开导航菜单" className="icon-button mobile-menu-trigger" onClick={() => setMobileNavigation(true)}><Menu size={21} /></IconButton>
           {!sidebar && <IconButton label="展开侧栏" onClick={() => setSidebar(true)}><MoreHorizontal size={18} /></IconButton>}
           <h1>{activeView}</h1>
-          <IconButton label={mobileSearch || book.query ? '关闭搜索' : '搜索笔记'} className="icon-button mobile-search-trigger"
-            aria-pressed={mobileSearch || !!book.query} onClick={toggleMobileSearch}>
-            {mobileSearch || book.query ? <X size={20} /> : <Search size={20} />}
-          </IconButton>
+          {!(mobileSearch || book.query) && (
+            <IconButton label="搜索笔记" className="icon-button mobile-search-trigger" onClick={toggleMobileSearch}>
+              <Search size={20} />
+            </IconButton>
+          )}
           <IconButton label="快速跳转" className="icon-button list-command-action" onClick={() => { setCommandQuery(''); setCommandPalette(true); }}><Command size={16} /></IconButton>
           {book.view !== 'trash' && <IconButton label={selectionMode ? '退出批量选择' : '批量选择'} className="icon-button list-bulk-action" aria-pressed={selectionMode} onClick={() => {
             if (selectionMode) exitSelectionMode();
@@ -1147,7 +1148,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               onClick={(e) => {
                 e.stopPropagation();
                 book.setQuery('');
-                searchInput.current?.focus();
+                if (searchInput.current) {
+                  searchInput.current.value = '';
+                  searchInput.current.focus();
+                }
               }}
             >
               <X size={13} />

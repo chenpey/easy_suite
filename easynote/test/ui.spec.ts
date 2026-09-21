@@ -1123,7 +1123,8 @@ test('pinning reorders the mobile list immediately and search toggles closed', a
   await page.getByRole('button', { name: '返回笔记列表' }).click();
   await expect(rows.filter({ hasText: originalSecond }).locator('.note-row-title svg')).toHaveCount(0);
 
-  await page.getByRole('button', { name: '关闭搜索', exact: true }).click();
+  await page.getByRole('button', { name: '清空搜索', exact: true }).click();
+  await search.blur();
   await expect(search).toBeHidden();
   await expect(search).toHaveValue('');
 });
