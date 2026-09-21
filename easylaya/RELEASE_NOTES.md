@@ -8,4 +8,4 @@
   - `laya_eval`：结构化快思考裁决（支持 `choice`、`score`、`noul`）。
   - `laya_label`：低延迟文本/记录分类打标。
   - `laya_relevance`：目标相关性初筛。
-- **一键配置与安装**：`easylaya --setup` 自动创建并隐藏安装至 `~/.easylaya/`，自动探测并注册至 Codex CLI。
+- **一键配置与安装**：`easylaya --setup` 自动创建并隐藏安装（macOS/Linux 为 `~/.easylaya/`，Windows 为 `%USERPROFILE%\.easylaya\`），自动探测并注册至 Codex CLI。

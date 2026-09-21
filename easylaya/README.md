@@ -24,10 +24,10 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 
 > [!TIP]
 > **全自动安装与隐藏（无需手动创建任何目录）**：
-> 运行 `./easylaya --setup` 时，程序会**自动在用户 Home 目录下创建隐藏目录 `~/.easylaya/`**，并将自身安装至该目录中：
-> - 服务程序本体：`~/.easylaya/easylaya`（Windows 为 `~/.easylaya/easylaya.exe`）
-> - 本地配置文件：`~/.easylaya/config.json`
-> - Codex 会自动注册该隐藏路径。
+> 运行 `./easylaya --setup` 时，程序会自动在用户主目录下创建隐藏目录：
+> - **macOS / Linux**：`~/.easylaya/easylaya`，配置文件 `~/.easylaya/config.json`
+> - **Windows**：`%USERPROFILE%\.easylaya\easylaya.exe`（自动调用 Windows 系统 API 为目录添加隐藏属性），配置文件 `%USERPROFILE%\.easylaya\config.json`
+> - Codex CLI 会自动检测并完成注册。
 > - **运行 `--setup` 完成后，当前下载的临时文件可以随时删除**，服务将长久稳定运行，绝不污染个人主目录。
 
 ### 方式 1：直接下载 Release 独立文件（最简，推荐）
