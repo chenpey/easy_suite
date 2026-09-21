@@ -12,7 +12,7 @@ import platform
 import subprocess
 from pathlib import Path
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 # Directories
 HOME_DIR = Path.home()
@@ -26,12 +26,25 @@ CONFIG_PATH = HIDDEN_INSTALL_DIR / "config.json"
 _router_instance = None
 
 
+def get_device():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return "mps"
+    except Exception:
+        pass
+    return "cpu"
+
+
 def get_router(preload: bool = True):
     global _router_instance
     if _router_instance is None:
         try:
             from laya import Router
-            _router_instance = Router(preload=preload)
+            device = get_device()
+            _router_instance = Router(preload=preload, device=device)
         except ImportError:
             sys.stderr.write(
                 "Error: The 'laya' package is not installed in the current Python environment.\n"

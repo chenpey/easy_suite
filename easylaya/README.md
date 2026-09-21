@@ -1,8 +1,8 @@
 # EasyLaya
 
-当前版本：`0.1.1`
+当前版本：`0.1.2`
 
-[EasyLaya Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easylaya-v0.1.1)
+[EasyLaya Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easylaya-v0.1.2)
 
 EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 快速决策引擎** 集成工具。
 
@@ -37,7 +37,7 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 #### macOS (Apple Silicon ARM64)
 ```bash
 # 1. 命令行直接拉取（天然无 macOS Gatekeeper 隔离属性）
-curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-darwin-arm64
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-darwin-arm64
 
 # 2. 赋予执行权限并运行引导（自动安装至 ~/.easylaya/ 并预热模型）
 chmod +x easylaya-darwin-arm64
@@ -51,7 +51,7 @@ rm easylaya-darwin-arm64
 #### Linux (x64)
 ```bash
 # 1. 下载独立二进制文件
-curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-linux-x64
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-linux-x64
 
 # 2. 赋予执行权限并运行引导（自动安装至 ~/.easylaya/ 并预热模型）
 chmod +x easylaya-linux-x64
@@ -64,7 +64,7 @@ rm easylaya-linux-x64
 #### Windows (x64, PowerShell)
 ```powershell
 # 1. 使用 Windows 内置 curl.exe 拉取（免受浏览器网络标记 SmartScreen 拦截）
-curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-windows-x64.zip
+curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-windows-x64.zip
 
 # 2. 解压缩并运行引导（自动安装至 %USERPROFILE%\.easylaya\ 并添加隐藏属性）
 Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .

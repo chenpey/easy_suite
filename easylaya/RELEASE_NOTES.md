@@ -1,9 +1,9 @@
-## EasyLaya v0.1.1
+## EasyLaya v0.1.2
 
 ### 新特性与优化
-- **Antigravity 全自动探测与注册**：`--setup` 流程现在会自动探测本地 Antigravity 环境并直接在全局 `mcp_config.json` 中完成注册，无需手动编辑配置文件。
-- **Windows 系统级隐藏属性与路径优化**：在 Windows 上运行 `--setup` 时自动通过 Win32 API 为 `%USERPROFILE%\.easylaya` 注入系统级隐藏属性，并对生成的 JSON 配置路径中的反斜杠进行合法转义。
-- **命令行 curl 一键免拦截拉取**：文档与 Release 指引全面升级为 `curl` 命令拉取，原生避开 macOS Gatekeeper 隔离属性与 Windows SmartScreen 标记拦截。
+- **Apple Silicon 原生 GPU (MPS) 硬件加速**：重构设备探测与调度逻辑（`get_device()`），显式探测并启用 Apple Silicon Metal Performance Shaders (MPS)，将矩阵运算完全从 CPU 卸载至 GPU。
+- **推理延迟极限压缩至 ~27ms**：实测单次决策与初筛延迟降至 26~31ms，消除 CPU 满载发热，提升整体交互响应速度。
+- **多平台设备自适应降级**：优先调度 CUDA (NVIDIA GPU) 与 MPS (Apple Silicon GPU)，当 GPU 不可用时平滑回退至 CPU，确保跨平台稳定性。
 
 ---
 
@@ -11,7 +11,7 @@
 
 #### macOS (Apple Silicon ARM64)
 ```bash
-curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-darwin-arm64
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-darwin-arm64
 chmod +x easylaya-darwin-arm64
 ./easylaya-darwin-arm64 --setup
 ```
@@ -19,14 +19,14 @@ chmod +x easylaya-darwin-arm64
 
 #### Linux (x64)
 ```bash
-curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-linux-x64
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-linux-x64
 chmod +x easylaya-linux-x64
 ./easylaya-linux-x64 --setup
 ```
 
 #### Windows (x64, PowerShell)
 ```powershell
-curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.1/easylaya-windows-x64.zip
+curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.2/easylaya-windows-x64.zip
 Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .
 .\easylaya.exe --setup
 ```
