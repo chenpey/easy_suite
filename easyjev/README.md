@@ -1,6 +1,6 @@
 # EasyJev
 
-当前版本：`0.1.0`
+当前版本：`0.1.1`
 
 EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Workers AI Jev 决策门禁** 集成工具。
 
