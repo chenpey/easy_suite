@@ -40,8 +40,9 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 
 #### macOS / Linux 使用指引：
 ```bash
-# 1. 赋予执行权限 (以 macOS 为例)
+# 1. 赋予执行权限并移除 macOS 隔离属性 (浏览器下载的文件会被 Gatekeeper 拦截)
 chmod +x easylaya-darwin-arm64
+xattr -d com.apple.quarantine easylaya-darwin-arm64 2>/dev/null || true
 
 # 2. 运行交互式引导（自动完成安装并隐藏至 ~/.easylaya/，预热模型）
 ./easylaya-darwin-arm64 --setup
@@ -229,6 +230,8 @@ Laya 在底层已实现自动设备探测（`MPS` -> `CUDA` -> `CPU`）：
   * 首次运行会自动从 Hugging Face 下载预训练模型权重（约 300MB ~ 600MB），后续所有运行均为纯本地毫秒级推理，不再需要联网。
 * **Q: Windows 下如何配置？**
   * 下载 `easylaya-windows-x64.zip` 解压后，在 PowerShell 中执行 `.\easylaya.exe --setup` 即可。
+* **Q: macOS 提示“无法验证是否包含恶意软件”或“已阻止打开”？**
+  * 这是 macOS Gatekeeper 对从浏览器下载未签名文件的安全机制。在终端运行 `xattr -d com.apple.quarantine easylaya-darwin-arm64` 即可解除限制；或在 macOS「系统设置」->「隐私与安全性」中点击「仍要打开」。
 * **Q: 是否需要 GPU 支持？**
   * 不需要。Laya 为轻量级非自回归模型，在现代 CPU（尤其是 Apple Silicon 或多核 x64）上单次推理通常在 30~50ms 内即可完成。
 

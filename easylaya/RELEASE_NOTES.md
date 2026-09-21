@@ -19,6 +19,7 @@
 - 资产：`easylaya-darwin-arm64`（原生支持 Metal / MPS GPU 加速）
 ```bash
 chmod +x easylaya-darwin-arm64
+xattr -d com.apple.quarantine easylaya-darwin-arm64 2>/dev/null || true
 ./easylaya-darwin-arm64 --setup
 ```
 
