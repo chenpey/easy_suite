@@ -11,7 +11,7 @@
 - **跨平台一键配置与安装**：
   - **macOS / Linux**：`./easylaya --setup` 自动安装至 `~/.easylaya/easylaya`。
   - **Windows**：`.\easylaya.exe --setup` 自动安装至 `%USERPROFILE%\.easylaya\easylaya.exe` 并通过 Windows API 添加目录隐藏属性。
-  - 自动探测并注册至 Codex CLI，并输出 Antigravity 配置。
+  - 自动探测并同时注册至 Codex CLI 与 Antigravity。
 
 ### 平台一键下载与运行指引（推荐）
 

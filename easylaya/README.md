@@ -27,7 +27,7 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 > 运行 `./easylaya --setup` 时，程序会自动在用户主目录下创建隐藏目录：
 > - **macOS / Linux**：`~/.easylaya/easylaya`，配置文件 `~/.easylaya/config.json`
 > - **Windows**：`%USERPROFILE%\.easylaya\easylaya.exe`（自动调用 Windows 系统 API 为目录添加隐藏属性），配置文件 `%USERPROFILE%\.easylaya\config.json`
-> - Codex CLI 会自动检测并完成注册。
+> - Codex CLI 与 Antigravity 均会自动检测并完成注册。
 > - **运行 `--setup` 完成后，当前下载的临时文件可以随时删除**，服务将长久稳定运行，绝不污染个人主目录。
 
 ### 方式 1：命令行一键下载并配置（最简，推荐）
@@ -90,6 +90,9 @@ pip install -r requirements.txt
 ---
 
 ## Codex 与 Antigravity 接入
+
+> [!TIP]
+> 运行 `./easylaya --setup` 时，程序会**自动探测本机环境并同时完成 Codex CLI 与 Antigravity 的自动注册**，通常无需任何手动操作。若需核对或手动配置，可参考以下方式：
 
 ### 1. 接入 Codex
 

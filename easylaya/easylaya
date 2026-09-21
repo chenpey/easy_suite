@@ -169,14 +169,43 @@ def run_setup():
         print("\n💡 接入 Codex CLI 方法：")
         print(f"   codex mcp add easylaya -- {active_bin}")
 
-    # 6. Antigravity integration
-    print("\n💡 接入 Antigravity 方法：")
-    print("   在 mcp_config.json 的 mcpServers 中添加：")
-    escaped_bin = json.dumps(active_bin)
-    print(f'   "easylaya": {{ "command": {escaped_bin} }}')
+    # 6. Antigravity integration & auto-registration
+    antigravity_config_dir = HOME_DIR / ".gemini" / "config"
+    antigravity_mcp_path = antigravity_config_dir / "mcp_config.json"
+    antigravity_found = (HOME_DIR / ".gemini").exists() or shutil.which("agy") is not None
+
+    if antigravity_found:
+        print("\n检测到本机已安装 Antigravity，正在自动注册 MCP Server...")
+        try:
+            antigravity_config_dir.mkdir(parents=True, exist_ok=True)
+            mcp_data = {}
+            if antigravity_mcp_path.exists() and antigravity_mcp_path.stat().st_size > 0:
+                try:
+                    with open(antigravity_mcp_path, "r", encoding="utf-8") as f:
+                        mcp_data = json.load(f)
+                except Exception:
+                    mcp_data = {}
+            if "mcpServers" not in mcp_data or not isinstance(mcp_data["mcpServers"], dict):
+                mcp_data["mcpServers"] = {}
+            mcp_data["mcpServers"]["easylaya"] = {
+                "command": active_bin,
+            }
+            with open(antigravity_mcp_path, "w", encoding="utf-8") as f:
+                json.dump(mcp_data, f, indent=2, ensure_ascii=False)
+            print(f"🎉 已成功自动注册到 Antigravity ({antigravity_mcp_path})！")
+        except Exception as e:
+            print(f"⚠️ 自动注册到 Antigravity 失败: {e}")
+            print("   可在 mcp_config.json 的 mcpServers 中手动添加：")
+            escaped_bin = json.dumps(active_bin)
+            print(f'   "easylaya": {{ "command": {escaped_bin} }}')
+    else:
+        print("\n💡 接入 Antigravity 方法：")
+        print(f"   在 {antigravity_mcp_path} 的 mcpServers 中添加：")
+        escaped_bin = json.dumps(active_bin)
+        print(f'   "easylaya": {{ "command": {escaped_bin} }}')
 
     if current_script != target_bin:
-        print(f"\n✨ 提示：当前下载的安装文件现在可以安全删除了，Codex 将永久调用 {display_dir} 目录下的服务。")
+        print(f"\n✨ 提示：当前下载的安装文件现在可以安全删除了，AI 助手将永久调用 {display_dir} 目录下的服务。")
 
 
 def run_test():
