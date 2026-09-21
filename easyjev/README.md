@@ -1,6 +1,6 @@
 # EasyJev
 
-当前版本：`0.1.1`
+当前版本：`0.1.1` · [下载 Release 单文件](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.1) · [全部 Releases](https://github.com/chenpey/easy_suite/releases)
 
 EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Workers AI Jev 决策门禁** 集成工具。
 
@@ -44,7 +44,19 @@ EasyJev 全程仅需 1 个 **Cloudflare User API Token**，权限为严格受限
 
 ## 快速配置
 
-在项目目录下执行交互式引导命令：
+### 方式 1：直接下载 Release 单文件（最简，推荐）
+
+无需克隆整个仓库，直接从 [EasyJev v0.1.1 Release](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.1) 下载 `easyjev` 可执行单文件：
+
+```bash
+# 赋予执行权限
+chmod +x easyjev
+
+# 运行交互式引导
+./easyjev --setup
+```
+
+### 方式 2：克隆仓库使用
 
 ```bash
 cd easyjev
