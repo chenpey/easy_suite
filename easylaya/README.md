@@ -30,36 +30,47 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 > - Codex CLI 会自动检测并完成注册。
 > - **运行 `--setup` 完成后，当前下载的临时文件可以随时删除**，服务将长久稳定运行，绝不污染个人主目录。
 
-### 方式 1：直接下载 Release 独立文件（最简，推荐）
+### 方式 1：命令行一键下载并配置（最简，推荐）
 
-根据操作系统下载对应的独立可执行程序（内置所有依赖，无需配置 Python 环境）：
+独立可执行文件内置所有运行依赖（无需预装 Python、PyTorch 或任何库），在终端中执行对应系统的命令即可一键拉取并安装：
 
-* **macOS (Apple Silicon ARM64)**: `easylaya-darwin-arm64`
-* **Linux (x64)**: `easylaya-linux-x64`
-* **Windows (x64)**: `easylaya-windows-x64.zip`
-
-#### macOS / Linux 使用指引：
+#### macOS (Apple Silicon ARM64)
 ```bash
-# 1. 赋予执行权限并移除 macOS 隔离属性 (浏览器下载的文件会被 Gatekeeper 拦截)
-chmod +x easylaya-darwin-arm64
-xattr -d com.apple.quarantine easylaya-darwin-arm64 2>/dev/null || true
+# 1. 命令行直接拉取（天然无 macOS Gatekeeper 隔离属性）
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-darwin-arm64
 
-# 2. 运行交互式引导（自动完成安装并隐藏至 ~/.easylaya/，预热模型）
+# 2. 赋予执行权限并运行引导（自动安装至 ~/.easylaya/ 并预热模型）
+chmod +x easylaya-darwin-arm64
 ./easylaya-darwin-arm64 --setup
 
-# 3. （可选）删除当前下载的安装文件，Codex 将永久调用 ~/.easylaya/easylaya
+# 3. （可选）删除当前目录的安装文件，Codex 将永久调用 ~/.easylaya/easylaya
 rm easylaya-darwin-arm64
 ```
+*(注：若通过浏览器下载，macOS 会附加隔离属性，执行前运行 `xattr -d com.apple.quarantine easylaya-darwin-arm64` 即可解除)*
 
-#### Windows 使用指引（PowerShell）：
+#### Linux (x64)
+```bash
+# 1. 下载独立二进制文件
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-linux-x64
+
+# 2. 赋予执行权限并运行引导（自动安装至 ~/.easylaya/ 并预热模型）
+chmod +x easylaya-linux-x64
+./easylaya-linux-x64 --setup
+
+# 3. （可选）删除临时安装文件
+rm easylaya-linux-x64
+```
+
+#### Windows (x64, PowerShell)
 ```powershell
-# 1. 解压缩 zip 包
-Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .
+# 1. 使用 Windows 内置 curl.exe 拉取（免受浏览器网络标记 SmartScreen 拦截）
+curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-windows-x64.zip
 
-# 2. 运行交互式引导（自动完成安装至 %USERPROFILE%\.easylaya\，预热模型）
+# 2. 解压缩并运行引导（自动安装至 %USERPROFILE%\.easylaya\ 并添加隐藏属性）
+Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .
 .\easylaya.exe --setup
 
-# 3. （可选）删除当前下载的临时文件，Codex 将永久调用 ~/.easylaya/easylaya.exe
+# 3. （可选）删除临时安装文件
 Remove-Item easylaya.exe, easylaya-windows-x64.zip
 ```
 

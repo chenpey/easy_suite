@@ -13,26 +13,27 @@
   - **Windows**：`.\easylaya.exe --setup` 自动安装至 `%USERPROFILE%\.easylaya\easylaya.exe` 并通过 Windows API 添加目录隐藏属性。
   - 自动探测并注册至 Codex CLI，并输出 Antigravity 配置。
 
-### 平台下载与运行指引
+### 平台一键下载与运行指引（推荐）
 
 #### macOS (Apple Silicon ARM64)
-- 资产：`easylaya-darwin-arm64`（原生支持 Metal / MPS GPU 加速）
 ```bash
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-darwin-arm64
 chmod +x easylaya-darwin-arm64
-xattr -d com.apple.quarantine easylaya-darwin-arm64 2>/dev/null || true
 ./easylaya-darwin-arm64 --setup
 ```
+*(注：命令行拉取天然无 macOS Gatekeeper 隔离拦截)*
 
 #### Linux (x64)
-- 资产：`easylaya-linux-x64`
 ```bash
+curl -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-linux-x64
 chmod +x easylaya-linux-x64
 ./easylaya-linux-x64 --setup
 ```
 
-#### Windows (x64)
-- 资产：`easylaya-windows-x64.zip`
+#### Windows (x64, PowerShell)
 ```powershell
+curl.exe -LO https://github.com/chenpey/easy_suite/releases/download/easylaya-v0.1.0/easylaya-windows-x64.zip
 Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .
 .\easylaya.exe --setup
 ```
+*(注：Windows 10/11 内置 curl.exe，命令行拉取可免受浏览器 SmartScreen 标记拦截)*
