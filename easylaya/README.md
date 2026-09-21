@@ -32,14 +32,15 @@ EasyLaya 是为 **Codex** 与 **Antigravity** 打造的极简 **本地 System 1 
 
 ### 方式 1：直接下载 Release 独立文件（最简，推荐）
 
-根据操作系统下载对应的独立可执行程序（无需配置 Python 环境）：
+根据操作系统下载对应的独立可执行程序（内置所有依赖，无需配置 Python 环境）：
 
 * **macOS (Apple Silicon ARM64)**: `easylaya-darwin-arm64`
 * **Linux (x64)**: `easylaya-linux-x64`
 * **Windows (x64)**: `easylaya-windows-x64.zip`
 
+#### macOS / Linux 使用指引：
 ```bash
-# 1. 赋予执行权限 (macOS / Linux)
+# 1. 赋予执行权限 (以 macOS 为例)
 chmod +x easylaya-darwin-arm64
 
 # 2. 运行交互式引导（自动完成安装并隐藏至 ~/.easylaya/，预热模型）
@@ -47,6 +48,18 @@ chmod +x easylaya-darwin-arm64
 
 # 3. （可选）删除当前下载的安装文件，Codex 将永久调用 ~/.easylaya/easylaya
 rm easylaya-darwin-arm64
+```
+
+#### Windows 使用指引（PowerShell）：
+```powershell
+# 1. 解压缩 zip 包
+Expand-Archive -Path easylaya-windows-x64.zip -DestinationPath .
+
+# 2. 运行交互式引导（自动完成安装至 %USERPROFILE%\.easylaya\，预热模型）
+.\easylaya.exe --setup
+
+# 3. （可选）删除当前下载的临时文件，Codex 将永久调用 ~/.easylaya/easylaya.exe
+Remove-Item easylaya.exe, easylaya-windows-x64.zip
 ```
 
 ### 方式 2：克隆仓库 / Python 源码运行
