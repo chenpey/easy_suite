@@ -8,7 +8,7 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.1.5` |
-| [EasyLaya](easylaya/) | `0.1.0` |
+| [EasyLaya](easylaya/) | `0.1.1` |
 | [EasyNewMac](easynewmac/) | `0.3.1` |
 | [EasyNote](easynote/) | `0.3.2` |
 <!-- versions:end -->
@@ -19,7 +19,7 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 为 Codex 与 Antigravity 打造的极简本地 System 1 决策引擎集成工具。基于开源 [NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)（Apache 2.0），通过标准 MCP 协议在本地运行非自回归决策模型，单前向传递 ~33ms，0 API 费用，0 数据外发，为智能体提供极速、高确定性的快思考决策能力。
 
-发布下载：[EasyLaya Latest](https://github.com/chenpey/easy_suite/releases/tag/easylaya-v0.1.0)
+发布下载：[EasyLaya Latest](https://github.com/chenpey/easy_suite/releases/tag/easylaya-v0.1.1)
 
 技术栈：Python / PyTorch / Transformers / Laya、MCP (Model Context Protocol)。提供 macOS ARM64、Linux x64、Windows x64 独立可执行程序。
 
