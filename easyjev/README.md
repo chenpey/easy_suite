@@ -1,8 +1,8 @@
 # EasyJev
 
-当前版本：`0.1.2`
+当前版本：`0.1.3`
 
-[EasyJev Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.2)
+[EasyJev Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.3)
 
 EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Workers AI Jev 决策门禁** 集成工具。
 
@@ -14,6 +14,7 @@ EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Worker
 
 * **极简单文件**：单文件自执行脚本，**0 第三方依赖**（无需 `npm install`），拉取即用。
 * **纯单 Token 模式**：只需提供 1 个 Cloudflare API Token，Account ID 启动时自动探测，用户与本地配置**完全零感知 Account ID**。
+* **全自动隐藏安装**：运行 `--setup` 时自动创建并安装至 `~/.easyjev/` 隐藏目录，运行后下载的临时文件可直接删除。
 * **安全本地存储**：交互式隐藏输入（无明文回显），Token 保存于本地 `config.json`，权限强制锁定为 `0600`（仅当前用户可读写），已写入 `.gitignore`。
 * **免费额度直连**：直接通过 REST API 调用 Cloudflare Workers AI 每日免费 Neurons 额度，**无需在 Cloudflare 上部署任何 Worker**。
 * **原生 MCP 支持**：无缝对接 Codex CLI、Codex Desktop 与 Antigravity。
@@ -46,35 +47,27 @@ EasyJev 全程仅需 1 个 **Cloudflare User API Token**，权限为严格受限
 
 ## 快速配置
 
-> [!IMPORTANT]
-> **关于 `easyjev` 文件的持久保留与推荐存放位置**：
-> - **运行 `./easyjev --setup` 后请勿删除此文件！**
->   `easyjev` 是一个双模文件，它**既是配置引导器，更是 Codex / Antigravity 运行时的 MCP Server 服务程序本体**。每次 AI 在对话中调用 Jev 工具时，都会在后台实时拉起此文件执行。如果删除此文件，AI 调用将因找不到命令而报错崩溃。
-> - **推荐存放位置**：
->   1. **单文件独立使用（推荐）**：将下载的文件放置在个人 CLI 常用目录，如 `~/.local/bin/easyjev`（或 `~/bin/easyjev`）。
->      ```bash
->      mkdir -p ~/.local/bin
->      mv easyjev ~/.local/bin/
->      cd ~/.local/bin
->      chmod +x easyjev
->      ./easyjev --setup
->      ```
->      配置文件 `config.json` 会自动保存在 `~/.local/bin/config.json`（`0600` 权限）。
->   2. **克隆仓库使用**：直接保留在当前仓库的 `easy_suite/easyjev/` 目录中即可，不要随意移动或删除。
+> [!TIP]
+> **全自动安装与隐藏（无需手动创建任何目录）**：
+> 运行 `./easyjev --setup` 时，脚本会**自动在用户 Home 目录下创建隐藏目录 `~/.easyjev/`**，并将程序自身与生成的 `config.json` 自动安装至该目录中：
+> - 服务程序本体：`~/.easyjev/easyjev`
+> - 本地配置文件：`~/.easyjev/config.json`（`0600` 权限）
+> - Codex 会自动注册该隐藏路径。
+> - **运行 `--setup` 完成后，当前下载的临时文件可以随时删除**，服务将长久稳定运行，绝不污染个人主目录。
 
 ### 方式 1：直接下载 Release 单文件（最简，推荐）
 
-无需克隆整个仓库，直接从 [EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.2) 下载 `easyjev` 可执行单文件：
+无需克隆整个仓库，直接从 [EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.3) 下载 `easyjev` 可执行单文件：
 
 ```bash
-# 移动到推荐目录（例如 ~/.local/bin）
-mkdir -p ~/.local/bin && mv easyjev ~/.local/bin/ && cd ~/.local/bin
-
-# 赋予执行权限
+# 1. 赋予执行权限
 chmod +x easyjev
 
-# 运行交互式引导
+# 2. 运行交互式引导（自动完成安装、配置并隐藏至 ~/.easyjev/）
 ./easyjev --setup
+
+# 3. （可选）删除当前下载的安装文件，Codex 将永久调用 ~/.easyjev/easyjev
+rm easyjev
 ```
 
 ### 方式 2：克隆仓库使用

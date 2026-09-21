@@ -7,13 +7,21 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const readline = require("node:readline");
 const { Writable } = require("node:stream");
 const { execSync } = require("node:child_process");
 
 const SCRIPT_PATH = fs.realpathSync(process.argv[1]);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
-const CONFIG_FILE = path.join(SCRIPT_DIR, "config.json");
+
+// Canonical installation location in user's home directory
+const HOME_DIR = os.homedir();
+const HIDDEN_INSTALL_DIR = path.join(HOME_DIR, ".easyjev");
+const HIDDEN_BIN_PATH = path.join(HIDDEN_INSTALL_DIR, "easyjev");
+const HIDDEN_CONFIG_PATH = path.join(HIDDEN_INSTALL_DIR, "config.json");
+const LOCAL_CONFIG_PATH = path.join(SCRIPT_DIR, "config.json");
+
 const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const JEV_MODEL = "@cf/typesafe/jev";
 
@@ -89,23 +97,31 @@ async function runJev(token, { state, questions }) {
 // ==========================================
 
 function loadConfig() {
-  if (!fs.existsSync(CONFIG_FILE)) {
-    return null;
+  // Check local directory first (e.g. if running inside easy_suite/easyjev)
+  if (fs.existsSync(LOCAL_CONFIG_PATH)) {
+    try {
+      return JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
+    } catch (err) {
+      throw new Error(`Failed to parse ${LOCAL_CONFIG_PATH}: ${err.message}`);
+    }
   }
-  try {
-    const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`Failed to parse ${CONFIG_FILE}: ${err.message}`);
+  // Check hidden home directory (~/.easyjev/config.json)
+  if (fs.existsSync(HIDDEN_CONFIG_PATH)) {
+    try {
+      return JSON.parse(fs.readFileSync(HIDDEN_CONFIG_PATH, "utf-8"));
+    } catch (err) {
+      throw new Error(`Failed to parse ${HIDDEN_CONFIG_PATH}: ${err.message}`);
+    }
   }
+  return null;
 }
 
-function saveConfig(token) {
+function saveConfig(token, targetPath = LOCAL_CONFIG_PATH) {
   const data = JSON.stringify({ api_token: token.trim() }, null, 2);
-  fs.writeFileSync(CONFIG_FILE, data, { mode: 0o600 });
+  fs.writeFileSync(targetPath, data, { mode: 0o600 });
   // Ensure mode 0600 on existing files as well
   try {
-    fs.chmodSync(CONFIG_FILE, 0o600);
+    fs.chmodSync(targetPath, 0o600);
   } catch {}
 }
 
@@ -195,11 +211,35 @@ async function runSetup() {
     process.exit(1);
   }
 
-  saveConfig(token);
-  console.log(`\n✅ 配置已保存至: ${CONFIG_FILE}`);
+  // 1. Ensure ~/.easyjev directory exists
+  fs.mkdirSync(HIDDEN_INSTALL_DIR, { recursive: true });
+
+  // 2. Automatically copy and install to ~/.easyjev/easyjev if not already there
+  let activeBinPath = SCRIPT_PATH;
+  if (SCRIPT_PATH !== HIDDEN_BIN_PATH) {
+    try {
+      fs.copyFileSync(SCRIPT_PATH, HIDDEN_BIN_PATH);
+      fs.chmodSync(HIDDEN_BIN_PATH, 0o755);
+      activeBinPath = HIDDEN_BIN_PATH;
+      console.log(`\n📦 已自动安装至隐藏目录: ${HIDDEN_BIN_PATH}`);
+    } catch (err) {
+      console.error(`⚠️ 自动安装至 ~/.easyjev 失败: ${err.message}`);
+    }
+  }
+
+  // 3. Save config to ~/.easyjev/config.json
+  saveConfig(token, HIDDEN_CONFIG_PATH);
+  console.log(`✅ 配置已保存至: ${HIDDEN_CONFIG_PATH}`);
   console.log("🔒 文件权限已锁定为 0600 (仅当前用户可读写)。");
 
-  // Check if codex CLI is available
+  // If run from a repo, also save locally for convenience
+  if (SCRIPT_DIR !== HIDDEN_INSTALL_DIR) {
+    try {
+      saveConfig(token, LOCAL_CONFIG_PATH);
+    } catch {}
+  }
+
+  // 4. Register activeBinPath in Codex
   let codexFound = false;
   try {
     execSync("command -v codex", { stdio: "ignore" });
@@ -209,20 +249,24 @@ async function runSetup() {
   if (codexFound) {
     console.log("\n检测到本机已安装 Codex CLI，正在自动注册 MCP Server...");
     try {
-      execSync(`codex mcp add easyjev -- "${SCRIPT_PATH}"`, { stdio: "inherit" });
+      execSync(`codex mcp add easyjev -- "${activeBinPath}"`, { stdio: "inherit" });
       console.log("🎉 已成功自动注册到 Codex！");
     } catch (err) {
       console.log("⚠️ 自动注册失败，可手动执行以下命令接入：");
-      console.log(`   codex mcp add easyjev -- "${SCRIPT_PATH}"`);
+      console.log(`   codex mcp add easyjev -- "${activeBinPath}"`);
     }
   } else {
     console.log("\n💡 接入 Codex 方法：");
-    console.log(`   codex mcp add easyjev -- "${SCRIPT_PATH}"`);
+    console.log(`   codex mcp add easyjev -- "${activeBinPath}"`);
   }
 
   console.log("\n💡 接入 Antigravity 方法：");
   console.log("   在 mcp_config.json 的 mcpServers 中添加：");
-  console.log(`   "easyjev": { "command": "${SCRIPT_PATH}" }\n`);
+  console.log(`   "easyjev": { "command": "${activeBinPath}" }`);
+
+  if (SCRIPT_PATH !== HIDDEN_BIN_PATH) {
+    console.log(`\n✨ 提示：当前下载的安装文件现在可以安全删除了，Codex 将永久调用隐藏目录下的服务。`);
+  }
 }
 
 async function runTest() {
@@ -448,7 +492,7 @@ function startMcpServer() {
             },
             serverInfo: {
               name: "easyjev",
-              version: "0.1.2",
+              version: "0.1.3",
             },
           },
         });
