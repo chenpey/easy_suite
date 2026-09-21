@@ -1,8 +1,8 @@
 # EasyNewMac
 
-当前版本：`0.3.1`
+当前版本：`0.3.2`
 
-[EasyNewMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-v0.3.1)
+[EasyNewMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-latest)
 
 EasyNewMac 在旧 Mac 上扫描已安装应用，让用户搜索、筛选和选择需要迁移的项目，然后导出可在新 Mac 上运行的安装脚本。
 

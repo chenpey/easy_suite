@@ -8,7 +8,7 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.1.5` |
-| [EasyNewMac](easynewmac/) | `0.3.1` |
+| [EasyNewMac](easynewmac/) | `0.3.2` |
 | [EasyNote](easynote/) | `0.3.2` |
 <!-- versions:end -->
 
@@ -38,7 +38,7 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 用于从旧 Mac 扫描 Homebrew、Mac App Store 和普通应用，让用户搜索、筛选并选择需要迁移的项目，预览后导出新 Mac 安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境；扫描清单不上传，EasyNewMac 本身也不执行安装。
 
-发布下载：[EasyNewMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-v0.3.1)
+发布下载：[EasyNewMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-latest)
 
 技术栈：AppleScript、Zsh、HTML、CSS、JavaScript。
 

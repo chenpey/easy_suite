@@ -74,5 +74,19 @@ jobs:
               --verify-tag \
               --title "EasyNewMac v${version}" \
               --notes-file easynewmac/RELEASE_NOTES.md \
-              --generate-notes
+              --generate-notes \
+              --latest
+          fi
+
+          git tag -f easynewmac-latest "$GITHUB_SHA"
+          git push origin -f easynewmac-latest
+          if gh release view "easynewmac-latest" >/dev/null 2>&1; then
+            gh release upload "easynewmac-latest" "$archive" "$checksum" --clobber
+          else
+            gh release create "easynewmac-latest" \
+              "$archive" \
+              "$checksum" \
+              --title "EasyNewMac Latest" \
+              --notes-file easynewmac/RELEASE_NOTES.md \
+              --latest=false
           fi

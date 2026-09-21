@@ -1,4 +1,4 @@
-## EasyNewMac 0.3.1
+## EasyNewMac 0.3.2
 
 修复 App 内生成器的 shell 配置判断。请用新版 App 重新导出；旧迁移脚本不会自动更新。
 
