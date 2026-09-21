@@ -48,7 +48,7 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 三个项目相互独立，所有命令都应在对应项目目录中执行：
 
-- EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本；部署凭据和初始账号均通过各自 README 规定的交互流程处理。
+- EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
 - EasyNewMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyNewMac.app` 即可使用。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
