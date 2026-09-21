@@ -1,8 +1,9 @@
-## EasyJev 0.1.3
+## EasyJev 0.1.4
 
 EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Workers AI Jev 决策门禁** 集成工具。
 
-### 本次更新 (v0.1.3)
+### 本次更新 (v0.1.4)
+- **修复 Cloudflare API 400 路由错误**：更正模型标识为 `typesafe/jev` 并采用 Cloudflare 通用 `/ai/run` 统一请求端点，内置多级端点回退机制，解决 `No route for that URI` 问题。
 - **全自动隐藏安装**：运行 `./easyjev --setup` 时自动在个人 Home 目录下创建 `~/.easyjev/`，并将程序本体与配置自动安装至其中。
 - **免手动移动**：用户不再需要手动执行 `mkdir` 或 `mv`；配置完成后，当前下载目录的临时文件可直接安全删除，Codex 将永久引用 `~/.easyjev/easyjev`。
 

@@ -1,12 +1,12 @@
 # EasyJev
 
-当前版本：`0.1.3`
+当前版本：`0.1.4`
 
-[EasyJev Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.3)
+[EasyJev Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.4)
 
 EasyJev 是为 **Codex** 与 **Antigravity** 打造的极简 **Cloudflare Workers AI Jev 决策门禁** 集成工具。
 
-通过标准 MCP (Model Context Protocol) 协议，将 Cloudflare 托管的 TypeSafe Jev（`@cf/typesafe/jev`）作为快速、高确定性的“系统一”（System One）决策工具提供给 AI 编码助手，在代码门禁、安全审查、数据分类打标和上下文初筛等高频判断场景下，大幅降低主模型的 Token 消耗与响应延迟。
+通过标准 MCP (Model Context Protocol) 协议，将 Cloudflare 托管的 TypeSafe Jev（`typesafe/jev`）作为快速、高确定性的“系统一”（System One）决策工具提供给 AI 编码助手，在代码门禁、安全审查、数据分类打标和上下文初筛等高频判断场景下，大幅降低主模型的 Token 消耗与响应延迟。
 
 ---
 
@@ -29,7 +29,7 @@ EasyJev 全程仅需 1 个 **Cloudflare User API Token**，权限为严格受限
 
 | Scope | Permission | Level | 用途 |
 | :--- | :--- | :--- | :--- |
-| **Account** | **Workers AI** | **Read** | 调用 Jev 模型（`@cf/typesafe/jev`）推理接口 |
+| **Account** | **Workers AI** | **Read** | 调用 Jev 模型（`typesafe/jev`）推理接口 |
 | **Account** | **Account Settings** | **Read** | 自动发现关联 Account ID，实现单 Token 零感知配置 |
 
 ### 2. 创建步骤
@@ -57,7 +57,7 @@ EasyJev 全程仅需 1 个 **Cloudflare User API Token**，权限为严格受限
 
 ### 方式 1：直接下载 Release 单文件（最简，推荐）
 
-无需克隆整个仓库，直接从 [EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.3) 下载 `easyjev` 可执行单文件：
+无需克隆整个仓库，直接从 [EasyJev Latest](https://github.com/chenpey/easy_suite/releases/tag/easyjev-v0.1.4) 下载 `easyjev` 可执行单文件：
 
 ```bash
 # 1. 赋予执行权限
