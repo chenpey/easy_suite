@@ -1113,14 +1113,47 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <button className="danger" disabled={!selected.size || disabled} onClick={() => setConfirmAction('bulk-trash')}><Trash2 size={14} />删除</button>
           </div>
         </div>}
-        <label className={`search-field ${mobileSearch || book.query ? 'mobile-open' : ''}`}><Search size={15} /><input ref={searchInput} aria-label="搜索笔记" placeholder="搜索笔记" value={book.query}
-          onChange={(e) => {
-            const value = e.target.value;
-            book.setQuery(value);
-            setMobileSearch(!!value);
+        <div
+          className={`search-field ${mobileSearch || book.query ? 'mobile-open' : ''}`}
+          role="search"
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('.search-clear')) return;
+            searchInput.current?.focus();
           }}
-          onBlur={() => { if (!searchInput.current?.value) setMobileSearch(false); }}
-          onKeyDown={(e) => { if (e.key === 'Escape') { book.setQuery(''); setMobileSearch(false); } }} /></label>
+        >
+          <Search size={15} />
+          <input
+            ref={searchInput}
+            aria-label="搜索笔记"
+            placeholder="搜索笔记"
+            value={book.query}
+            onChange={(e) => {
+              const value = e.target.value;
+              book.setQuery(value);
+              setMobileSearch(!!value);
+            }}
+            onBlur={() => { if (!searchInput.current?.value) setMobileSearch(false); }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { book.setQuery(''); setMobileSearch(false); } }}
+          />
+          {book.query && (
+            <button
+              type="button"
+              className="search-clear"
+              aria-label="清空搜索"
+              title="清空搜索"
+              onMouseDown={(e) => {
+                e.preventDefault();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                book.setQuery('');
+                searchInput.current?.focus();
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </header>
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
         {book.loading ? <div className="empty-state">正在加载…</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? '没有匹配的笔记' : '暂无笔记'}</span></div> : book.notes.map((item) =>
