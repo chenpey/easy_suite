@@ -165,6 +165,64 @@ AI（Codex / Antigravity）启动后会自动挂载 `easylaya` 提供的 MCP 工
 
 ---
 
+## 硬件加速说明（Apple Silicon M 系列 & NVIDIA GPU）
+
+Laya 在底层已实现自动设备探测（`MPS` -> `CUDA` -> `CPU`）：
+
+### 1. Apple Silicon M 系列 Mac (M1 / M2 / M3 / M4 / M5...)
+* **开箱即用，无需配置**：直接下载 `easylaya-darwin-arm64` 独立二进制即可。
+* **原生 Metal 加速**：Apple Silicon 的 PyTorch 原生支持 **MPS (Metal Performance Shaders)**，单文件直接调用 Mac 统一内存与 GPU/神经引擎，**无需配置任何额外驱动或 CUDA**，推理延迟低至 **~20-30ms**。
+
+### 2. NVIDIA 显卡 (Linux / Windows)
+* **独立二进制包设计**：为了将独立打包体积控制在 **~200MB**（避免打包完整 CUDA 导致突破 GitHub Releases 2GB 上限），并避免用户机器 NVIDIA 驱动与 CUDA 版本的兼容冲突，Release 包默认基于高性能 CPU 构建（CPU 单次决策已达 ~35ms）。
+* **如何启用 CUDA 显卡加速**：如果您的 Linux/Windows 机器配备有 NVIDIA 显卡，并希望开启 CUDA 极限加速（~10ms），请使用 **方式 2（源码/Python 运行）**：
+  ```bash
+  cd easylaya
+  # 安装对应 CUDA 版本的 PyTorch（例如 CUDA 12.4）
+  pip install torch --index-url https://download.pytorch.org/whl/cu124
+  pip install -r requirements.txt
+  ./easylaya --setup
+  ```
+  Laya 会自动识别到 `CUDA` 并全速跑在显卡显存中。
+
+---
+
+## 如何跟进上游更新
+
+上游项目地址：[https://github.com/NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)
+
+### 1. 上游模型权重更新（Hugging Face）
+当作者在 Hugging Face 仓库（`convaiinnovations/laya`、`laya-multilingual`、`laya-typed-decisions`）发布新权重或微调模型时：
+* EasyLaya 使用 `transformers` 与 `huggingface_hub` 自动加载模型。
+* 若要强制拉取最新权重，只需清理本地 Hugging Face 缓存目录：
+  ```bash
+  # macOS / Linux
+  rm -rf ~/.cache/huggingface/hub/models--convaiinnovations--*
+  # Windows (PowerShell)
+  Remove-Item -Recurse -Force "$env:USERPROFILE\.cache\huggingface\hub\models--convaiinnovations--*"
+  ```
+  下一次调用或运行 `./easylaya --setup` 时会自动拉取最新版本。
+
+### 2. 上游代码库与 PyPI 包更新
+当上游在 PyPI 发布了新版本 `laya`（如 `0.3.5`、`0.4.0`）：
+1. **修改依赖版本**：在 `easylaya/requirements.txt` 中修改版本（如 `laya>=0.3.5`）。
+2. **升级仓库版本号**：在根目录下执行：
+   ```bash
+   node scripts/version.mjs bump easylaya patch
+   # 若有重大变更可升级 minor:
+   # node scripts/version.mjs bump easylaya minor
+   ```
+3. **提交并打 Tag 推送**：
+   ```bash
+   git commit -am "chore(easylaya): 跟进上游 laya v0.3.5"
+   git push origin main
+   git tag easylaya-v0.1.1
+   git push origin easylaya-v0.1.1
+   ```
+4. **自动化发版**：GitHub Actions 会自动触发多平台矩阵构建，全自动为 macOS ARM、Linux x64、Windows x64 编译出最新版本的独立二进制并发布到 GitHub Releases。
+
+---
+
 ## 常见问题与排查
 
 * **Q: 首次运行 `--setup` 时速度较慢？**
@@ -173,3 +231,4 @@ AI（Codex / Antigravity）启动后会自动挂载 `easylaya` 提供的 MCP 工
   * 下载 `easylaya-windows-x64.zip` 解压后，在 PowerShell 中执行 `.\easylaya.exe --setup` 即可。
 * **Q: 是否需要 GPU 支持？**
   * 不需要。Laya 为轻量级非自回归模型，在现代 CPU（尤其是 Apple Silicon 或多核 x64）上单次推理通常在 30~50ms 内即可完成。
+
