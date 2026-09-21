@@ -1,6 +1,6 @@
 # Easy Suite
 
-Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
+Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
 
 ## 版本
 
@@ -8,11 +8,20 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.1.5` |
+| [EasyJev](easyjev/) | `0.1.0` |
 | [EasyNewMac](easynewmac/) | `0.3.1` |
 | [EasyNote](easynote/) | `0.3.2` |
 <!-- versions:end -->
 
 ## 项目目录
+
+### [EasyJev](easyjev/)
+
+为 Codex 与 Antigravity 打造的极简 Cloudflare Workers AI Jev 决策门禁集成工具。零第三方依赖自执行单文件，单 Token 模式，通过标准 MCP 协议将 Cloudflare 托管的 Jev 模型作为快速、低延迟、高确定性的快思考决策能力引入编码智能体。
+
+技术栈：JavaScript (Node.js 原生标准库)、MCP (Model Context Protocol)、Cloudflare Workers AI。
+
+详细说明见 [EasyJev README](easyjev/README.md)。
 
 ### [EasyDrop](easydrop/)
 
@@ -44,9 +53,9 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 ## 使用
 
-三个项目相互独立，所有命令都应在对应项目目录中执行：
+四个项目相互独立，所有命令都应在对应项目目录中执行：
 
-- EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本；部署凭据和初始账号均通过各自 README 规定的交互流程处理。
+- EasyJev、EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本；EasyJev 无需安装依赖，直接通过 `./easyjev --setup` 完成配置。
 - EasyNewMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyNewMac.app` 即可使用。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。

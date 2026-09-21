@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1180" viewBox="0 0 1600 1180" role="img" aria-labelledby="title desc">
+  <title id="title">EasyJev Cloudflare API Token 配置示意图</title>
+  <desc id="desc">从 My Profile 的 API Tokens 创建 Custom Token，配置 EasyJev 所需的 Workers AI 与账号自动发现权限。</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-15%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#18324d" flood-opacity=".12"/>
+    </filter>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;fill:#172033}
+      .title{font-size:40px;font-weight:750}.heading{font-size:28px;font-weight:720}.body{font-size:24px}.small{font-size:20px}.tiny{font-size:18px}.muted{fill:#687387}.white{fill:#fff}.orange{fill:#d96500}.blue{fill:#1769e0}.green{fill:#087f5b}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    </style>
+  </defs>
+  <rect width="1600" height="1180" fill="#f5f7fb"/>
+  <text x="70" y="70" class="title">EasyJev Cloudflare API Token：纯单 Token 极简配置</text>
+  <text x="70" y="108" class="small muted">只需 1 个 User API Token，账号 ID 由脚本自动探测，无需手动配置任何 Cloudflare 资源或部署 Worker。</text>
+
+  <!-- Step 1 -->
+  <rect x="70" y="145" width="1460" height="142" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <circle cx="115" cy="199" r="24" fill="#f48120"/><text x="107" y="208" class="heading white">1</text>
+  <text x="162" y="195" class="heading">打开 Custom Token 创建表单</text>
+  <text x="162" y="238" class="body mono">My Profile → API Tokens → Create Token → Create Custom Token</text>
+  <text x="162" y="270" class="small muted">Token name 示例：easyjev-token。无需使用 Global API Key。</text>
+
+  <!-- Step 2 -->
+  <rect x="70" y="315" width="1460" height="360" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <circle cx="115" cy="369" r="24" fill="#f48120"/><text x="107" y="378" class="heading white">2</text>
+  <text x="162" y="365" class="heading">Permissions：仅添加 2 项账号只读权限</text>
+  <rect x="130" y="405" width="1340" height="180" rx="12" fill="#fafbfc" stroke="#d7dee8"/>
+  <text x="170" y="446" class="small muted">Scope</text><text x="410" y="446" class="small muted">Permission</text><text x="970" y="446" class="small muted">Level</text><text x="1120" y="446" class="small muted">用途</text>
+  <line x1="155" y1="462" x2="1445" y2="462" stroke="#d7dee8"/>
+  <g class="body">
+    <text x="170" y="504">Account</text><text x="410" y="504">Workers AI</text><text x="970" y="504" class="blue">Read</text><text x="1120" y="504" class="green">调用 Jev 模型 (@cf/typesafe/jev)</text>
+    <text x="170" y="556">Account</text><text x="410" y="556">Account Settings</text><text x="970" y="556" class="blue">Read</text><text x="1120" y="556" class="green">自动发现 Account ID（实现单 Token 零感知）</text>
+  </g>
+  <text x="162" y="628" class="small muted">注：不需要任何 Edit/Write 权限，也不需要 D1、R2、Zone 或 Workers Scripts 权限，确保最小特权安全原则。</text>
+
+  <!-- Step 3 -->
+  <rect x="70" y="705" width="1460" height="230" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <circle cx="115" cy="759" r="24" fill="#f48120"/><text x="107" y="768" class="heading white">3</text>
+  <text x="162" y="755" class="heading">Account Resources：限制到你的目标账号</text>
+  <text x="162" y="805" class="body">Account Resources：<tspan class="mono">Include → Specific account → 目标账号</tspan></text>
+  <text x="162" y="852" class="small muted">在下拉菜单中选择你的 Cloudflare 账号；无需配置 Zone Resources。</text>
+  <rect x="162" y="874" width="760" height="36" rx="8" fill="#fff4e9" stroke="#f0b27a"/>
+  <text x="180" y="899" class="tiny orange">不要选择 All accounts，建议仅锁定你需要使用 Workers AI 的特定账号。</text>
+
+  <!-- Step 4 -->
+  <rect x="70" y="965" width="1460" height="150" rx="18" fill="#fff" filter="url(#shadow)"/>
+  <circle cx="115" cy="1019" r="24" fill="#f48120"/><text x="107" y="1028" class="heading white">4</text>
+  <text x="162" y="1015" class="heading">创建并完成交互式配置</text>
+  <text x="162" y="1058" class="body">点击 <tspan class="green" font-weight="700">Continue to summary → Create Token</tspan>，复制生成的 Token Secret</text>
+  <text x="162" y="1092" class="small muted">在终端执行 <tspan class="mono blue">./easyjev --setup</tspan> 并粘贴 Token，脚本自动测试连通性并以 0600 权限保存在本地 config.json。</text>
+</svg>
