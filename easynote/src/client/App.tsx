@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -1180,7 +1180,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <header className="list-header">
         <div className="list-heading">
           <IconButton label="打开导航菜单" className="icon-button mobile-menu-trigger" onClick={() => setMobileNavigation(true)}><Menu size={21} /></IconButton>
-          {!sidebar && <IconButton label="展开侧栏" onClick={() => setSidebar(true)}><MoreHorizontal size={18} /></IconButton>}
+          {!sidebar && <IconButton label="展开侧栏" className="sidebar-toggle-action" onClick={() => setSidebar(true)}><PanelLeftOpen size={16} /></IconButton>}
           <h1 title={activeView}>{activeView}</h1>
           {!(mobileSearch || book.query) && (
             <IconButton label="搜索笔记" className="icon-button mobile-search-trigger" onClick={toggleMobileSearch}>
@@ -1222,8 +1222,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <Search size={15} />
           <input
             ref={searchInput}
-            aria-label="搜索笔记"
-            placeholder="搜索笔记"
+            aria-label={t('搜索笔记')}
+            placeholder={t('搜索笔记')}
             value={book.query}
             onChange={(e) => {
               const value = e.target.value;
@@ -1237,8 +1237,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <button
               type="button"
               className="search-clear"
-              aria-label="清空搜索"
-              title="清空搜索"
+              aria-label={t('清空搜索')}
+              title={t('清空搜索')}
               onMouseDown={(e) => {
                 e.preventDefault();
               }}
