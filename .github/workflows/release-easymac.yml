@@ -64,17 +64,19 @@ jobs:
           version="$(<easymac/VERSION)"
           archive="easymac/dist/EasyMac-v${version}.zip"
           checksum="${archive}.sha256"
+          notes_file="$(mktemp)"
+          node scripts/version.mjs notes easymac "$version" > "$notes_file"
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$archive" "$checksum" --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$notes_file"
           else
             gh release create "$GITHUB_REF_NAME" \
               "$archive" \
               "$checksum" \
               --verify-tag \
               --title "EasyMac v${version}" \
-              --notes-file easymac/RELEASE_NOTES.md \
-              --generate-notes \
+              --notes-file "$notes_file" \
               --latest
           fi
 
@@ -82,11 +84,12 @@ jobs:
           git push origin -f easymac-latest
           if gh release view "easymac-latest" >/dev/null 2>&1; then
             gh release upload "easymac-latest" "$archive" "$checksum" --clobber
+            gh release edit "easymac-latest" --notes-file "$notes_file"
           else
             gh release create "easymac-latest" \
               "$archive" \
               "$checksum" \
               --title "EasyMac Latest" \
-              --notes-file easymac/RELEASE_NOTES.md \
+              --notes-file "$notes_file" \
               --latest=false
           fi

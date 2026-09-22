@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.6`
+Current Version: `0.7.7`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.7 Updates
+
+- **Full English UI & Interaction Localization**: Completely replaced remaining hardcoded Chinese strings across client views, including login/register/password reset forms, Settings modal (import/export guides), sidebar, batch action bar, conflict resolution modal, version history, tag management, PDF export and paginated preview, shortcut modal, and all global notice toasts.
+- **Editor & Accessibility Polish**: Localized editor body placeholder, accessibility aria-labels, and diagram rendering error messages.
+- **Dictionary Alignment & Type Safety**: Completed `src/client/i18n.ts` dictionary symmetry without duplicate keys, passing automated i18n checks and TypeScript compilation.
 
 ## 0.7.6 Updates
 

@@ -24,11 +24,11 @@ export function AccountSecurity({ disabled, username, notify, reportError, logou
 
   const changePassword = async () => {
     if (newPassword.length < 12 || newPassword.length > 128) {
-      reportError('新密码必须为 12-128 个字符。');
+      reportError(t('新密码必须为 12-128 个字符。'));
       return;
     }
     if (newPassword !== confirmation) {
-      reportError('两次输入的新密码不一致。');
+      reportError(t('两次输入的新密码不一致。'));
       return;
     }
     setWorking(true);

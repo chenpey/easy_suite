@@ -7,6 +7,7 @@ import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 import DOMPurify from 'dompurify';
 import { idPattern } from '../shared/types';
+import { t } from './i18n';
 
 interface Props {
   value: string;
@@ -153,11 +154,11 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
             ...defaultKeymap,
             ...historyKeymap,
           ]),
-          EditorView.lineWrapping, placeholder('开始记录…'),
+          EditorView.lineWrapping, placeholder(t('start_writing')),
           search.current.of(searchQueryFacet.of(searchQuery)),
           searchHighlights,
           EditorView.contentAttributes.of({
-            'aria-label': '笔记正文',
+            'aria-label': t('note_content'),
             'aria-keyshortcuts': 'Meta+B Control+B Meta+I Control+I Meta+E Control+E Meta+Enter Control+Enter Meta+/ Control+/',
             spellcheck: 'false',
           }),
@@ -239,7 +240,7 @@ renderer.renderer.rules.image = (tokens, index) => {
   const token = tokens[index];
   const src = token.attrGet('src') ?? '';
   const id = /^(?:\/api\/images\/|\/api\/public\/shares\/[a-f0-9]{64}\/images\/)([0-9a-f-]{36})$/i.exec(src)?.[1];
-  if (!id || !idPattern.test(id)) return '<span class="blocked-image">[外部图片未加载]</span>';
+  if (!id || !idPattern.test(id)) return `<span class="blocked-image">${t('[外部图片未加载]')}</span>`;
   return `<img src="${src}" data-private-image="${id}" alt="${renderer.utils.escapeHtml(token.content)}" loading="lazy" />`;
 };
 renderer.renderer.rules.link_open = (tokens, index, options, _env, self) => {
@@ -272,7 +273,7 @@ renderer.renderer.rules.footnote_anchor = (tokens, index) => {
   const number = Number(tokens[index].meta.id) + 1;
   const subId = Number(tokens[index].meta.subId ?? 0);
   const reference = subId > 0 ? `${number}:${subId}` : String(number);
-  return ` <a href="#footnote-ref-${reference}" data-footnote-backref="${reference}" aria-label="返回脚注引用">↩︎</a>`;
+  return ` <a href="#footnote-ref-${reference}" data-footnote-backref="${reference}" aria-label="${t('返回脚注引用')}">↩︎</a>`;
 };
 
 export function toggleMarkdownTask(content: string, taskIndex: number, checked: boolean): string {
@@ -342,7 +343,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
     }
     const replacement = parsed.createElement('span');
     replacement.className = 'blocked-image';
-    replacement.textContent = '[外部图片未加载]';
+    replacement.textContent = t('[外部图片未加载]');
     image.replaceWith(replacement);
   });
   parsed.body.querySelectorAll<HTMLAnchorElement>('a').forEach((link) => {
@@ -381,7 +382,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
     const checkbox = parsed.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.dataset.taskIndex = String(taskIndex++);
-    checkbox.setAttribute('aria-label', `待办事项：${item.textContent?.trim() || '未命名'}`);
+    checkbox.setAttribute('aria-label', t('待办事项：{0}', item.textContent?.trim() || t('未命名')));
     if (checked) {
       checkbox.checked = true;
       checkbox.setAttribute('checked', '');
@@ -399,7 +400,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
 function diagramError(element: HTMLElement, error: unknown) {
   element.className = 'mermaid-error';
   element.removeAttribute('data-mermaid-source');
-  element.textContent = `图表无法渲染：${String(error).split('\n', 1)[0]}`;
+  element.textContent = t('图表无法渲染：{0}', String(error).split('\n', 1)[0]);
 }
 
 function fitDiagramToContainer(element: HTMLElement) {
@@ -505,7 +506,7 @@ export function Preview({
           if (cancelled) return;
           const source = element.textContent?.trim() ?? '';
           if (!source || source.length > 50_000 || index >= 20) {
-            diagramError(element, source ? '图表内容过大或数量超过 20 个。' : '图表内容为空。');
+            diagramError(element, source ? t('图表内容过大或数量超过 20 个。') : t('图表内容为空。'));
             continue;
           }
           try {

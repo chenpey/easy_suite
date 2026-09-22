@@ -75,7 +75,7 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
               <div className="share-management-main">
                 <button className="share-management-note" onClick={() => openNote(item)}>
                   <FileText size={16} />
-                  <strong>{item.title || '未命名笔记'}</strong>
+                  <strong>{item.title || t('untitled_note')}</strong>
                 </button>
                 <span>
                   {item.archived ? `${t('archive')} · ` : ''}{t('share_shared_at', dateTime(item.createdAt))} · {item.expiresAt === null
@@ -87,7 +87,7 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
                 {item.expiresAt === null
                   ? <span className="share-permanent"><InfinityIcon size={14} />{t('permanent')}</span>
                   : <>
-                    <select aria-label={t('share_extend_duration_aria', item.title || '未命名笔记')}
+                    <select aria-label={t('share_extend_duration_aria', item.title || t('untitled_note'))}
                       value={extensions[item.noteId] ?? '168'}
                       disabled={disabled || working}
                       onChange={(event) => setExtensions((current) => ({
@@ -99,12 +99,12 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
                       <option value="720">{t('延长 30 天')}</option>
                       <option value="permanent">{t('设为永久')}</option>
                     </select>
-                    <button aria-label={t('share_extend_aria', item.title || '未命名笔记')} disabled={disabled || working}
+                    <button aria-label={t('share_extend_aria', item.title || t('untitled_note'))} disabled={disabled || working}
                       onClick={() => void extend(item)}>
                       {working ? <LoaderCircle className="spin" size={15} /> : <CalendarPlus size={15} />}{t('extend')}
                     </button>
                   </>}
-                <button className="danger" aria-label={t('share_cancel_aria', item.title || '未命名笔记')}
+                <button className="danger" aria-label={t('share_cancel_aria', item.title || t('untitled_note'))}
                   disabled={disabled || working} onClick={() => void revoke(item)}>
                   {working ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}{t('stop_sharing')}
                 </button>
