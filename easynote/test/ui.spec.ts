@@ -39,6 +39,20 @@ async function openMobileNoteActions(page: Page) {
   return dialog;
 }
 
+test('selects an existing tag for the current note', async ({ page }) => {
+  const tag = `已有标签-${randomUUID().slice(0, 8)}`;
+  const id = randomUUID();
+  expect((await page.request.post(`/api/notes/${id}`, {
+    headers, data: { title: tag, content: '', tags: [tag], pinned: false,
+      archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+  })).status()).toBe(201);
+  await page.goto('/');
+  await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+  await page.getByRole('combobox', { name: '选择已有标签' }).selectOption(tag);
+  await expect(page.getByRole('textbox', { name: '笔记标签' })).toHaveValue(tag);
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+});
+
 test('does not render the login form while the initial session is loading', async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });

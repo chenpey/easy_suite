@@ -1261,7 +1261,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             const tags = [...new Set(tagText.split(/[,，]/).map((v) => v.trim()).filter(Boolean))];
             if (tags.length > 20 || tags.some((t) => t.length > 40)) { book.setError('最多 20 个标签，每个不超过 40 字符。'); setTagText(note.tags.join(', ')); return; }
             if (JSON.stringify(tags) !== JSON.stringify(note.tags)) setNoteFields({ tags });
-          }} /></label>
+          }} /><select aria-label="选择已有标签" value="" disabled={!!note.deletedAt || !!transfer || note.tags.length >= 20} onChange={(event) => {
+            if (!event.target.value) return;
+            const tags = [...new Set([...note.tags, event.target.value])];
+            setTagText(tags.join(', '));
+            setNoteFields({ tags });
+          }}><option value="">选择已有标签</option>{book.tags.filter((tag) => !note.tags.includes(tag)).map((tag) =>
+            <option key={tag} value={tag}>{tag}</option>)}</select></label>
           <span className="word-count">{note.content.length.toLocaleString()} 字符</span>
           <IconButton label={pdfProgress || '导出当前笔记为 PDF'} className="icon-button mobile-pdf-action" disabled={printing}
             onClick={exportCurrentNote}>{printing ? <LoaderCircle className="spin" size={17} /> : <Printer size={17} />}</IconButton>
