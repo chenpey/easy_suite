@@ -30,6 +30,12 @@
   --code-bg: #f5f5f7;
   --badge-blue-bg: #e8f3ff;
   --badge-green-bg: #eaf6ed;
+  --badge-warning-bg: rgba(255, 149, 0, .15);
+  --badge-warning-text: #c97000;
+  --badge-muted-bg: rgba(142, 142, 147, .16);
+  --badge-muted-text: #636366;
+  --badge-admin-bg: rgba(94, 92, 230, .14);
+  --badge-admin-text: #5856d6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -59,6 +65,12 @@
     --code-bg: #2c2c2e;
     --badge-blue-bg: rgba(10, 132, 255, .2);
     --badge-green-bg: rgba(48, 209, 88, .2);
+    --badge-warning-bg: rgba(255, 159, 10, .25);
+    --badge-warning-text: #ff9f0a;
+    --badge-muted-bg: rgba(142, 142, 147, .2);
+    --badge-muted-text: #98989d;
+    --badge-admin-bg: rgba(94, 92, 230, .25);
+    --badge-admin-text: #7d7aff;
   }
 }
 
@@ -419,11 +431,11 @@ progress {
   border: 1px solid var(--hairline);
   border-radius: 8px;
   overflow: hidden;
-  background: #f1f1f3;
+  background: var(--input-bg);
   cursor: zoom-in;
 }
 
-.thumbnail-link:not(:disabled):hover { background: #e8e8ed; }
+.thumbnail-link:not(:disabled):hover { background: var(--fill-hover); }
 
 .file-thumbnail {
   display: block;
@@ -749,30 +761,35 @@ body[data-page="login"] {
 .modal-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 3px;
   margin-bottom: 20px;
   padding: 3px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--tab-bg);
 }
 
 .modal-tab {
-  min-height: 34px;
-  border-radius: 6px;
-  padding: 6px 10px;
+  min-height: 32px;
+  border-radius: 7px;
+  padding: 5px 12px;
   border: none;
   background: transparent;
   color: var(--label-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color .18s ease, color .18s ease;
+  transition: all .18s ease;
+}
+
+.modal-tab:not(.active):hover {
+  color: var(--text);
 }
 
 .modal-tab.active {
   background: var(--tab-active-bg);
   color: var(--tab-active-text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12), 0 1px 1px rgba(0, 0, 0, .06);
 }
 
 .history-filters {
@@ -1042,76 +1059,218 @@ dialog::backdrop {
   margin-top: 24px;
 }
 
-.registration-setting {
+.apple-card {
+  background: var(--input-bg);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.profile-header-card {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin: 14px 0 20px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--hairline);
+  gap: 16px;
+  padding: 16px;
+  background: var(--input-bg);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  margin-bottom: 20px;
 }
 
-.registration-setting span { display: grid; gap: 4px; }
-.registration-setting small { color: var(--label-secondary); font-weight: 400; }
-.registration-setting input { width: 20px; height: 20px; accent-color: var(--blue); }
-
-#user-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px 14px;
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--hairline);
+.profile-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-#user-form > label {
-  align-self: end;
-  color: #3a3a3c;
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.badge-admin {
+  background: var(--badge-admin-bg);
+  color: var(--badge-admin-text);
+}
+
+.badge-user {
+  background: var(--fill-hover);
+  color: var(--label-secondary);
+}
+
+.badge-success {
+  background: var(--badge-green-bg);
+  color: var(--green);
+}
+
+.badge-warning {
+  background: var(--badge-warning-bg);
+  color: var(--badge-warning-text);
+}
+
+.badge-muted {
+  background: var(--badge-muted-bg);
+  color: var(--badge-muted-text);
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-row label {
+  color: var(--text-label);
   font-size: 13px;
   font-weight: 500;
 }
 
-.user-options {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: auto minmax(130px, 1fr) auto;
-  gap: 10px;
+.form-row-inline {
+  display: flex;
   align-items: center;
-  margin-top: 6px;
+  gap: 8px;
+}
+
+.form-row-inline label {
+  color: var(--text-label);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.section-subheading {
+  margin: 20px 0 8px;
+}
+
+.section-subheading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--label-secondary);
+}
+
+.registration-card {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+}
+
+.registration-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.registration-setting span { display: grid; gap: 3px; }
+.registration-setting small { color: var(--label-secondary); font-weight: 400; font-size: 12px; }
+.registration-setting input { width: 20px; height: 20px; accent-color: var(--blue); cursor: pointer; }
+
+#user-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.user-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-top: 4px;
 }
 
 .toggle {
   display: inline-flex;
-  gap: 7px;
+  gap: 8px;
   align-items: center;
   white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-label);
+  cursor: pointer;
 }
 
-.toggle input { width: 18px; height: 18px; accent-color: var(--blue); }
-#user-form .dialog-actions { grid-column: 1 / -1; margin-top: 10px; }
-.user-list { margin-top: 8px; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
+#user-form .dialog-actions { margin-top: 6px; }
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
 
 .user-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  display: flex;
   align-items: center;
-  padding: 14px 0;
+  gap: 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--hairline);
+  transition: background-color .15s ease;
 }
 
 .user-row:last-child { border-bottom: 0; }
-.user-meta { min-width: 0; }
-.user-name { overflow-wrap: anywhere; font-weight: 600; }
-.user-detail { margin-top: 4px; }
+.user-row:hover { background: var(--fill-hover); }
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--tab-bg);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-meta { flex: 1; min-width: 0; }
+.user-name { overflow-wrap: anywhere; font-weight: 600; font-size: 14px; }
+.user-detail { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.user-sep { color: var(--label-tertiary); font-size: 11px; }
 .user-row .item-actions { justify-content: flex-end; }
 .user-disabled { opacity: .58; }
 
-#account-dialog { max-width: 500px; }
-.account-name { margin: 12px 0 2px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+#account-dialog {
+  max-width: 580px;
+  border-radius: 18px;
+  padding: 24px 28px;
+}
 
 .account-section {
-  padding: 22px 0;
+  padding: 20px 0;
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -1121,17 +1280,17 @@ dialog::backdrop {
   font-weight: 600;
 }
 
-.account-section label, #delete-account-form > label {
-  display: block;
-  margin: 12px 0 8px;
-  color: #3a3a3c;
-  font-size: 13px;
-  font-weight: 500;
+.account-section form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
-.account-section .dialog-actions { margin-top: 16px; }
+.account-section .dialog-actions { margin-top: 8px; }
 .account-danger { display: flex; justify-content: flex-end; padding-top: 22px; }
 #delete-account-dialog p { color: var(--red); line-height: 1.5; }
+#delete-account-form { display: flex; flex-direction: column; gap: 14px; }
+#delete-account-form .dialog-actions { margin-top: 8px; }
 
 .sr-only {
   position: absolute;
@@ -1172,9 +1331,12 @@ dialog::backdrop {
   .history .tools { gap: 4px; }
   .login-layout { padding: 28px 22px; }
   .login-layout .brand { margin-bottom: 30px; }
-  #user-form { grid-template-columns: minmax(0, 1fr); }
-  #user-form .dialog-actions, .user-options { grid-column: 1; }
-  .user-options { grid-template-columns: auto minmax(0, 1fr) auto; }
+  #account-dialog {
+    width: calc(100% - 24px);
+    padding: 20px 16px;
+  }
+  .user-options { flex-direction: column; align-items: stretch; gap: 10px; }
+  .user-options .form-row-inline { justify-content: space-between; }
   .temporary-share-duration { grid-template-columns: minmax(0, 1fr); }
   .temporary-share-duration button { width: 100%; }
   #image-preview-dialog {

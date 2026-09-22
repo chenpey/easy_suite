@@ -269,16 +269,36 @@ async function loadUsers() {
   for (const user of data.users) {
     const row = document.createElement("div");
     row.className = `user-row${user.enabled ? "" : " user-disabled"}`;
+    const avatar = document.createElement("div");
+    avatar.className = "user-avatar";
+    avatar.textContent = (user.username || "U").charAt(0).toUpperCase();
+
     const meta = document.createElement("div");
     meta.className = "user-meta";
     const name = document.createElement("div");
     name.className = "user-name";
     name.textContent = user.username;
+
     const detail = document.createElement("div");
-    detail.className = "user-detail muted";
+    detail.className = "user-detail";
+
+    const roleBadge = document.createElement("span");
+    roleBadge.className = `badge ${user.role === "admin" ? "badge-admin" : "badge-user"}`;
+    roleBadge.textContent = user.role === "admin" ? "管理员" : "用户";
+
+    const sep = document.createElement("span");
+    sep.className = "user-sep";
+    sep.textContent = " · ";
+
+    const statusBadge = document.createElement("span");
+    const statusClass = user.pendingApproval ? "badge-warning" : user.enabled ? "badge-success" : "badge-muted";
     const state = user.pendingApproval ? "待启用" : user.enabled ? "已启用" : "已禁用";
-    detail.textContent = `${user.role === "admin" ? "管理员" : "用户"} · ${state}`;
+    statusBadge.className = `badge ${statusClass}`;
+    statusBadge.textContent = state;
+
+    detail.append(roleBadge, sep, statusBadge);
     meta.append(name, detail);
+
     const actions = document.createElement("div");
     actions.className = "item-actions";
     const edit = actionButton("编辑用户", "pencil", () => {
@@ -307,7 +327,7 @@ async function loadUsers() {
       remove.disabled = true;
     }
     actions.append(edit, toggle, remove);
-    row.append(meta, actions);
+    row.append(avatar, meta, actions);
     list.append(row);
   }
   renderIcons();
@@ -1389,7 +1409,14 @@ async function initializeApp() {
     $("account-recovery-result").hidden = true;
     $("account-recovery-code").textContent = "";
     $("account-recovery-notice").textContent = "";
-    $("account-username").textContent = session.user.username;
+    const username = session.user.username || "";
+    $("account-username").textContent = username;
+    if ($("account-avatar")) $("account-avatar").textContent = username.charAt(0).toUpperCase() || "U";
+    if ($("account-role-badge")) {
+      const isAdmin = session.user.role === "admin";
+      $("account-role-badge").textContent = isAdmin ? "管理员" : "普通用户";
+      $("account-role-badge").className = `badge ${isAdmin ? "badge-admin" : "badge-user"}`;
+    }
     $("recovery-status").textContent = session.user.hasRecoveryCode
       ? "已设置恢复码"
       : "尚未设置恢复码";
