@@ -1141,7 +1141,9 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
     -webkit-line-clamp: 2;
     line-clamp: 2;
   }
-  .note-row-meta, .list-footer { display: none; }
+  .note-row-meta { margin-top: 5px; font-size: 12px; }
+  .note-row-meta span { display: none; }
+  .list-footer { display: none; }
   .mobile-compose {
     position: fixed;
     right: 20px;

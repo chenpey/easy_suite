@@ -411,6 +411,7 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
 
 function Notebook({ session, installApp, logout }: { session: Session; installApp?(): Promise<void>; logout(): Promise<void> }) {
   const book = useNotebook(session);
+  const [visibleNoteLimit, setVisibleNoteLimit] = useState(50);
   const [layout, setLayout] = useState<'edit' | 'preview'>('edit');
   const [mobileNote, setMobileNote] = useState(false);
   const [mobileNavigation, setMobileNavigation] = useState(false);
@@ -492,7 +493,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setDialogFeedbackTarget(dialogFeedbackTargets.current.at(-1) ?? null);
   }, []);
   const note = book.note;
+  const visibleNotes = book.notes.slice(0, visibleNoteLimit);
+  const hasHiddenNotes = visibleNotes.length < book.notes.length;
   const outline = useMemo(() => headings(note?.content ?? ''), [note?.content]);
+  useEffect(() => setVisibleNoteLimit(50), [book.query, book.tag, book.view]);
   const updateNoteListWidth = (value: number) => {
     const next = Math.min(440, Math.max(220, Math.round(value)));
     noteListWidthRef.current = next;
@@ -1160,15 +1164,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
       </header>
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
-        {book.loading ? <div className="empty-state">正在加载…</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? '没有匹配的笔记' : '暂无笔记'}</span></div> : book.notes.map((item) =>
+        {book.loading ? <div className="empty-state">正在加载…</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? '没有匹配的笔记' : '暂无笔记'}</span></div> : visibleNotes.map((item) =>
           <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
+            aria-label={`${item.title || '未命名笔记'}，${new Date(item.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
             onClick={() => selectionMode ? toggleSelected(item.id) : void openNote(item.id)}>
             <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || '未命名笔记', book.query)}</span>{item.pinned && <Pin size={12} />}</div>
-            <div className="note-excerpt">{highlightMatches(noteExcerptText(item.excerpt, book.query) || '空白笔记', book.query)}</div>
+            <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || '空白笔记', book.query)}</div>
             <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title="本机草稿" />}</div>
           </button>)}
-        {book.nextOffset !== null && <button className="load-more" onClick={() => void run(book.loadMore)}>加载更多<ChevronDown size={14} /></button>}
+        {(hasHiddenNotes || book.nextOffset !== null) && <button className="load-more" onClick={() => {
+          setVisibleNoteLimit((value) => value + 50);
+          if (!hasHiddenNotes && book.nextOffset !== null) void run(book.loadMore);
+        }}>加载更多<ChevronDown size={14} /></button>}
       </div>
       <footer className="list-footer">{book.notes.length} 篇{book.nextOffset !== null ? '+' : ''}
         {(!book.online || session.offline) && <span><WifiOff size={11} />离线</span>}
