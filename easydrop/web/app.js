@@ -1,7 +1,7 @@
-import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound } from "lucide";
+import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound } from "lucide";
 import QRCode from "qrcode";
 
-const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound };
+const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound };
 const APP_VERSION = __EASYDROP_VERSION__;
 const renderIcons = () => createIcons({ icons });
 const $ = (id) => document.getElementById(id);
@@ -195,6 +195,52 @@ function actionButton(label, name, handler, danger = false) {
   return button;
 }
 
+function setupPasswordToggles(root = document) {
+  for (const toggle of root.querySelectorAll(".password-toggle")) {
+    if (toggle.dataset.bound) continue;
+    toggle.dataset.bound = "true";
+    toggle.addEventListener("click", () => {
+      const field = toggle.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const isPassword = input.type === "password";
+      input.type = isPassword ? "text" : "password";
+      toggle.title = isPassword ? "隐藏密码" : "显示密码";
+      toggle.setAttribute("aria-label", isPassword ? "隐藏密码" : "显示密码");
+      toggle.replaceChildren(icon(isPassword ? "eye-off" : "eye"));
+      renderIcons();
+    });
+  }
+}
+
+function setupPasswordRules(input, rulesContainer) {
+  if (!input || !rulesContainer) return;
+  const rules = {
+    length: { el: rulesContainer.querySelector('[data-rule="length"]'), label: "至少 12 位" },
+    upper: { el: rulesContainer.querySelector('[data-rule="upper"]'), label: "包含大写字母" },
+    lower: { el: rulesContainer.querySelector('[data-rule="lower"]'), label: "包含小写字母" },
+    number: { el: rulesContainer.querySelector('[data-rule="number"]'), label: "包含数字" },
+  };
+  const check = () => {
+    const val = input.value;
+    const checks = {
+      length: val.length >= 12 && val.length <= 32,
+      upper: /[A-Z]/.test(val),
+      lower: /[a-z]/.test(val),
+      number: /[0-9]/.test(val),
+    };
+    for (const [key, rule] of Object.entries(rules)) {
+      if (!rule.el) continue;
+      const valid = Boolean(checks[key]);
+      rule.el.classList.toggle("valid", valid);
+      rule.el.replaceChildren(icon(valid ? "check" : "x"), document.createTextNode(rule.label));
+    }
+    renderIcons();
+  };
+  input.addEventListener("input", check);
+  check();
+}
+
 function confirmDelete(title) {
   return new Promise((resolve) => {
     const dialog = $("confirm-dialog");
@@ -307,6 +353,13 @@ async function initializeAuth() {
     if (name === view) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
   }
+  const authTabs = document.querySelector(".auth-tabs");
+  if (authTabs) authTabs.hidden = (view === "reset");
+
+  setupPasswordToggles();
+  setupPasswordRules($("register-password"), $("register-password-rules"));
+  setupPasswordRules($("reset-password"), $("reset-password-rules"));
+
   const authConfigRequest = api("/api/auth/config");
 
   $("login-form").addEventListener("submit", (event) => {
@@ -445,10 +498,36 @@ function openImagePreview(item, fileUrl) {
   $("image-preview-dialog").showModal();
 }
 
+let currentFilter = "all";
+
+function applyHistoryFilter() {
+  const list = $("history-list");
+  if (!list) return;
+  const rows = list.querySelectorAll(".history-item");
+  let visibleCount = 0;
+  for (const row of rows) {
+    const match = currentFilter === "all" || row.dataset.category === currentFilter;
+    row.hidden = !match;
+    if (match) visibleCount++;
+  }
+  let empty = list.querySelector(".empty-filter");
+  if (visibleCount === 0 && rows.length > 0) {
+    if (!empty) {
+      empty = document.createElement("p");
+      empty.className = "empty empty-filter";
+      empty.textContent = "本页当前分类暂无记录";
+      list.append(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
+}
+
 function historyRow(item) {
   const row = document.createElement("article");
   row.className = "history-item";
   row.dataset.id = item.id;
+  row.dataset.category = item.type === "text" ? "text" : item.media_type ? "image" : "file";
   const content = document.createElement("div");
   content.className = "item-content";
   const time = document.createElement("time");
@@ -554,7 +633,7 @@ function historyRow(item) {
 }
 
 function updateHistorySelection() {
-  const boxes = [...$("history-list").querySelectorAll(".history-select")];
+  const boxes = [...$("history-list").querySelectorAll(".history-item:not([hidden]) .history-select")];
   const count = boxes.filter((box) => box.checked).length;
   $("select-all").disabled = !boxes.length;
   $("select-all").checked = boxes.length > 0 && count === boxes.length;
@@ -628,6 +707,7 @@ function renderHistory(data, page = 0) {
     empty.textContent = "暂无分享记录";
     list.append(empty);
   }
+  applyHistoryFilter();
   updateHistoryPagination();
   updateHistorySelection();
   if (!retainHistoryRows) pruneHistoryRowCache();
@@ -1098,7 +1178,28 @@ function pauseUpload() {
 async function initializeApp() {
   const bootstrap = await api("/api/bootstrap");
   session = bootstrap.session;
-  $("users-open").hidden = session.user.role !== "admin";
+  setupPasswordToggles();
+  $("account-tabs").hidden = session.user.role !== "admin";
+  const profileTab = $("tab-profile");
+  const usersTab = $("tab-users");
+  const profilePanel = $("account-profile-panel");
+  const usersPanel = $("account-users-panel");
+
+  const setAccountTab = (tab) => {
+    profileTab.classList.toggle("active", tab === "profile");
+    usersTab.classList.toggle("active", tab === "users");
+    profileTab.setAttribute("aria-pressed", String(tab === "profile"));
+    usersTab.setAttribute("aria-pressed", String(tab === "users"));
+    profilePanel.hidden = tab !== "profile";
+    usersPanel.hidden = tab !== "users";
+    if (tab === "users") {
+      resetUserForm();
+      loadUsers().catch(report);
+    }
+  };
+  profileTab.addEventListener("click", () => setAccountTab("profile"));
+  usersTab.addEventListener("click", () => setAccountTab("users"));
+
   $("upload-limit").textContent = `单文件上限 ${size(session.maxUploadBytes)}`;
   const updateCount = () => {
     const bytes = new TextEncoder().encode($("text-input").value).length;
@@ -1106,10 +1207,37 @@ async function initializeApp() {
     $("text-form").querySelector("button").disabled = textSubmitting || !$("text-input").value.trim() || bytes > session.maxTextBytes;
   };
   $("text-input").addEventListener("input", updateCount);
+  $("text-input").addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      const submitBtn = $("text-form").querySelector('button[type="submit"]');
+      if (submitBtn && !submitBtn.disabled) {
+        $("text-form").requestSubmit();
+      }
+    }
+  });
   updateCount();
   $("refresh").disabled = false;
   $("clear").disabled = false;
   updateUploadControls();
+
+  const enqueueFiles = (files) => {
+    if (!files || !files.length || uploading) return false;
+    $("upload-list").replaceChildren();
+    const records = savedUploads();
+    const used = new Set();
+    uploadQueue = Array.from(files).map((file) => {
+      const saved = records.find((record) =>
+        !used.has(record.key) && record.name === file.name && record.size === file.size &&
+        record.lastModified === file.lastModified);
+      if (saved) used.add(saved.key);
+      return makeUploadRow(file, saved);
+    });
+    updateUploadControls();
+    if (uploadQueue.length) void startUpload();
+    return uploadQueue.length > 0;
+  };
+
   $("text-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (textSubmitting || !session) return;
@@ -1127,20 +1255,79 @@ async function initializeApp() {
     textSubmitting = false;
     if (session) updateCount();
   });
-  $("file-input").addEventListener("change", () => {
-    $("upload-list").replaceChildren();
-    const records = savedUploads();
-    const used = new Set();
-    uploadQueue = Array.from($("file-input").files).map((file) => {
-      const saved = records.find((record) =>
-        !used.has(record.key) && record.name === file.name && record.size === file.size &&
-        record.lastModified === file.lastModified);
-      if (saved) used.add(saved.key);
-      return makeUploadRow(file, saved);
-    });
-    updateUploadControls();
-    if (uploadQueue.length) void startUpload();
+  $("file-input").addEventListener("change", () => enqueueFiles($("file-input").files));
+
+  const dragOverlay = $("drag-overlay");
+  let dragCounter = 0;
+  window.addEventListener("dragenter", (e) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      dragCounter++;
+      dragOverlay.hidden = false;
+    }
   });
+  window.addEventListener("dragleave", (e) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dragOverlay.hidden = true;
+      }
+    }
+  });
+  window.addEventListener("dragover", (e) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("drop", (e) => {
+    if (e.dataTransfer?.types?.includes("Files")) {
+      e.preventDefault();
+      dragCounter = 0;
+      dragOverlay.hidden = true;
+      if (e.dataTransfer.files?.length) {
+        enqueueFiles(e.dataTransfer.files);
+      }
+    }
+  });
+
+  window.addEventListener("paste", (e) => {
+    const target = e.target;
+    const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+    const inCompose = target === document.body || target?.closest?.(".compose");
+    if (isInput || !inCompose || document.querySelector("dialog[open]")) return;
+    if (e.clipboardData?.files?.length) {
+      e.preventDefault();
+      if (enqueueFiles(e.clipboardData.files)) notice(`已从剪贴板添加 ${e.clipboardData.files.length} 个文件`);
+      return;
+    }
+    if (e.clipboardData?.types?.includes("text/plain")) {
+      const text = e.clipboardData.getData("text/plain");
+      if (text && text.trim()) {
+        e.preventDefault();
+        const input = $("text-input");
+        input.value = (input.value ? input.value + "\n" : "") + text;
+        updateCount();
+        input.focus();
+        notice("已将剪贴板内容填入文本框");
+      }
+    }
+  });
+
+  for (const btn of document.querySelectorAll(".history-filter-btn")) {
+    btn.addEventListener("click", () => {
+      for (const b of document.querySelectorAll(".history-filter-btn")) {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      }
+      btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
+      currentFilter = btn.dataset.filter || "all";
+      for (const box of $("history-list").querySelectorAll(".history-select")) box.checked = false;
+      applyHistoryFilter();
+      updateHistorySelection();
+    });
+  }
+
   $("upload").addEventListener("click", () => uploading ? pauseUpload() : startUpload());
   $("refresh").addEventListener("click", () => busy($("refresh"), async () => {
     await loadHistory();
@@ -1152,13 +1339,13 @@ async function initializeApp() {
   $("history-prev").addEventListener("click", () => loadHistory(historyPage - 1).catch(report));
   $("history-next").addEventListener("click", () => loadHistory(historyPage + 1).catch(report));
   $("select-all").addEventListener("change", () => {
-    for (const box of $("history-list").querySelectorAll(".history-select")) box.checked = $("select-all").checked;
+    for (const box of $("history-list").querySelectorAll(".history-item:not([hidden]) .history-select")) box.checked = $("select-all").checked;
     updateHistorySelection();
   });
   $("clear").addEventListener("click", () => busy($("clear"), async () => {
     if (uploading) return;
     const rows = [...$("history-list").querySelectorAll(".history-item")]
-      .filter((row) => row.querySelector(".history-select").checked);
+      .filter((row) => !row.hidden && row.querySelector(".history-select").checked);
     if (!await confirmDelete(rows.length ? `删除所选 ${rows.length} 条记录？` : "清空所有分享记录和文件？")) return;
     const removed = [];
     deletingHistory = true;
@@ -1196,6 +1383,7 @@ async function initializeApp() {
     expireSession();
   }));
   $("account-open").addEventListener("click", () => {
+    setAccountTab("profile");
     $("password-form").reset();
     $("recovery-form").reset();
     $("account-recovery-result").hidden = true;
@@ -1327,12 +1515,6 @@ async function initializeApp() {
     notice("临时链接已撤销");
     await loadHistory();
   }));
-  $("users-open").addEventListener("click", () => busy($("users-open"), async () => {
-    resetUserForm();
-    await loadUsers();
-    $("users-dialog").showModal();
-  }));
-  $("users-close").addEventListener("click", () => $("users-dialog").close());
   $("registration-enabled").addEventListener("change", async () => {
     const input = $("registration-enabled");
     const enabled = input.checked;
