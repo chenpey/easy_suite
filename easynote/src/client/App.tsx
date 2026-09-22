@@ -23,7 +23,7 @@ import {
 import { useNotebook } from './useNotebook';
 import { exportArchive, exportLocalDrafts, importExternalFiles } from './transfer';
 import type { NoteConflictField } from './merge';
-import { dateLocale, setUiLanguage, uiLanguage } from './i18n';
+import { dateLocale, setUiLanguage, translate, uiLanguage } from './i18n';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -31,7 +31,8 @@ interface InstallPromptEvent extends Event {
 }
 
 function IconButton({ label, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return <button className="icon-button" data-tooltip={label} aria-label={label} {...props}>{children}</button>;
+  const tooltip = translate(label);
+  return <button className="icon-button" data-tooltip={tooltip} aria-label={tooltip} {...props}>{children}</button>;
 }
 
 function BrandIcon({ size }: { size: number }) {
@@ -1469,7 +1470,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <option value="zh">中文</option><option value="en">English</option>
       </select></div>
       <div className="setting-row"><span>深色外观</span><button role="switch" aria-checked={dark} aria-label="深色外观" className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
-      <div className="setting-row"><span>离线笔记库{book.offlineLibrary ? ` · ${book.offlineCount} 篇` : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label="离线笔记库" className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
+      <div className="setting-row"><span>离线笔记库{book.offlineLibrary ? (uiLanguage() === 'en' ? ` · ${book.offlineCount} notes` : ` · ${book.offlineCount} 篇`) : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label="离线笔记库" className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
       {installApp && <div className="setting-row"><span>应用</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />安装 EasyNote</button></div>}
       <div className="setting-row"><span>数据</span><div className="button-group">
         <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), '备份已下载')}><Download size={16} />导出 ZIP</button>
@@ -1489,15 +1490,36 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <summary>查看导入格式示例</summary>
         <p>请选择 EasyNote 导出的完整 ZIP，不要解压后逐个选择笔记文件。</p>
         <p>也可导入 Obsidian 目录、通用 Markdown/TXT ZIP 或多个 Markdown/TXT 文件；本地 Wiki 链接、相对链接和受支持附件会自动转换。</p>
-        <pre>{`easynote-YYYY-MM-DD.zip
+        <pre>{uiLanguage() === 'en' ? `easynote-YYYY-MM-DD.zip
+  manifest.json
+  notes/
+    sample-note.md
+    untitled.md
+  files/
+    <file-id>-attachment-name` : `easynote-YYYY-MM-DD.zip
   manifest.json
   notes/
     示例笔记.md
     未命名.md
   files/
     <file-id>-附件名`}</pre>
-        <p><code>manifest.json</code> 示例：</p>
-        <pre>{`{
+        <p><code>manifest.json</code> {uiLanguage() === 'en' ? 'Example:' : '示例：'}</p>
+        <pre>{uiLanguage() === 'en' ? `{
+  "format": "easynote",
+  "version": 2,
+  "notes": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "path": "notes/sample-note.md",
+      "title": "Sample Note",
+      "tags": ["sample"],
+      "pinned": false,
+      "archived": false,
+      "deletedAt": null
+    }
+  ],
+  "files": []
+}` : `{
   "format": "easynote",
   "version": 2,
   "notes": [
