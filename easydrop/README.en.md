@@ -8,49 +8,6 @@ EasyDrop is a text and file sharing tool built on Cloudflare Workers, using user
 
 Ideal for personal cross-device text and file transfers, it also supports multiple users on the same instance with isolated personal workspaces. Administrators manage registration and accounts, while content access remains strictly segregated per user.
 
-## 1.2.6 Updates
-
-- **Settings Modal English Layout Polish**: Optimized layout and text alignment of the account settings modal in English mode, adjusting label and control widths to prevent text wrapping and misalignments; refined responsive spacing and layout on mobile and narrow screens.
-
-## 1.2.5 Updates
-
-- **i18n Architecture Refactoring**: Consolidated all copy into an independent dictionary (`web/i18n.js`) supporting `t(key, ...args)` parameter interpolation.
-- **Static & Dynamic Decoupling**: HTML static copy uses `data-i18n*` attributes rendered once on load, while JS dynamic copy uses explicit `t(...)` calls, completely removing the `MutationObserver` text replacement hack.
-- **Automated Key Alignment Script**: Added `scripts/check-i18n.mjs` integrated into `check` and `test` pipelines, blocking builds if translations are missing or misaligned.
-
-## 1.2.4 Updates
-
-- **Language Option Standardization**: Kept native labels "中文" and "English" unchanged in the settings language selector, and unified the label to "语言/Language" to avoid translation confusion.
-
-## 1.2.3 Updates
-
-- **Copy Feedback Localization**: Fixed the "Copied" feedback tooltip remaining in Chinese when copying text or file links in English mode; added dynamic observation and localization support for the `data-copy-feedback` attribute.
-
-## 1.2.2 Updates
-
-- **Translation & Pagination Fixes**: Added English translations for the file picker area and "Current Page" filter tag; removed the global string replacement rule that accidentally stripped the "页" character, ensuring pagination indicators display properly.
-
-## 1.2.1 Updates
-
-- **i18n & Layout Polish**: Fixed centered/separated layout defect in the language selector within Account Settings, adopting standard Apple-style space-between alignment; reordered phrase dictionary to prevent substring conflicts (e.g. deleted items count, chunk upload status); added `alt` and meta description translations; dynamically formatted timestamps and share expiry dates according to selected UI language.
-
-## 1.2.0 Updates
-
-- The UI defaults to Chinese and can switch to English from the login page or account settings, with mobile layouts adapted for longer English labels.
-
-## 1.1.7 Updates
-
-- **Apple HIG Design Overhaul**: Account settings and user management adopt an Inset Grouped card style, macOS-inspired Segmented Controls, circular user letter avatars, and semantic status badges.
-- **Form Layout Fixes**: Eliminated hidden ID placeholder offsets caused by two-column CSS grid; refactored into a clean, single-column responsive form and options row.
-- **Dark Mode & Thumbnail Polish**: Transparent image thumbnail backgrounds adapt to dark theme; optimized responsive spacing for mobile dialogs and forms.
-
-## 1.1.6 Updates
-
-- Added system dark theme support, password visibility toggles with rule hints, and merged admin user management into the Account modal.
-- Added drag-and-drop and secure clipboard file uploads, plus `Cmd/Ctrl+Enter` text sharing shortcut.
-- Added history type filtering for the current page; select-all, counts, and deletion strictly apply to currently visible records.
-- Updated browser regression tests for user management, filtering, and modal paste handling.
-
 ## Table of Contents
 
 - [Features](#features)
