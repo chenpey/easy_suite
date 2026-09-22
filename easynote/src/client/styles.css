@@ -556,6 +556,7 @@ nav button.active svg { color: var(--accent); }
 .tags-input { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; color: var(--muted); }
 .tags-input:focus-within { color: var(--accent); }
 .tags-input input { width: 100%; padding: 4px 0; background: transparent; border: 0; box-shadow: none; font-size: 12px; }
+.tags-input select { max-width: 40%; padding: 4px; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
 .word-count { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .markdown { min-height: 100px; overflow-wrap: anywhere; color: var(--ink); font-size: 16px; line-height: 1.7; }
 .markdown h1 { font-size: 30px; font-weight: 650; }
