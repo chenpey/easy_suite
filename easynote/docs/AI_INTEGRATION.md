@@ -18,23 +18,7 @@ AI 客户端 → https://EasyNote 地址/mcp → D1 / R2
 
 ## 连接 Codex
 
-将令牌放入本地环境变量：
-
-```bash
-export EASYNOTE_TOKEN='enai_...'
-```
-
-在 `~/.codex/config.toml` 中添加：
-
-```toml
-[mcp_servers.easynote]
-url = "https://你的-EasyNote-域名/mcp"
-bearer_token_env_var = "EASYNOTE_TOKEN"
-```
-
-重启 Codex，然后使用 `/mcp` 检查连接。Codex 桌面端也可在“设置 → MCP servers”中添加同一个 Streamable HTTP URL。
-
-仅在可信设备上，也可直接保存请求头，免去环境变量：
+创建令牌后点击“复制 Codex 配置”，将内容加入 `~/.codex/config.toml`：
 
 ```toml
 [mcp_servers.easynote]
@@ -42,7 +26,21 @@ url = "https://你的-EasyNote-域名/mcp"
 http_headers = { Authorization = "Bearer enai_..." }
 ```
 
-`config.toml` 此时包含明文令牌，不要共享或提交该文件。
+重启 Codex，然后使用 `/mcp` 检查连接。Codex 桌面端也可在“设置 → MCP servers”中添加同一个 Streamable HTTP URL。
+
+如需避免在配置文件中保存令牌，可先设置环境变量：
+
+```bash
+export EASYNOTE_TOKEN='enai_...'
+```
+
+再将配置中的 `http_headers` 替换为：
+
+```toml
+bearer_token_env_var = "EASYNOTE_TOKEN"
+```
+
+`bearer_token_env_var` 必须填写环境变量名称，不能填写 `enai_...` 令牌本身。直接配置方式会在 `config.toml` 中保存明文令牌，不要共享或提交该文件。
 
 ## MCP 工具
 
