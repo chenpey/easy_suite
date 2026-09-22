@@ -262,11 +262,34 @@ Complete R2 enablement, public route selection, and API Token creation in Cloudf
 ### 2. Enable R2
 
 1. Log into [Cloudflare Dashboard](https://dash.cloudflare.com/) and navigate to the target account.
-2. Go to **Storage & databases → R2 → Overview**.
-3. Complete the R2 subscription checkout if prompted.
-4. Verify the **Create bucket** button appears. The deployment script creates `<worker-name>-files` and enforces private access.
+2. Go to **Storage & databases → R2 → Overview**, or navigate directly to [R2 Overview](https://dash.cloudflare.com/?to=/:account/r2/overview).
+3. On first use, follow the prompts to complete the R2 subscription checkout (**Add R2 subscription**, **Get started**, or **Continue**).
+4. Return to R2 Overview and confirm that the **Create bucket** button appears. The deployment script creates `<worker-name>-files` and enforces private access.
 
-### 3. Create API Token
+![Cloudflare R2 Enablement Flow](docs/img/cloudflare/cloudflare-r2-enable.svg)
+
+The R2 "subscription" activates the R2 product independently from your Workers plan. R2 Standard includes 10 GB-month storage, 1,000,000 Class A operations, and 10,000,000 Class B operations per month for free.
+
+### 3. Prepare Access Domain
+
+#### 3.1 Using workers.dev
+
+1. Navigate to **Workers & Pages** in the target account.
+2. Locate **Your subdomain**. Set it up on first use, or click **Change** to view/modify if already configured.
+3. Choose an account-level subdomain (e.g. `my-account`), resulting in the suffix `my-account.workers.dev`.
+4. Run the deployment script to create the Worker and obtain the full URL.
+
+![Cloudflare workers.dev Subdomain Initialization Flow](docs/img/cloudflare/cloudflare-workers-dev.svg)
+
+The `workers.dev` subdomain belongs to the entire account rather than an individual Worker. A Worker named `my-share` under `my-account` will be available at `https://my-share.my-account.workers.dev`.
+
+#### 3.2 Using Custom Domain
+
+1. Ensure the apex domain has been added to the same Cloudflare account with Zone status **Active**.
+2. Prepare an unused hostname (e.g. `share.example.com`) for the deployment script to create the DNS record.
+3. Enter the full hostname at the `Custom domain` prompt during deployment; the script attaches the domain via Wrangler, and Cloudflare automatically provisions DNS and edge certificates.
+
+### 4. Create API Token
 
 Create a **User API Token** under [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/):
 
@@ -288,7 +311,9 @@ Additional permissions required only for Custom Domains:
 
 Include the target account in **Account Resources**, and the root domain zone in **Zone Resources** if using Custom Domains.
 
-### 4. Run Deployment
+![EasyDrop Cloudflare API Token Scopes and Permissions](docs/img/cloudflare/cloudflare-api-token.svg)
+
+### 5. Run Deployment
 
 ```sh
 cd easydrop
