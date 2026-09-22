@@ -104,7 +104,7 @@ function translateUi(value) {
 }
 function translateElement(element) {
   if (element.closest("pre, code, [data-i18n-ignore]")) return;
-  for (const attribute of ["aria-label", "title", "placeholder", "alt"]) {
+  for (const attribute of ["aria-label", "title", "placeholder", "alt", "data-copy-feedback"]) {
     const value = element.getAttribute(attribute);
     const translated = value && translateUi(value);
     if (value && translated !== value) element.setAttribute(attribute, translated);
@@ -130,7 +130,7 @@ function installUiLanguage() {
   new MutationObserver((records) => records.forEach((record) => {
     if (record.type === "attributes") translateElement(record.target);
     record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement));
-  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder", "alt"] });
+  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder", "alt", "data-copy-feedback"] });
 }
 installUiLanguage();
 for (const id of ["language-select", "login-language-select"]) {
@@ -480,9 +480,9 @@ function showCopyFeedback(button, status, popover) {
   clearCopyFeedback?.();
   notice("");
   clearTimeout(copyFeedbackTimers.get(button));
-  status.textContent = "已复制";
+  status.textContent = translateUi("已复制");
   if (popover) {
-    button.dataset.copyFeedback = "已复制";
+    button.dataset.copyFeedback = translateUi("已复制");
     button.classList.add("copy-confirmed");
   }
   clearCopyFeedback = () => {
