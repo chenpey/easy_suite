@@ -52,8 +52,6 @@ const translations = {
   "下载原图": "Download Original",
   "有效时长（小时）": "Duration (hours)",
   "创建链接": "Create Link",
-  "中文": "Chinese",
-  "英文": "English",
   "账号和个人空间中的全部内容将被删除。": "All contents of this account and personal space will be deleted.",
 };
 const translationPhrases = [

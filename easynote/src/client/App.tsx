@@ -1505,7 +1505,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     </Modal>}
     {settings && <Modal title="设置" close={() => { if (!transfer) setSettings(false); }}>
-      <div className="setting-row"><span>语言</span><select aria-label="语言" value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
+      <div className="setting-row"><span>语言/Language</span><select aria-label="语言" value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
         <option value="zh">中文</option><option value="en">English</option>
       </select></div>
       <div className="setting-row"><span>深色外观</span><button role="switch" aria-checked={dark} aria-label="深色外观" className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
