@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, FileText, FolderOpen, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -456,9 +456,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [linkQuery, setLinkQuery] = useState('');
   const [linkNotes, setLinkNotes] = useState<NoteSummary[]>([]);
   const [tagManager, setTagManager] = useState(false);
-  const [tagSource, setTagSource] = useState('');
-  const [tagTarget, setTagTarget] = useState('');
-  const [tagAction, setTagAction] = useState<'rename' | 'merge' | 'delete'>('rename');
+  const [newTagInput, setNewTagInput] = useState('');
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [editingTagValue, setEditingTagValue] = useState('');
+  const [mergingTag, setMergingTag] = useState<string | null>(null);
+  const [mergingTarget, setMergingTarget] = useState('');
+  const [deletingTag, setDeletingTag] = useState<string | null>(null);
+  const [noteTagQuery, setNoteTagQuery] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
@@ -475,7 +479,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [dark, setDark] = useState(() => localStorage.getItem('easynote-theme') === 'dark');
   const [wideDocument, setWideDocument] = useState(() => localStorage.getItem('easynote-document-width') === 'wide');
-  const [tagText, setTagText] = useState('');
   const editor = useRef<EditorHandle>(null);
   const editorCursor = useRef(0);
   const pendingEditorOffset = useRef<{ noteId: string; offset: number } | null>(null);
@@ -534,7 +537,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     localStorage.setItem('easynote-note-list-width', String(Math.min(440, Math.max(220, widths[event.key]))));
   };
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('easynote-theme', dark ? 'dark' : 'light'); }, [dark]);
-  useEffect(() => { setTagText(note?.tags.join(', ') ?? ''); }, [note?.id, JSON.stringify(note?.tags)]);
   useEffect(() => {
     const pending = pendingEditorOffset.current;
     editorCursor.current = pending && pending.noteId === note?.id
@@ -931,15 +933,34 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const count = await moveToTrash([...selected]);
     finishBulk(`已将 ${count} 篇笔记移入回收站`);
   };
-  const applyTagManagement = () => void run(async () => {
-    const source = tagSource.trim();
-    const target = tagAction === 'delete' ? null : tagTarget.trim();
-    if (!source || target !== null && (!target || target.length > 40)) throw new Error('请选择来源标签并填写 1-40 个字符的目标标签。');
-    const count = await book.manageTag(source, target);
-    setTagManager(false);
-    setTagSource('');
-    setTagTarget('');
-    showNotice(`已更新 ${count} 篇笔记`);
+  const handleSaveEditTag = () => void run(async () => {
+    if (!editingTag) return;
+    const target = editingTagValue.trim();
+    if (!target || target.length > 40 || target.includes(',') || target.includes('，')) {
+      throw new Error('标签必须为 1-40 个字符，且不能包含逗号。');
+    }
+    if (target === editingTag) {
+      setEditingTag(null);
+      return;
+    }
+    const count = await book.manageTag(editingTag, target);
+    setEditingTag(null);
+    showNotice(`已将 #${editingTag} 重命名为 #${target}${count ? `，更新了 ${count} 篇笔记` : ''}`);
+  });
+  const handleConfirmMergeTag = () => void run(async () => {
+    if (!mergingTag || !mergingTarget) return;
+    const from = mergingTag;
+    const to = mergingTarget;
+    const count = await book.manageTag(from, to);
+    setMergingTag(null);
+    showNotice(`已将 #${from} 合并到 #${to}${count ? `，更新了 ${count} 篇笔记` : ''}`);
+  });
+  const handleConfirmDeleteTag = () => void run(async () => {
+    if (!deletingTag) return;
+    const target = deletingTag;
+    const count = await book.manageTag(target, null);
+    setDeletingTag(null);
+    showNotice(`已删除标签 #${target}${count ? `，更新了 ${count} 篇笔记` : ''}`);
   });
   const goToHeading = (offset: number) => {
     editAt(offset);
@@ -1258,19 +1279,112 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           </aside>}
         </div>
         <footer className="document-footer">
-          <div className="tags-input"><Tag size={15} /><details className="tag-picker"><summary>标签管理</summary><div role="group" aria-label="选择已有标签">
-            {[...new Set([...book.tags, ...note.tags])].map((tag) => <label key={tag}><input type="checkbox" checked={note.tags.includes(tag)}
-              disabled={!!note.deletedAt || !!transfer || !note.tags.includes(tag) && note.tags.length >= 20} onChange={(event) => {
-                const tags = event.target.checked ? [...note.tags, tag] : note.tags.filter((value) => value !== tag);
-                setTagText(tags.join(', '));
-                setNoteFields({ tags });
-              }} />{tag}</label>)}
-            {!book.tags.length && !note.tags.length && <span>暂无已有标签</span>}
-          </div></details><input aria-label="笔记标签" placeholder="标签" value={tagText} disabled={!!note.deletedAt || !!transfer} onChange={(e) => setTagText(e.target.value)} onBlur={() => {
-            const tags = [...new Set(tagText.split(/[,，]/).map((v) => v.trim()).filter(Boolean))];
-            if (tags.length > 20 || tags.some((t) => t.length > 40)) { book.setError('最多 20 个标签，每个不超过 40 字符。'); setTagText(note.tags.join(', ')); return; }
-            if (JSON.stringify(tags) !== JSON.stringify(note.tags)) setNoteFields({ tags });
-          }} /></div>
+          <div className="note-tags-bar">
+            <Tag size={15} className="note-tags-icon" />
+            <div className="note-tags-list">
+              {note.tags.map((tag) => (
+                <span key={tag} className="note-tag-chip">
+                  <span className="note-tag-name">#{tag}</span>
+                  <button
+                    type="button"
+                    className="note-tag-remove"
+                    title={`去除标签 #${tag}`}
+                    aria-label={`去除标签 ${tag}`}
+                    disabled={!!note.deletedAt || !!transfer}
+                    onClick={() => {
+                      const tags = note.tags.filter((t) => t !== tag);
+                      setNoteFields({ tags });
+                    }}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <details className="tag-picker">
+              <summary className="tag-picker-summary" aria-label="添加标签">
+                <Plus size={13} />
+                <span>{note.tags.length ? '添加' : '添加标签'}</span>
+              </summary>
+              <div className="tag-picker-popover" role="group" aria-label="选择或创建标签">
+                <div className="tag-picker-search">
+                  <input
+                    placeholder="搜索或回车新建标签…"
+                    value={noteTagQuery}
+                    onChange={(e) => setNoteTagQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = noteTagQuery.trim();
+                        if (!val) return;
+                        if (val.length > 40 || val.includes(',') || val.includes('，')) {
+                          book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+                          return;
+                        }
+                        if (note.tags.includes(val)) {
+                          setNoteTagQuery('');
+                          return;
+                        }
+                        if (note.tags.length >= 20) {
+                          book.setError('最多 20 个标签。');
+                          return;
+                        }
+                        book.addTag(val);
+                        setNoteFields({ tags: [...note.tags, val] });
+                        setNoteTagQuery('');
+                      }
+                    }}
+                  />
+                  {noteTagQuery.trim() && !book.tags.includes(noteTagQuery.trim()) && !note.tags.includes(noteTagQuery.trim()) && (
+                    <button
+                      type="button"
+                      className="tag-picker-create-btn"
+                      onClick={() => {
+                        const val = noteTagQuery.trim();
+                        if (val.length > 40 || val.includes(',') || val.includes('，')) {
+                          book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+                          return;
+                        }
+                        if (note.tags.length >= 20) {
+                          book.setError('最多 20 个标签。');
+                          return;
+                        }
+                        book.addTag(val);
+                        setNoteFields({ tags: [...note.tags, val] });
+                        setNoteTagQuery('');
+                      }}
+                    >
+                      新建并打标
+                    </button>
+                  )}
+                </div>
+                <div className="tag-picker-options">
+                  {[...new Set([...book.tags, ...note.tags])]
+                    .sort((a, b) => a.localeCompare(b, 'zh-CN'))
+                    .filter((t) => !noteTagQuery.trim() || t.toLocaleLowerCase().includes(noteTagQuery.trim().toLocaleLowerCase()))
+                    .map((tag) => (
+                      <label key={tag} className="tag-picker-option">
+                        <input
+                          type="checkbox"
+                          checked={note.tags.includes(tag)}
+                          disabled={!!note.deletedAt || !!transfer || (!note.tags.includes(tag) && note.tags.length >= 20)}
+                          onChange={(event) => {
+                            const tags = event.target.checked
+                              ? [...note.tags, tag]
+                              : note.tags.filter((value) => value !== tag);
+                            setNoteFields({ tags });
+                          }}
+                        />
+                        <span>{tag}</span>
+                      </label>
+                    ))}
+                  {![...new Set([...book.tags, ...note.tags])].filter((t) => !noteTagQuery.trim() || t.toLocaleLowerCase().includes(noteTagQuery.trim().toLocaleLowerCase())).length && (
+                    <span className="tag-picker-empty">{noteTagQuery.trim() ? '按回车创建新标签' : '暂无已有标签'}</span>
+                  )}
+                </div>
+              </div>
+            </details>
+          </div>
           <span className="word-count">{note.content.length.toLocaleString()} 字符</span>
           <IconButton label={pdfProgress || '导出当前笔记为 PDF'} className="icon-button mobile-pdf-action" disabled={printing}
             onClick={exportCurrentNote}>{printing ? <LoaderCircle className="spin" size={17} /> : <Printer size={17} />}</IconButton>
@@ -1481,16 +1595,147 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="command-list">{linkNotes.map((item) =>
         <button key={item.id} onClick={() => insertNoteLink(item)}><Link2 size={16} /><span>{item.title || '未命名笔记'}</span></button>)}</div>
     </Modal>}
-    {tagManager && <Modal title="管理标签" close={() => setTagManager(false)}>
-      <div className="form-grid">
-        <label>来源标签<input list="known-tags" value={tagSource} onChange={(event) => setTagSource(event.target.value)} /></label>
-        <datalist id="known-tags">{book.tags.map((value) => <option value={value} key={value} />)}</datalist>
-        <label>操作<select value={tagAction} onChange={(event) => setTagAction(event.target.value as typeof tagAction)}>
-          <option value="rename">重命名</option><option value="merge">合并</option><option value="delete">删除</option>
-        </select></label>
-        {tagAction !== 'delete' && <label>目标标签<input maxLength={40} value={tagTarget} onChange={(event) => setTagTarget(event.target.value)} /></label>}
+    {tagManager && <Modal title="管理标签" className="tag-manager-dialog" close={() => {
+      setTagManager(false);
+      setEditingTag(null);
+      setMergingTag(null);
+      setDeletingTag(null);
+    }}>
+      <div className="tag-manager-content">
+        <form className="tag-manager-add" onSubmit={(e) => {
+          e.preventDefault();
+          const val = newTagInput.trim();
+          if (!val) return;
+          if (val.length > 40 || val.includes(',') || val.includes('，')) {
+            book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+            return;
+          }
+          if (book.tags.includes(val)) {
+            book.setError('该标签已存在。');
+            return;
+          }
+          book.addTag(val);
+          setNewTagInput('');
+          showNotice(`已新增标签 #${val}`);
+        }}>
+          <input
+            placeholder="输入新标签名称…"
+            maxLength={40}
+            value={newTagInput}
+            onChange={(e) => setNewTagInput(e.target.value)}
+          />
+          <button type="submit" className="primary" disabled={disabled || !newTagInput.trim()}>
+            <Plus size={15} />新增
+          </button>
+        </form>
+
+        <div className="tag-manager-list" role="list">
+          {book.tags.length === 0 ? (
+            <div className="tag-manager-empty">暂无标签，在上方输入名称创建新标签</div>
+          ) : (
+            book.tags.map((tag) => {
+              if (editingTag === tag) {
+                return (
+                  <div key={tag} className="tag-manager-row editing" role="listitem">
+                    <input
+                      autoFocus
+                      maxLength={40}
+                      value={editingTagValue}
+                      onChange={(e) => setEditingTagValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleSaveEditTag();
+                        if (e.key === 'Escape') setEditingTag(null);
+                      }}
+                    />
+                    <div className="tag-manager-row-actions">
+                      <button className="primary" disabled={disabled || !editingTagValue.trim()} onClick={() => void handleSaveEditTag()}>保存</button>
+                      <button onClick={() => setEditingTag(null)}>取消</button>
+                    </div>
+                  </div>
+                );
+              }
+              if (mergingTag === tag) {
+                const targetOptions = book.tags.filter((t) => t !== tag);
+                return (
+                  <div key={tag} className="tag-manager-row merging" role="listitem">
+                    <span className="tag-manager-label">将 <strong>#{tag}</strong> 合并到：</span>
+                    <select value={mergingTarget} onChange={(e) => setMergingTarget(e.target.value)}>
+                      {targetOptions.map((t) => <option key={t} value={t}>#{t}</option>)}
+                    </select>
+                    <div className="tag-manager-row-actions">
+                      <button className="primary" disabled={disabled || !mergingTarget} onClick={() => void handleConfirmMergeTag()}>确认合并</button>
+                      <button onClick={() => setMergingTag(null)}>取消</button>
+                    </div>
+                  </div>
+                );
+              }
+              if (deletingTag === tag) {
+                return (
+                  <div key={tag} className="tag-manager-row deleting" role="listitem">
+                    <span className="tag-manager-label danger-text">从所有笔记中删除 <strong>#{tag}</strong>？</span>
+                    <div className="tag-manager-row-actions">
+                      <button className="danger" disabled={disabled} onClick={() => void handleConfirmDeleteTag()}>确认删除</button>
+                      <button onClick={() => setDeletingTag(null)}>取消</button>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <div key={tag} className="tag-manager-row" role="listitem">
+                  <span className="tag-manager-badge">#{tag}</span>
+                  <div className="tag-manager-row-actions">
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => {
+                        setEditingTag(tag);
+                        setEditingTagValue(tag);
+                        setMergingTag(null);
+                        setDeletingTag(null);
+                      }}
+                    >
+                      <Pencil size={13} />编辑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disabled || book.tags.length <= 1}
+                      onClick={() => {
+                        const targets = book.tags.filter((t) => t !== tag);
+                        setMergingTag(tag);
+                        setMergingTarget(targets[0] || '');
+                        setEditingTag(null);
+                        setDeletingTag(null);
+                      }}
+                    >
+                      <GitMerge size={13} />合并
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-btn"
+                      disabled={disabled}
+                      onClick={() => {
+                        setDeletingTag(tag);
+                        setEditingTag(null);
+                        setMergingTag(null);
+                      }}
+                    >
+                      <Trash2 size={13} />删除
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
-      <div className="dialog-actions"><button onClick={() => setTagManager(false)}>取消</button><button className={tagAction === 'delete' ? 'danger' : 'primary'} disabled={disabled || !tagSource.trim()} onClick={applyTagManagement}>应用</button></div>
+      <div className="dialog-actions">
+        <button onClick={() => {
+          setTagManager(false);
+          setEditingTag(null);
+          setMergingTag(null);
+          setDeletingTag(null);
+        }}>完成</button>
+      </div>
     </Modal>}
     {bulkTagOpen && <Modal title="批量添加标签" close={() => setBulkTagOpen(false)}>
       <label className="single-field">标签<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>

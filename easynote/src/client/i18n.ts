@@ -79,6 +79,10 @@ Object.assign(exact, {
   '延长 30 天': 'Extend 30 Days', '设为永久': 'Make Permanent', '暂无正在分享的笔记': 'No Shared Notes',
   '永久删除这篇笔记？': 'Delete this note permanently?', '将永久删除回收站中的全部笔记，此操作无法撤销。': 'All notes in Trash will be permanently deleted. This cannot be undone.',
   '另一个标签页正在编辑': 'Another Tab Is Editing', '浏览器不支持安全编辑锁': 'Browser Does Not Support Safe Edit Lock',
+  '添加标签': 'Add Tag', '新增标签': 'New Tag', '输入新标签名称…': 'Enter new tag name…',
+  '暂无标签，在上方输入名称创建新标签': 'No tags. Enter a name above to create one.',
+  '确认合并': 'Confirm Merge', '搜索或回车新建标签…': 'Search or press enter to create…',
+  '新建并打标': 'Create & Tag', '按回车创建新标签': 'Press Enter to create new tag', '完成': 'Done',
 });
 
 const ignored = '.note-row, .note-title, .cm-editor, .markdown, .tag-nav, .tag-picker label, .task-center-copy, .version-preview, pre, code, [data-i18n-ignore]';
