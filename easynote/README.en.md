@@ -2,9 +2,14 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.3`
+Current Version: `0.7.4`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.4 Updates
+
+- **Enhanced Tag Picker Interaction**: The tag selection popover now supports pressing `ESC` or clicking outside to dismiss, auto-focuses the search input upon opening, and includes a dedicated close button.
+- **UI Polish & i18n Fixes**: Fixed the "Reopen" primary button styling and English translation on the multi-tab lock screen; resolved edge-clipping of tooltips (e.g. `Move to Trash`) on the rightmost toolbar button.
 
 ## 0.7.3 Updates
 
