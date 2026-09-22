@@ -2,9 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.1`
+Current Version: `0.7.2`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.2 Updates
+
+- **i18n & Localization Fixes**: Date and time formatting in English mode dynamically uses `'en-US'`; enabled `data-tooltip` and `alt` attribute translations; reordered phrase dictionary to resolve substring precedence conflicts (e.g. tag operations, revision notices, size limits, and conflict copy suffixes); added missing dynamic notices and error translations.
 
 ## 0.7.1 Updates
 

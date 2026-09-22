@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, Link2, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
 import type { NoteShare } from '../shared/types';
 import { api } from './api';
+import { dateLocale } from './i18n';
 
 interface Props {
   noteId: string;
@@ -77,7 +78,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
       <Link2 size={17} />
       <div><strong>分享有效</strong><span>{share.expiresAt === null
         ? '永久有效'
-        : `截止 ${new Date(share.expiresAt).toLocaleString('zh-CN')}`}</span></div>
+        : `截止 ${new Date(share.expiresAt).toLocaleString(dateLocale())}`}</span></div>
     </div>}
     {url && <div className="share-url" role="status">
       <input readOnly aria-label="只读分享链接" value={url} onFocus={(event) => event.currentTarget.select()} />

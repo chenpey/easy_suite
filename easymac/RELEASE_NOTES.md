@@ -1,3 +1,8 @@
+## EasyMac 0.4.1
+
+- 增强动态属性监听（`aria-label`、`title`、`placeholder`、`alt`），提升英文切换完整度。
+- 补充页面描述元信息（meta description）翻译与安装脚本说明文本。
+
 ## EasyMac 0.4.0
 
 - 本地 UI 增加中英文切换，默认中文并保存用户选择。

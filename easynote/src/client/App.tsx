@@ -23,7 +23,7 @@ import {
 import { useNotebook } from './useNotebook';
 import { exportArchive, exportLocalDrafts, importExternalFiles } from './transfer';
 import type { NoteConflictField } from './merge';
-import { setUiLanguage, uiLanguage } from './i18n';
+import { dateLocale, setUiLanguage, uiLanguage } from './i18n';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -200,8 +200,8 @@ function SharedPage({ token }: { token: string }) {
         <article className="shared-document">
           <h1>{note.title || '未命名笔记'}</h1>
           <div className="document-meta">
-            <time>更新于 {new Date(note.updatedAt).toLocaleString('zh-CN')}</time>
-            <span>{note.expiresAt === null ? '永久有效' : `有效至 ${new Date(note.expiresAt).toLocaleString('zh-CN')}`}</span>
+            <time>更新于 {new Date(note.updatedAt).toLocaleString(dateLocale())}</time>
+            <span>{note.expiresAt === null ? '永久有效' : `有效至 ${new Date(note.expiresAt).toLocaleString(dateLocale())}`}</span>
           </div>
           <Preview content={note.content} onImage={(src) => window.open(src, '_blank', 'noopener,noreferrer')} />
         </article>}
@@ -1188,12 +1188,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
         {book.loading ? <div className="empty-state">正在加载…</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? '没有匹配的笔记' : '暂无笔记'}</span></div> : visibleNotes.map((item) =>
           <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
-            aria-label={`${item.title || '未命名笔记'}，${new Date(item.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}`}
+            aria-label={`${item.title || '未命名笔记'}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
             onClick={() => selectionMode ? toggleSelected(item.id) : void openNote(item.id)}>
             <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || '未命名笔记', book.query)}</span>{item.pinned && <Pin size={12} />}</div>
             <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || '空白笔记', book.query)}</div>
-            <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title="本机草稿" />}</div>
+            <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title="本机草稿" />}</div>
           </button>)}
         {(hasHiddenNotes || book.nextOffset !== null) && <button className="load-more" onClick={() => {
           setVisibleNoteLimit((value) => value + 50);
@@ -1254,7 +1254,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <div className="document-scroll">
             <div className={`document ${wideDocument ? 'wide' : ''}`}>
               <input className="note-title" aria-label="笔记标题" placeholder="未命名笔记" maxLength={256} value={note.title} readOnly={!!note.deletedAt || !!transfer} onChange={(e) => setNoteFields({ title: e.target.value })} />
-              <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>修订 {note.revision}</span></div>
+              <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>修订 {note.revision}</span></div>
               {layout === 'preview' || note.deletedAt || transfer
                 ? <Preview content={note.content} onImage={setLightbox} onNote={(id) => void openNote(id)}
                     onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
@@ -1772,7 +1772,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     </Modal>}
     {versionList && versionNoteId === note?.id && <Modal title="历史版本" close={() => { setVersionList(null); setChosenVersion(null); }}>
-      <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>修订 {version.revision} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString('zh-CN')}</time></button>)}</div>
+      <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>修订 {version.revision} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
       {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={dark} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
         <RotateCcw size={15} />恢复此版本
       </button></div></>}
