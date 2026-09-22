@@ -398,8 +398,9 @@ async function loginContext(context) {
 test("administrator can create, edit, disable, enable and delete a user", async ({ page, context }) => {
   await loginContext(context);
   await page.goto(preview.url);
+  await page.getByRole("button", { name: "账户与设置" }).click();
   await page.getByRole("button", { name: "用户管理" }).click();
-  await expect(page.locator("#users-dialog")).toBeVisible();
+  await expect(page.locator("#account-dialog")).toBeVisible();
 
   await page.getByLabel("用户名", { exact: true }).fill("ui-member");
   await page.getByLabel("密码", { exact: true }).fill("UiMemberPass123!");
@@ -408,8 +409,8 @@ test("administrator can create, edit, disable, enable and delete a user", async 
   await expect(row).toContainText("用户 · 已启用");
   await page.screenshot({ path: "test-results/users-1280.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator("#users-dialog")).toBeVisible();
-  expect(await page.locator("#users-dialog").evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  expect(await page.locator("#account-dialog").evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
   await page.screenshot({ path: "test-results/users-390.png" });
 
   await row.getByRole("button", { name: "编辑用户" }).click();
@@ -432,11 +433,12 @@ test("administrator can create, edit, disable, enable and delete a user", async 
 test("registration, recovery, password change and self-deletion work end to end", async ({ page, context, browser }) => {
   const adminHeaders = await loginContext(context);
   await page.goto(preview.url);
+  await page.getByRole("button", { name: "账户与设置" }).click();
   await page.getByRole("button", { name: "用户管理" }).click();
   await page.getByLabel("自助注册").check();
   await expect(page.locator("#notice")).toHaveText("已开放自助注册");
   await expect(page.getByLabel("自助注册")).toBeChecked();
-  await page.locator("#users-dialog").getByRole("button", { name: "关闭" }).click();
+  await page.locator("#account-dialog").getByRole("button", { name: "关闭" }).click();
 
   const memberContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const memberPage = await memberContext.newPage();
@@ -453,6 +455,7 @@ test("registration, recovery, password change and self-deletion work end to end"
   await memberPage.screenshot({ path: "test-results/registration-1280.png", fullPage: true });
 
   const row = page.locator(".user-row").filter({ hasText: "ui-self-service" });
+  await page.getByRole("button", { name: "账户与设置" }).click();
   await page.getByRole("button", { name: "用户管理" }).click();
   await expect(row).toContainText("待启用");
   await row.getByRole("button", { name: "启用用户" }).click();
@@ -465,7 +468,7 @@ test("registration, recovery, password change and self-deletion work end to end"
   await loginView.getByRole("button", { name: "登录", exact: true }).click();
   await expect(memberPage).toHaveURL(`${preview.url}/`);
 
-  await memberPage.getByRole("button", { name: "账户设置" }).click();
+  await memberPage.getByRole("button", { name: "账户与设置" }).click();
   const accountDialog = memberPage.locator("#account-dialog");
   await expect(accountDialog).toBeVisible();
   await expect(accountDialog.locator("#account-username")).toHaveText("ui-self-service");
@@ -497,7 +500,7 @@ test("registration, recovery, password change and self-deletion work end to end"
   await memberPage.locator("#login-view").getByLabel("用户名", { exact: true }).fill("ui-self-service");
   await memberPage.locator("#login-view").getByLabel("密码", { exact: true }).fill("UiRecoveredPass456!");
   await memberPage.locator("#login-view").getByRole("button", { name: "登录", exact: true }).click();
-  await memberPage.getByRole("button", { name: "账户设置" }).click();
+  await memberPage.getByRole("button", { name: "账户与设置" }).click();
   const passwordForm = memberPage.locator("#password-form");
   await passwordForm.getByLabel("当前密码").fill("UiRecoveredPass456!");
   await passwordForm.getByLabel("新密码", { exact: true }).fill("UiChangedPass789!");
@@ -508,7 +511,7 @@ test("registration, recovery, password change and self-deletion work end to end"
   await memberPage.locator("#login-view").getByLabel("用户名", { exact: true }).fill("ui-self-service");
   await memberPage.locator("#login-view").getByLabel("密码", { exact: true }).fill("UiChangedPass789!");
   await memberPage.locator("#login-view").getByRole("button", { name: "登录", exact: true }).click();
-  await memberPage.getByRole("button", { name: "账户设置" }).click();
+  await memberPage.getByRole("button", { name: "账户与设置" }).click();
   await memberPage.getByRole("button", { name: "注销账号" }).click();
   const deleteDialog = memberPage.locator("#delete-account-dialog");
   await deleteDialog.getByLabel("输入用户名确认").fill("ui-self-service");
@@ -841,6 +844,43 @@ test("selected deletion, partial failure and transient notices", async ({ page, 
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(page.locator(".history-item")).toHaveCount(0);
   await expect(page.locator("#notice")).toBeEmpty({ timeout: 2500 });
+});
+
+test("history filters constrain selection and dialogs ignore pasted files", async ({ page, context }) => {
+  await loginContext(context);
+  const items = [
+    { id: "filter-text", type: "text", content: "filter text", created_at: 1700000002 },
+    { id: "filter-file", type: "file", name: "filter.txt", size: 4, media_type: null, created_at: 1700000001 },
+    { id: "filter-image", type: "file", name: "filter.png", size: 4, media_type: "image/png", created_at: 1700000000 },
+  ];
+  await page.route("**/api/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const bootstrap = await response.json();
+    await route.fulfill({ response, json: {
+      ...bootstrap,
+      history: { items, total: items.length, totalPages: 1, nextCursor: null, revision: 1 },
+    } });
+  });
+  await page.goto(preview.url);
+  await page.getByRole("button", { name: "图片", exact: true }).click();
+  await expect(page.locator(".history-item:visible")).toHaveCount(1);
+  await page.getByLabel("批量选择", { exact: true }).check();
+  await expect(page.getByLabel("选择记录：filter.png")).toBeChecked();
+  await expect(page.getByLabel("选择记录：filter text")).not.toBeChecked();
+  await expect(page.getByLabel("选择记录：filter.txt")).not.toBeChecked();
+  await expect(page.locator("#selection-count")).toHaveText("已选 1 条");
+
+  await page.getByRole("button", { name: "账户与设置" }).click();
+  await page.evaluate(() => {
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File(["secret"], "dialog-paste.txt", { type: "text/plain" }));
+    document.querySelector("#account-dialog").dispatchEvent(new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboard,
+    }));
+  });
+  await expect(page.locator("#upload-list > li")).toHaveCount(0);
 });
 
 

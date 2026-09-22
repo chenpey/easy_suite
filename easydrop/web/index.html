@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0071e3">
   <meta name="application-name" content="EasyDrop">
+  <meta name="description" content="EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="EasyDrop">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -16,12 +17,12 @@
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body data-page="app">
+  <div id="drag-overlay" class="drag-overlay" hidden><i data-lucide="file-up"></i><span>拖放文件至此处上传</span></div>
   <header>
     <div class="header-inner">
       <div class="brand"><img class="brand-icon" src="/favicon.svg" alt=""><h1>EasyDrop</h1></div>
       <div class="tools">
-        <button id="account-open" class="icon-button" title="账户设置" aria-label="账户设置"><i data-lucide="user-round"></i></button>
-        <button id="users-open" class="icon-button" title="用户管理" aria-label="用户管理" hidden><i data-lucide="users"></i></button>
+        <button id="account-open" class="icon-button" title="账户与设置" aria-label="账户与设置"><i data-lucide="user-round"></i></button>
         <div class="site-link-preview">
           <button id="qr-open" class="icon-button" title="访问二维码" aria-label="访问二维码"><i data-lucide="qr-code"></i></button>
           <div id="site-link-popover" class="qr-popover site-link-popover" role="tooltip">
@@ -42,14 +43,14 @@
         <h2 id="text-title"><i data-lucide="text"></i>文本</h2>
         <form id="text-form">
           <label class="sr-only" for="text-input">分享文本</label>
-          <textarea id="text-input" placeholder="输入要分享的文本" rows="6" required></textarea>
+          <textarea id="text-input" placeholder="输入要分享的文本 (支持 Cmd/Ctrl+Enter 发送)" rows="6" required></textarea>
           <div class="section-footer"><span id="text-count" class="muted"></span><button class="primary" type="submit" disabled><i data-lucide="send"></i>分享文本</button></div>
         </form>
       </section>
       <section aria-labelledby="file-title">
         <h2 id="file-title"><i data-lucide="files"></i>文件</h2>
         <label class="file-picker" for="file-input">
-          <i data-lucide="file-up"></i><span>选择文件</span><span id="upload-limit" class="muted"></span>
+          <i data-lucide="file-up"></i><span>选择或拖拽文件到此处</span><span id="upload-limit" class="muted"></span>
           <input id="file-input" type="file" multiple disabled>
         </label>
         <ul id="upload-list" class="upload-list"></ul>
@@ -64,6 +65,13 @@
           <label class="history-selection" title="选择或取消选择本页记录"><input id="select-all" type="checkbox" aria-label="批量选择" disabled></label>
           <button id="clear" class="icon-button danger" title="清空历史" aria-label="清空历史" disabled><i data-lucide="trash-2"></i></button>
         </div>
+      </div>
+      <div class="history-filters" role="group" aria-label="当前页历史记录类型筛选">
+        <span class="muted">本页</span>
+        <button class="history-filter-btn active" type="button" data-filter="all" aria-pressed="true">全部</button>
+        <button class="history-filter-btn" type="button" data-filter="text" aria-pressed="false">文本</button>
+        <button class="history-filter-btn" type="button" data-filter="file" aria-pressed="false">文件</button>
+        <button class="history-filter-btn" type="button" data-filter="image" aria-pressed="false">图片</button>
       </div>
       <div id="history-list" aria-live="polite"></div>
       <nav class="history-pagination" aria-label="分享历史分页">
@@ -128,38 +136,83 @@
     </form>
   </dialog>
   <dialog id="account-dialog">
-    <div class="section-heading"><h2>账户设置</h2><button id="account-close" class="icon-button" title="关闭" aria-label="关闭账户设置"><i data-lucide="x"></i></button></div>
-    <p id="account-username" class="account-name"></p>
-    <section class="account-section" aria-labelledby="password-title">
-      <h3 id="password-title">修改密码</h3>
-      <form id="password-form">
-        <label for="current-password">当前密码</label>
-        <input id="current-password" type="password" autocomplete="current-password" required maxlength="32">
-        <label for="new-password">新密码</label>
-        <input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
-          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-        <label for="new-password-confirm">确认新密码</label>
-        <input id="new-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
-          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-        <div class="dialog-actions"><button class="primary" type="submit"><i data-lucide="key-round"></i>修改密码</button></div>
-      </form>
-    </section>
-    <section class="account-section" aria-labelledby="recovery-title">
-      <h3 id="recovery-title">恢复码</h3>
-      <p id="recovery-status" class="muted"></p>
-      <form id="recovery-form">
-        <label for="recovery-current-password">当前密码</label>
-        <input id="recovery-current-password" type="password" autocomplete="current-password" required maxlength="32">
-        <div class="dialog-actions"><button class="secondary" type="submit"><i data-lucide="refresh-cw"></i><span id="recovery-submit-label">生成恢复码</span></button></div>
-      </form>
-      <div id="account-recovery-result" class="recovery-result" hidden>
-        <code id="account-recovery-code"></code>
-        <button id="copy-account-recovery" class="secondary" type="button"><i data-lucide="copy"></i>复制恢复码</button>
-        <p id="account-recovery-notice" class="copy-notice" role="status" aria-live="polite"></p>
+    <div class="section-heading"><h2 id="account-title">账户与设置</h2><button id="account-close" class="icon-button" title="关闭" aria-label="关闭账户设置"><i data-lucide="x"></i></button></div>
+    <nav id="account-tabs" class="modal-tabs" hidden>
+      <button id="tab-profile" class="modal-tab active" type="button" aria-pressed="true">个人设置</button>
+      <button id="tab-users" class="modal-tab" type="button" aria-pressed="false">用户管理</button>
+    </nav>
+    <div id="account-profile-panel">
+      <p id="account-username" class="account-name"></p>
+      <section class="account-section" aria-labelledby="password-title">
+        <h3 id="password-title">修改密码</h3>
+        <form id="password-form">
+          <label for="current-password">当前密码</label>
+          <div class="password-field">
+            <input id="current-password" type="password" autocomplete="current-password" required maxlength="32">
+            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          </div>
+          <label for="new-password">新密码</label>
+          <div class="password-field">
+            <input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
+              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
+            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          </div>
+          <label for="new-password-confirm">确认新密码</label>
+          <div class="password-field">
+            <input id="new-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
+              pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
+            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          </div>
+          <div class="dialog-actions"><button class="primary" type="submit"><i data-lucide="key-round"></i>修改密码</button></div>
+        </form>
+      </section>
+      <section class="account-section" aria-labelledby="recovery-title">
+        <h3 id="recovery-title">恢复码</h3>
+        <p id="recovery-status" class="muted"></p>
+        <form id="recovery-form">
+          <label for="recovery-current-password">当前密码</label>
+          <div class="password-field">
+            <input id="recovery-current-password" type="password" autocomplete="current-password" required maxlength="32">
+            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          </div>
+          <div class="dialog-actions"><button class="secondary" type="submit"><i data-lucide="refresh-cw"></i><span id="recovery-submit-label">生成恢复码</span></button></div>
+        </form>
+        <div id="account-recovery-result" class="recovery-result" hidden>
+          <code id="account-recovery-code"></code>
+          <button id="copy-account-recovery" class="secondary" type="button"><i data-lucide="copy"></i>复制恢复码</button>
+          <p id="account-recovery-notice" class="copy-notice" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+      <div class="account-danger">
+        <button id="delete-account-open" class="destructive" type="button"><i data-lucide="trash-2"></i>注销账号</button>
       </div>
-    </section>
-    <div class="account-danger">
-      <button id="delete-account-open" class="destructive" type="button"><i data-lucide="trash-2"></i>注销账号</button>
+    </div>
+    <div id="account-users-panel" hidden>
+      <label class="registration-setting">
+        <span><strong>自助注册</strong><small>新账号需要管理员启用</small></span>
+        <input id="registration-enabled" type="checkbox">
+      </label>
+      <form id="user-form">
+        <input id="user-id" type="hidden">
+        <label for="user-name">用户名</label>
+        <input id="user-name" type="text" autocomplete="off" minlength="3" maxlength="32" required>
+        <label id="user-password-label" for="user-password">密码</label>
+        <div class="password-field">
+          <input id="user-password" type="password" autocomplete="new-password" minlength="12" maxlength="32"
+            pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+        </div>
+        <div class="user-options">
+          <label for="user-role">角色</label>
+          <select id="user-role"><option value="user">用户</option><option value="admin">管理员</option></select>
+          <label class="toggle"><input id="user-enabled" type="checkbox" checked><span>启用</span></label>
+        </div>
+        <div class="dialog-actions">
+          <button id="user-cancel" class="secondary" type="button" hidden>取消编辑</button>
+          <button class="primary" type="submit"><i data-lucide="user-plus"></i><span id="user-submit-label">添加用户</span></button>
+        </div>
+      </form>
+      <div id="user-list" class="user-list"></div>
     </div>
   </dialog>
   <dialog id="delete-account-dialog">
@@ -169,37 +222,15 @@
       <label for="delete-account-username">输入用户名确认</label>
       <input id="delete-account-username" type="text" autocomplete="off" required>
       <label for="delete-account-password">当前密码</label>
-      <input id="delete-account-password" type="password" autocomplete="current-password" required maxlength="32">
+      <div class="password-field">
+        <input id="delete-account-password" type="password" autocomplete="current-password" required maxlength="32">
+        <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+      </div>
       <div class="dialog-actions">
         <button id="delete-account-cancel" class="secondary" type="button">取消</button>
         <button class="destructive" type="submit"><i data-lucide="trash-2"></i>确认注销</button>
       </div>
     </form>
-  </dialog>
-  <dialog id="users-dialog">
-    <div class="section-heading"><h2>用户管理</h2><button id="users-close" class="icon-button" title="关闭" aria-label="关闭"><i data-lucide="x"></i></button></div>
-    <label class="registration-setting">
-      <span><strong>自助注册</strong><small>新账号需要管理员启用</small></span>
-      <input id="registration-enabled" type="checkbox">
-    </label>
-    <form id="user-form">
-      <input id="user-id" type="hidden">
-      <label for="user-name">用户名</label>
-      <input id="user-name" type="text" autocomplete="off" minlength="3" maxlength="32" required>
-      <label id="user-password-label" for="user-password">密码</label>
-      <input id="user-password" type="password" autocomplete="new-password" minlength="12" maxlength="32"
-        pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-      <div class="user-options">
-        <label for="user-role">角色</label>
-        <select id="user-role"><option value="user">用户</option><option value="admin">管理员</option></select>
-        <label class="toggle"><input id="user-enabled" type="checkbox" checked><span>启用</span></label>
-      </div>
-      <div class="dialog-actions">
-        <button id="user-cancel" class="secondary" type="button" hidden>取消编辑</button>
-        <button class="primary" type="submit"><i data-lucide="user-plus"></i><span id="user-submit-label">添加用户</span></button>
-      </div>
-    </form>
-    <div id="user-list" class="user-list"></div>
   </dialog>
 </body>
 </html>
