@@ -241,7 +241,7 @@ Autosave updates note content with `createVersion: false`. Explicit saves (`Cmd/
 
 Simultaneous edits on different devices are resolved using revision numbers. Conflicts return `409 Conflict`, preserving local drafts and allowing users to branch into conflict copies without overwriting remote data.
 
-### Shortcuts & Knowledge Links
+### Shortcuts & Navigation
 
 `Cmd/Ctrl+K` opens the quick command palette for navigation, actions, search, and settings.
 
@@ -254,7 +254,96 @@ Simultaneous edits on different devices are resolved using revision numbers. Con
 | `Cmd/Ctrl+/` | View keyboard shortcuts |
 | `Esc` | Close dialogs |
 
-Internal links use `[[Note UUID|Display Title]]`. Backlinks are automatically calculated across all active notes.
+Double-clicking any heading, paragraph, list item, table, or code block in preview mode instantly switches to edit mode and jumps to the exact source line in the editor.
+
+### Heading Hierarchy & Outline
+
+EasyNote provides a dedicated note title input; titles do not require Markdown `#` prefixes. The note body starts major sections with `##`, subsections with `###`, and so forth. The sidebar outline panel automatically generates a hierarchical table of contents from body headings for quick jumping.
+
+### Interactive Task Lists
+
+Use `- [ ] task` for incomplete items and `- [x] task` for completed items (`- [] task` shorthand is also supported). In preview mode, checkboxes can be directly clicked to toggle status, which automatically writes back to the Markdown source and saves.
+
+```markdown
+- [ ] Incomplete task
+- [x] Completed task
+```
+
+The sidebar "Task Center" aggregates all uncompleted tasks across all non-deleted notes (including archived notes), while ignoring task syntax inside code blocks. Each entry displays its source note and line number, and clicking it jumps directly to that line in edit mode.
+
+### GFM Tables
+
+Supports standard GitHub Flavored Markdown tables with column alignment via colons:
+
+```markdown
+| Header 1 | Header 2 | Header 3 |
+| :--- | :---: | ---: |
+| Left-aligned | Center-aligned | Right-aligned |
+```
+
+Double-clicking a table in preview mode jumps to its Markdown source line. Tables automatically adapt to desktop and mobile viewport widths.
+
+### Code Blocks & Syntax Highlighting
+
+Code blocks use fenced syntax with language tags (powered by `highlight.js/lib/common`), supporting major languages such as `typescript`, `javascript`, `python`, `bash`, `json`, `html`, `css`, `yaml`, `sql`, `go`, etc. Unrecognized languages gracefully fall back to safe plain text. Double-clicking any code block navigates to its editor source line.
+
+````markdown
+```python
+def hello_world():
+    print("Hello from EasyNote")
+```
+````
+
+### Footnotes
+
+Supports standard Markdown footnote syntax:
+
+```markdown
+Body reference[^1] and additional note[^details].
+
+[^1]: Detailed definition for the first footnote.
+[^details]: Footnote content supports multi-line text and links.
+```
+
+In preview mode, clicking a superscript (e.g. `[1]`) smoothly scrolls down to the footnote definition at the bottom; clicking the backreference link (`↩︎`) smoothly returns to the citation in the body text.
+
+### Knowledge Links (WikiLinks) & Backlinks
+
+Use `[[Note UUID|Display Title]]` or `[[Note UUID]]` to build bidirectional links between notes. Links are permanently bound to the note's UUID, so renaming a target note's title will not break existing links. Clicking a link in preview mode directly navigates to the target note in-app.
+
+```markdown
+See reference document: [[00000000-0000-0000-0000-000000000001|Project Specification]]
+```
+
+The sidebar outline panel scans active notes in real time to display "Backlinks" (all notes referencing the current note), establishing a two-way knowledge graph.
+
+### Diagrams & HTML
+
+Flowcharts and mindmaps use Mermaid fenced code blocks and render automatically in preview mode, with full light/dark mode auto-theming:
+
+````markdown
+```mermaid
+flowchart LR
+  A[Start] --> B{Approved?}
+  B -->|Yes| C[Deploy]
+```
+````
+
+For mindmaps, set the first line to `mindmap` and indent child nodes. Common diagram types such as `sequenceDiagram`, `classDiagram`, and `stateDiagram` are also supported. Notes support up to 20 Mermaid diagrams, each up to 50,000 characters.
+
+Safe HTML blocks can be embedded directly in Markdown, sanitized via DOMPurify. Safe structural tags like `<section>`, `<mark>`, `<kbd>`, `<details>`, `<summary>` are preserved; risky elements such as `<script>`, `<style>`, `<iframe>`, `<form>`, inline event handlers, and external media are stripped.
+
+You can import [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-demo.en.md) to test the complete rendering syntax showcase, or [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) for diagrams and HTML blocks.
+
+### Images & Attachments
+
+- **Private Image Syntax**: `![Image description](/api/images/<uuid>)`. Supports original image uploads (no lossy compression or EXIF stripping), lazy loading, offline IndexedDB cache fallback, and full-screen lightbox zoom upon clicking in preview mode.
+- **Private Attachment Syntax**: `[Document.pdf](/api/files/<uuid>)`. For PDF, TXT, CSV, JSON, ZIP, etc., clicking the link in preview mode triggers a secure browser download with the `download` attribute and `nosniff` security header.
+- **External Image Tracking Shield**: To prevent access tracking and privacy leaks, external HTTP(S) images are blocked by default and rendered with a placeholder (`[外部图片未加载]`).
+- **Security & Storage**:
+  - Image/attachment URLs use stable internal routes (`/api/images/<id>`), with no public buckets or temporary signed URLs.
+  - Every file request verifies login and tenant ownership with `private, no-store` headers.
+  - Files referenced by active notes, trash, or retained version snapshots are protected from deletion; unreferenced files are safely cleaned up after a grace period.
 
 ### AI Integration (MCP)
 
