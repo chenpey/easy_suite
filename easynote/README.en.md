@@ -142,7 +142,11 @@ git commit -m "发布：EasyNote v0.4.4"
 
 ### 1. Enable R2
 
-Enable R2 in Cloudflare Dashboard under **Storage & databases → R2 → Overview**. Complete the checkout if prompted; the script automatically creates and configures the bucket.
+When using R2 for the first time, log into [Cloudflare Dashboard](https://dash.cloudflare.com/), go to **Storage & databases → R2 → Overview**, and complete the R2 subscription checkout. Once the **Create bucket** button appears, return to your terminal; manual bucket creation is not required.
+
+![EasyNote Cloudflare D1, R2, and workers.dev Resource Preparation](docs/img/cloudflare/cloudflare-resources.svg)
+
+The deployment script automatically discovers accounts based on your Token, creates or reuses dedicated `easynote-db` and private `easynote-images`, and retrieves the D1 UUID.
 
 ### 2. Choose Public Access
 
@@ -151,14 +155,16 @@ Enable R2 in Cloudflare Dashboard under **Storage & databases → R2 → Overvie
 
 ### 3. Create Custom API Token
 
-Create an API Token under [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/):
+Create a Custom API Token under [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/):
 
-- Account Settings: Read
-- Workers Scripts: Edit
-- D1: Edit
-- Workers R2 Storage: Edit
+- Account Settings: Read (to discover accounts)
+- Workers Scripts: Edit (to create/update Worker, assets, and secrets)
+- D1: Edit (to manage database and migrations)
+- Workers R2 Storage: Edit (to manage private R2 bucket)
 - (Custom Domain only) Zone: Read
 - (Custom Domain only) Workers Routes: Read
+
+![EasyNote Cloudflare API Token Scopes and Permissions](docs/img/cloudflare/cloudflare-api-token.svg)
 
 ### 4. Deploy
 
