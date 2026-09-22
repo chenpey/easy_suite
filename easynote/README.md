@@ -2,9 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.7.2`
+当前版本：`0.7.3`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 0.7.3 更新
+
+- **弹窗标题与布局优化**：修复确认弹窗（移入回收站等）标题直接在 React VDOM 层进行翻译；优化侧边栏宽度（调整至 200px）与工具栏按钮尺寸，笔记列表标题设置不折行与省略显示，彻底解决英文长标题（如 `Archived Notes`）换行问题；补充图标按钮 tooltip 翻译与设置面板文字折行优化。
 
 ## 0.7.2 更新
 

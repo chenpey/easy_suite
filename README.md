@@ -9,8 +9,8 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 <!-- versions:start -->
 | 项目 | 当前版本 |
 | --- | --- |
-| [EasyDrop](easydrop/) | `1.2.1` |
-| [EasyNote](easynote/) | `0.7.2` |
+| [EasyDrop](easydrop/) | `1.2.2` |
+| [EasyNote](easynote/) | `0.7.3` |
 | [EasyMac](easymac/) | `0.4.1` |
 <!-- versions:end -->
 
