@@ -1,0 +1,92 @@
+name: Release EasyMac
+
+on:
+  push:
+    tags:
+      - "easymac-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate version
+        shell: zsh {0}
+        run: |
+          version="$(<easymac/VERSION)"
+          tag_version="${GITHUB_REF_NAME#easymac-v}"
+          [[ "$tag_version" == "$version" ]] || {
+            print -u2 -- "标签版本 $tag_version 与 VERSION $version 不一致"
+            exit 1
+          }
+
+      - name: Test
+        shell: zsh {0}
+        run: |
+          chmod 755 easymac/scripts/*.zsh
+          easymac/scripts/scan-preview.zsh /tmp/easymac-release-test >/dev/null
+          EASYMAC_SCAN_FIXTURE=/tmp/easymac-release-test/data.js \
+            node --test easymac/test/core.test.cjs
+          node scripts/version.mjs check
+
+      - name: Build
+        shell: zsh {0}
+        run: |
+          easymac/scripts/build.zsh
+          version="$(<easymac/VERSION)"
+          release_dir="$(mktemp -d)"
+          ditto -x -k "easymac/dist/EasyMac-v${version}.zip" "$release_dir"
+          test -x "$release_dir/EasyMac/EasyMac.app/Contents/Resources/first-open.zsh"
+          test -f "$release_dir/EasyMac/首次使用.txt"
+          test "$(find "$release_dir/EasyMac" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" = "2"
+          codesign --verify --deep --strict "$release_dir/EasyMac/EasyMac.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$release_dir/EasyMac/EasyMac.app/Contents/Info.plist")" = "party.tiandi.easymac"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$release_dir/EasyMac/EasyMac.app/Contents/Info.plist")" = "EasyMac.icns"
+          ! /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$release_dir/EasyMac/EasyMac.app/Contents/Info.plist"
+          test ! -e "$release_dir/EasyMac/EasyMac.app/Contents/Resources/Assets.car"
+          test ! -e "$release_dir/EasyMac/EasyMac.app/Contents/Resources/applet.icns"
+          gzip -t "$release_dir/EasyMac/EasyMac.app/Contents/Resources/catalog/casks.tsv.gz"
+          test -f "$release_dir/EasyMac/EasyMac.app/Contents/Resources/web/easymac-icon.svg"
+          test ! -e "$release_dir/EasyMac/EasyMac.app/Contents/Resources/web/loading.html"
+          grep -q 'rel="icon".*easymac-icon.svg' "$release_dir/EasyMac/EasyMac.app/Contents/Resources/web/index.html"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: zsh {0}
+        run: |
+          version="$(<easymac/VERSION)"
+          archive="easymac/dist/EasyMac-v${version}.zip"
+          checksum="${archive}.sha256"
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$archive" "$checksum" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "$archive" \
+              "$checksum" \
+              --verify-tag \
+              --title "EasyMac v${version}" \
+              --notes-file easymac/RELEASE_NOTES.md \
+              --generate-notes \
+              --latest
+          fi
+
+          git tag -f easymac-latest "$GITHUB_SHA"
+          git push origin -f easymac-latest
+          if gh release view "easymac-latest" >/dev/null 2>&1; then
+            gh release upload "easymac-latest" "$archive" "$checksum" --clobber
+          else
+            gh release create "easymac-latest" \
+              "$archive" \
+              "$checksum" \
+              --title "EasyMac Latest" \
+              --notes-file easymac/RELEASE_NOTES.md \
+              --latest=false
+          fi

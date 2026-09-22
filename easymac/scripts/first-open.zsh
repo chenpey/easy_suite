@@ -8,21 +8,21 @@ embedded_app="${SCRIPT_DIR:h:h}"
 if [[ "$embedded_app" == *.app && -f "$embedded_app/Contents/Info.plist" ]]; then
   APP_PATH="$embedded_app"
 else
-  APP_PATH="$SCRIPT_DIR/EasyNewMac.app"
+  APP_PATH="$SCRIPT_DIR/EasyMac.app"
 fi
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
-EXPECTED_IDENTIFIER="party.tiandi.easynewmac"
+EXPECTED_IDENTIFIER="party.tiandi.easymac"
 terminal_tty="$(/usr/bin/tty 2>/dev/null || true)"
 
 fail() {
   print -u2 -- ""
-  print -u2 -- "无法打开 EasyNewMac：$1"
+  print -u2 -- "无法打开 EasyMac：$1"
   print -u2 -- ""
   read -r "?按回车键关闭..."
   exit 1
 }
 
-[[ -d "$APP_PATH" ]] || fail "请将此脚本与 EasyNewMac.app 保持在同一文件夹。"
+[[ -d "$APP_PATH" ]] || fail "请将此脚本与 EasyMac.app 保持在同一文件夹。"
 
 close_own_terminal_tab() {
   [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" && "$terminal_tty" == /dev/* ]] || return 0
@@ -52,7 +52,7 @@ APPLESCRIPT
 }
 
 print -- ""
-print -- "EasyNewMac 首次打开"
+print -- "EasyMac 首次打开"
 print -- "正在验证应用完整性..."
 
 /usr/bin/codesign --verify --deep --strict "$APP_PATH" 2>/dev/null \
@@ -67,8 +67,8 @@ bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$INFO_PLIST
 /usr/bin/xattr -dr com.apple.quarantine "$APP_PATH" \
   || fail "无法移除下载隔离标记。"
 
-print -- "验证通过，正在打开 EasyNewMac..."
+print -- "验证通过，正在打开 EasyMac..."
 /usr/bin/open "$APP_PATH" || fail "无法打开应用。"
 
-print -- "以后可以直接双击 EasyNewMac.app。"
+print -- "以后可以直接双击 EasyMac.app。"
 close_own_terminal_tab

@@ -144,7 +144,7 @@ test("automatic selections prepare Homebrew and defer MAS installs", () => {
 
 // Execute generated output with fake tools in a disposable HOME; never install software.
 function migration(t, items, { brew = "exit 0", mas = "exit 1", setup = () => {}, env = {}, transform = (script) => script, timeout = 10000 } = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easynewmac-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easymac-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const bin = path.join(root, "bin");
   fs.mkdirSync(bin);
@@ -213,7 +213,7 @@ exit 0` });
   assert.match(calls, /bundle check --no-upgrade/);
   assert.doesNotMatch(calls, /bundle --no-upgrade/);
   assert.match(result.output, /失败：0 项/);
-  const logDir = path.join(result.root, "Library/Logs/EasyNewMac");
+  const logDir = path.join(result.root, "Library/Logs/EasyMac");
   assert.match(fs.readFileSync(path.join(logDir, fs.readdirSync(logDir)[0]), "utf8"), /验收通过/);
 });
 
@@ -431,7 +431,7 @@ test("official nvm download failure reports error and continues MAS", (t) => {
   assert.match(result.output, /Shadowrocket 已安装并通过验收/);
 });
 
-test("real official nvm installs LTS and survives an independent login", { skip: process.env.EASYNEWMAC_REAL_NVM !== "1" }, (t) => {
+test("real official nvm installs LTS and survives an independent login", { skip: process.env.EASYMAC_REAL_NVM !== "1" && process.env.EASYNEWMAC_REAL_NVM !== "1" }, (t) => {
   const result = migration(t, [nodeItem], {
     timeout: 300000,
     env: { METHOD: "script" },
@@ -483,7 +483,7 @@ test("invalid install identifiers are excluded from generated commands", () => {
 
 test("ZIP entry stores executable Unix permissions", () => {
   const zip = core.createExecutableZip(
-    "EasyNewMac-Migration.command",
+    "EasyMac-Migration.command",
     "#!/bin/zsh\nprint ok\n",
     new Date("2026-09-19T00:00:00Z"),
   );
@@ -541,12 +541,12 @@ test("bundled Cask catalog contains unique safe mappings", () => {
 });
 
 test("real scanner payload is decodable when integration fixture exists", () => {
-  const fixturePath = process.env.EASYNEWMAC_SCAN_FIXTURE;
+  const fixturePath = process.env.EASYMAC_SCAN_FIXTURE || process.env.EASYNEWMAC_SCAN_FIXTURE;
   if (!fixturePath) return;
 
   const context = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.resolve(fixturePath), "utf8"), context);
-  const scan = core.decodeScanPayload(context.window.EASYNEWMAC_SCAN);
+  const scan = core.decodeScanPayload(context.window.EASYMAC_SCAN || context.window.EASYNEWMAC_SCAN);
 
   assert.ok(scan.items.length > 0);
   assert.equal(new Set(scan.items.map((entry) => entry.id)).size, scan.items.length);

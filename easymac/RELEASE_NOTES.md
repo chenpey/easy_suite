@@ -1,4 +1,4 @@
-## EasyNewMac 0.3.2
+## EasyMac 0.3.2
 
 修复 App 内生成器的 shell 配置判断。请用新版 App 重新导出；旧迁移脚本不会自动更新。
 
@@ -9,4 +9,4 @@
 - 增加独立 shell 回归测试和可选的真实官方 nvm/LTS 联网安装测试。
 
 保留默认 brew 升级、失败补装与重试、Node LTS、日志和 App Store 三态汇总。
-发布包仍包含 EasyNewMac.app 和“首次使用.txt”。
+发布包仍包含 EasyMac.app 和“首次使用.txt”。

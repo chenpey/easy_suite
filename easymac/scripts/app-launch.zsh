@@ -6,7 +6,7 @@ set -euo pipefail
 RESOURCE_DIR="${0:A:h}"
 WEB_DIR="$RESOURCE_DIR/web"
 SCANNER="$RESOURCE_DIR/scan.zsh"
-runtime_root="${TMPDIR:-/tmp}/EasyNewMac-$UID"
+runtime_root="${TMPDIR:-/tmp}/EasyMac-$UID"
 run_dir="$runtime_root/current"
 
 [[ -d "$WEB_DIR" ]] || {
@@ -21,7 +21,7 @@ run_dir="$runtime_root/current"
 rm -rf -- "$runtime_root"
 mkdir -p -- "$run_dir"
 cp -R "$WEB_DIR/." "$run_dir/"
-print 'window.EASYNEWMAC_PENDING = true;' > "$run_dir/data.js"
+print 'window.EASYMAC_PENDING = true;' > "$run_dir/data.js"
 
 /usr/bin/open "$run_dir/index.html"
 "$SCANNER" "$run_dir/data.js"
