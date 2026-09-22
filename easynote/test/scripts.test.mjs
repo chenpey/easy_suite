@@ -422,6 +422,7 @@ test('deployment reuses resource IDs, refreshes template settings and preserves 
   assert.equal(saved.account_id, original.account_id);
   assert.equal(saved.vars.AUTOSAVE_MS, config.vars.AUTOSAVE_MS);
   assert.equal(saved.vars.ALLOW_LOCAL_HTTP, 'false');
+  assert.deepEqual(saved.assets.run_worker_first, ['/api/*', '/mcp']);
   assert.equal(saved.d1_databases[0].database_id, databaseId);
   const wranglerCalls = (await calls(f)).filter((c) => c.tool === 'wrangler');
   assert.deepEqual(wranglerCalls.map((c) => c.args.slice(0, 2)), [
