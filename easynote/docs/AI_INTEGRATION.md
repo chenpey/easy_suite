@@ -1,5 +1,7 @@
 # EasyNote AI 接入
 
+[简体中文](AI_INTEGRATION.md) | [English](AI_INTEGRATION.en.md)
+
 EasyNote 在部署后的 `/mcp` 提供远程 Streamable HTTP MCP。用户不需要下载源码、安装 Node.js 或运行本地桥接器：
 
 ```text
