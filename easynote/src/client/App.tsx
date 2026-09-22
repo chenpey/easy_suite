@@ -30,9 +30,10 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-function IconButton({ label, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+function IconButton({ label, children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   const tooltip = translate(label);
-  return <button className="icon-button" data-tooltip={tooltip} aria-label={tooltip} {...props}>{children}</button>;
+  const resolvedClass = className ? (className.includes('icon-button') ? className : `icon-button ${className}`) : 'icon-button';
+  return <button className={resolvedClass} data-tooltip={tooltip} aria-label={tooltip} {...props}>{children}</button>;
 }
 
 function BrandIcon({ size }: { size: number }) {
@@ -392,22 +393,70 @@ function PrivateApp() {
 function AccountWorkspace({ session, installApp, logout }: { session: Session; installApp?(): Promise<void>; logout(): Promise<void> }) {
   const [ownsLock, setOwnsLock] = useState<boolean | null>(null);
   const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     let release: (() => void) | undefined;
+    let hasLock = false;
+    let channel: BroadcastChannel | undefined;
+
     if (!navigator.locks) { setOwnsLock(false); return; }
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel(`easynote-editor-lock:${session.user!.id}`);
+      channel.onmessage = (e) => {
+        if (e.data?.type === 'claim' && hasLock) {
+          hasLock = false;
+          channel?.postMessage({ type: 'yielded' });
+          release?.();
+          if (!cancelled) setOwnsLock(false);
+        }
+      };
+    }
+
     void navigator.locks.request(`easynote-editor:${session.user!.id}`, { ifAvailable: true }, async (lock) => {
       if (cancelled) return;
       setOwnsLock(!!lock);
-      if (lock) await new Promise<void>((resolve) => { release = resolve; });
+      if (lock) {
+        hasLock = true;
+        await new Promise<void>((resolve) => { release = resolve; });
+        hasLock = false;
+      }
     }).catch(() => { if (!cancelled) setOwnsLock(false); });
-    return () => { cancelled = true; release?.(); };
+
+    return () => {
+      cancelled = true;
+      channel?.close();
+      release?.();
+    };
   }, [session.user!.id, attempt]);
+
+  const handleReopen = () => {
+    setOwnsLock(null);
+    if (typeof BroadcastChannel !== 'undefined') {
+      const channel = new BroadcastChannel(`easynote-editor-lock:${session.user!.id}`);
+      let done = false;
+      const proceed = () => {
+        if (done) return;
+        done = true;
+        channel.close();
+        setAttempt((n) => n + 1);
+      };
+      channel.onmessage = (e) => {
+        if (e.data?.type === 'yielded') proceed();
+      };
+      channel.postMessage({ type: 'claim' });
+      setTimeout(proceed, 150);
+    } else {
+      setAttempt((n) => n + 1);
+    }
+  };
+
   if (ownsLock) return <Notebook session={session} installApp={installApp} logout={logout} />;
   return <main className="login"><div className="login-form">
     <div className="brand login-brand"><BrandIcon size={32} /><h1>EasyNote</h1></div>
-    <div className="login-heading">{ownsLock === null ? '正在打开笔记' : navigator.locks ? '另一个标签页正在编辑' : '浏览器不支持安全编辑锁'}</div>
-    {ownsLock === false && navigator.locks && <button className="primary" onClick={() => setAttempt((n) => n + 1)}>{translate('重新打开')}</button>}
+    <div className="login-heading">{ownsLock === null ? translate('正在打开笔记') : navigator.locks ? translate('另一个标签页正在编辑') : translate('浏览器不支持安全编辑锁')}</div>
+    {ownsLock === false && navigator.locks && <button className="primary" onClick={handleReopen}>{translate('重新打开')}</button>}
   </div></main>;
 }
 
@@ -1263,8 +1312,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               onClick={() => setSharing(true)}><Share2 size={17} /></IconButton>
             <IconButton label={pdfProgress || '导出当前笔记为 PDF'} className="icon-button print-action" disabled={printing} onClick={exportCurrentNote}>{printing ? <LoaderCircle className="spin" size={17} /> : <Printer size={17} />}</IconButton>
             <IconButton label="历史版本" className="icon-button toolbar-history-action" disabled={disabled || note.revision === 0} onClick={openHistory}><History size={17} /></IconButton>
-            {!note.deletedAt ? <IconButton label="移入回收站" disabled={disabled} onClick={() => setConfirmAction('trash')}><Trash2 size={17} /></IconButton> :
-              <IconButton label="恢复笔记" disabled={disabled} onClick={() => setNoteFields({ deletedAt: null })}><RotateCcw size={17} /></IconButton>}
+            {!note.deletedAt ? <IconButton label="移入回收站" className="toolbar-trash-action" disabled={disabled} onClick={() => setConfirmAction('trash')}><Trash2 size={17} /></IconButton> :
+              <IconButton label="恢复笔记" className="toolbar-trash-action" disabled={disabled} onClick={() => setNoteFields({ deletedAt: null })}><RotateCcw size={17} /></IconButton>}
             <IconButton label="更多笔记操作" className="icon-button mobile-note-menu-trigger" onClick={() => setMobileNoteActions(true)}><MoreHorizontal size={20} /></IconButton>
           </>}
         </div>

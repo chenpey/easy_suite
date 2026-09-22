@@ -2,9 +2,14 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.4`
+Current Version: `0.7.5`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.5 Updates
+
+- **Multi-Tab Edit Lock Active Takeover**: Established inter-tab communication via native `BroadcastChannel`. Clicking "Reopen" in a non-holding tab actively notifies the current holding tab to yield its lock for seamless takeover, enabling flexible switching between multiple tabs.
+- **Tooltip Alignment & Localization Fixes**: Added dedicated class and right-alignment styling for the trash/restore action buttons, completely preventing tooltip truncation at the window edge. Fully localized lock screen status and action strings.
 
 ## 0.7.4 Updates
 

@@ -2,13 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.4.1`
+Current Version: `0.4.2`
 
 [Download EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
 EasyMac scans installed applications on an old Mac, allows users to search, filter, and select items for migration, and exports an automated installation script ready to run on a new Mac.
 
 Built as a lightweight local launcher and local web interface, it requires no app installation, Xcode, developer accounts, or extra runtime environments.
+
+## 0.4.2 Updates
+
+- Unified settings dialog language label to "语言/Language", preserving native "中文" and "English" option texts.
 
 ## 0.4.1 Updates
 

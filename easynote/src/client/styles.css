@@ -491,15 +491,18 @@ nav button.active svg { color: var(--accent); }
 .status-dot { width: 6px; height: 6px; background: var(--success); border-radius: 50%; }
 .pending .status-dot { background: var(--warning); }
 .toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.toolbar-trash-action[data-tooltip]::after,
 .toolbar-right > .icon-button:last-child[data-tooltip]::after {
   left: auto;
   right: 0;
   transform: translate(0, -2px);
 }
+.toolbar-trash-action[data-tooltip]:focus-visible::after,
 .toolbar-right > .icon-button:last-child[data-tooltip]:focus-visible::after {
   transform: translate(0, 0);
 }
 @media (hover: hover) and (min-width: 641px) {
+  .toolbar-trash-action[data-tooltip]:hover::after,
   .toolbar-right > .icon-button:last-child[data-tooltip]:hover::after {
     transform: translate(0, 0);
   }
