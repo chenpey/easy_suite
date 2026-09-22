@@ -215,6 +215,7 @@ Object.assign(exact, {
   '无标签': 'No tags', '已置顶': 'Pinned', '未置顶': 'Not pinned', '未归档': 'Not archived',
   '（空）': '(empty)', '等待初始化': 'Waiting for initialization', '登录笔记': 'Sign in to Notes',
   '示例：': 'Example:', 'manifest.json 示例：': 'manifest.json Example:',
+  '重新打开': 'Reopen',
 });
 
 const ignored = '.note-row, .note-title, .cm-editor, .markdown, .tag-nav, .tag-picker label, .task-center-copy, .version-preview, pre, code, [data-i18n-ignore]';

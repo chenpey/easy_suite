@@ -407,7 +407,7 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
   return <main className="login"><div className="login-form">
     <div className="brand login-brand"><BrandIcon size={32} /><h1>EasyNote</h1></div>
     <div className="login-heading">{ownsLock === null ? '正在打开笔记' : navigator.locks ? '另一个标签页正在编辑' : '浏览器不支持安全编辑锁'}</div>
-    {ownsLock === false && navigator.locks && <button onClick={() => setAttempt((n) => n + 1)}>重新打开</button>}
+    {ownsLock === false && navigator.locks && <button className="primary" onClick={() => setAttempt((n) => n + 1)}>{translate('重新打开')}</button>}
   </div></main>;
 }
 
