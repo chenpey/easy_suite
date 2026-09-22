@@ -17,6 +17,8 @@ export interface NoteSearchMatch {
   field: 'title' | 'content';
   line: number | null;
   heading: string | null;
+  startOffset: number | null;
+  endOffset: number | null;
   snippet: string;
 }
 export type IntegrationNoteSummary = NoteSummary & {

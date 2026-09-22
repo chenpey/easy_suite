@@ -5,17 +5,19 @@ import { integrationIdentity, integrationRoutes, integrationTokenRoutes } from '
 import { noteRoutes } from './notes';
 import { featureRoutes, publicShareRoutes } from './features';
 import { connectNoteEvents } from './events';
+import { mcpRoute } from './mcp';
 
 export { NoteEvents } from './events';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
+    if (path !== '/mcp' && !path.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (new URL(request.url).protocol !== 'https:' && !localHttp(request, env)) {
         throw new ApiError(403, 'HTTPS is required.');
       }
+      if (path === '/mcp') return await mcpRoute(request, env);
       if (path.startsWith('/api/public/shares/')) {
         const response = await publicShareRoutes(request, env, path);
         if (response) return response;

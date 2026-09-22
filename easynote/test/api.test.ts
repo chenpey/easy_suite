@@ -111,11 +111,14 @@ test('AI tokens are scoped, revocable and preserve revision history', async () =
   const searchResult = search.notes.find((item: any) => item.id === id);
   assert.equal(searchResult.uri, `easynote://notes/${id}.md`);
   assert.ok(searchResult.matches.some((match: any) =>
-    match.field === 'content' && match.line === 3 && match.heading === '影响' && match.snippet.includes('法兰克福')));
+    match.field === 'content' && match.line === 3 && match.heading === '影响' &&
+    match.startOffset === note.content.indexOf('法兰克福') &&
+    match.endOffset === match.startOffset + '法兰克福'.length && match.snippet.includes('法兰克福')));
   assert.match(searchResult.excerpt, /法兰克福/);
   const titleSearch = await (await request('/api/integrations/notes?q=AI&limit=10', 'GET', undefined, bearer)).json() as any;
   assert.ok(titleSearch.notes.find((item: any) => item.id === id).matches.some((match: any) =>
-    match.field === 'title' && match.line === null && match.heading === null && match.snippet.includes('AI')));
+    match.field === 'title' && match.line === null && match.heading === null &&
+    match.startOffset === null && match.endOffset === null && match.snippet.includes('AI')));
   const longSearch = await request(
     `/api/integrations/notes?q=${encodeURIComponent(longQuery)}&view=all&limit=10`,
     'GET',
@@ -129,9 +132,18 @@ test('AI tokens are scoped, revocable and preserve revision history', async () =
 
   const secondId = randomUUID();
   const secondCreate = await request(`/api/integrations/notes/${secondId}`, 'POST', {
-    ...base, title: '批量读取第二篇', revision: 0, operationId: randomUUID(),
+    ...base, title: '批量读取第二篇', archived: true, revision: 0, operationId: randomUUID(),
   }, bearer);
   assert.equal(secondCreate.status, 201, await secondCreate.clone().text());
+  const secondNote = (await secondCreate.clone().json() as any).note;
+  const anyView = await (await request('/api/integrations/notes?q=批量读取第二篇&view=any', 'GET', undefined, bearer)).json() as any;
+  assert.ok(anyView.notes.some((item: any) => item.id === secondId));
+  const activeView = await (await request('/api/integrations/notes?q=批量读取第二篇&view=all', 'GET', undefined, bearer)).json() as any;
+  assert.ok(!activeView.notes.some((item: any) => item.id === secondId));
+  const unarchive = await request(`/api/integrations/notes/${secondId}`, 'PUT', {
+    ...base, title: '批量读取第二篇', archived: false, revision: secondNote.revision, operationId: randomUUID(),
+  }, bearer);
+  assert.equal(unarchive.status, 200, await unarchive.clone().text());
   const batch = await (await request(
     `/api/integrations/notes/batch?ids=${encodeURIComponent(`${secondId},${id}`)}`,
     'GET',

@@ -1,23 +1,18 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { Client } from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { readFile } from 'node:fs/promises';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createRuntime, testUserId } from './runtime';
 import { digest } from '../src/worker/core';
 
 let instance: Awaited<ReturnType<typeof createRuntime>>;
-let configDirectory = '';
-const port = 8793;
-const origin = `http://127.0.0.1:${port}`;
+const origin = 'https://easynote.test';
 const writeSecret = `enai_${'d'.repeat(64)}`;
 const readSecret = `enai_${'e'.repeat(64)}`;
 
 async function integrationRequest(secret: string, path: string, method = 'GET', body?: unknown) {
-  return fetch(`${origin}${path}`, {
+  return instance.runtime.dispatchFetch(`${origin}${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${secret}`,
@@ -27,18 +22,10 @@ async function integrationRequest(secret: string, path: string, method = 'GET', 
   });
 }
 
-async function writeConfig(name: string, token: string): Promise<string> {
-  const path = join(configDirectory, `${name}.json`);
-  await writeFile(path, JSON.stringify({ url: origin, token }), { mode: 0o600 });
-  return path;
-}
-
-async function connectMcp(configPath: string): Promise<Client> {
-  const transport = new StdioClientTransport({
-    command: process.execPath,
-    args: ['--import', 'tsx', 'src/ai/index.ts', 'mcp', '--config', configPath],
-    cwd: new URL('..', import.meta.url).pathname,
-    stderr: 'pipe',
+async function connectMcp(token: string): Promise<Client> {
+  const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+    authProvider: { token: async () => token },
+    fetch: (url, init) => instance.runtime.dispatchFetch(url, init as never) as unknown as Promise<Response>,
   });
   const client = new Client({ name: 'easynote-test-client', version: '1.0.0' });
   await client.connect(transport);
@@ -46,9 +33,7 @@ async function connectMcp(configPath: string): Promise<Client> {
 }
 
 before(async () => {
-  instance = await createRuntime(port);
-  await instance.runtime.ready;
-  configDirectory = await mkdtemp(join(tmpdir(), 'easynote-mcp-'));
+  instance = await createRuntime();
   const now = Date.now();
   await instance.db.batch([
     instance.db.prepare(`INSERT INTO integration_tokens
@@ -82,11 +67,37 @@ before(async () => {
 
 after(async () => {
   await instance?.runtime.dispose();
-  if (configDirectory) await rm(configDirectory, { recursive: true, force: true });
+});
+
+test('remote MCP requires its bearer token, POST and same-origin browser requests', async () => {
+  const initialize = JSON.stringify({
+    jsonrpc: '2.0', id: 1, method: 'initialize',
+    params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test', version: '1' } },
+  });
+  const missing = await instance.runtime.dispatchFetch(`${origin}/mcp`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: initialize,
+  });
+  assert.equal(missing.status, 401);
+
+  const get = await instance.runtime.dispatchFetch(`${origin}/mcp`, {
+    headers: { Authorization: `Bearer ${readSecret}` },
+  });
+  assert.equal(get.status, 405);
+
+  const crossOrigin = await instance.runtime.dispatchFetch(`${origin}/mcp`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${readSecret}`,
+      'Content-Type': 'application/json',
+      Origin: 'https://attacker.example',
+    },
+    body: initialize,
+  });
+  assert.equal(crossOrigin.status, 403);
 });
 
 test('MCP searches, reads and writes through the EasyNote API', async () => {
-  const client = await connectMcp(await writeConfig('write', writeSecret));
+  const client = await connectMcp(writeSecret);
   try {
     const tools = await client.listTools();
     assert.ok(tools.tools.some((tool) => tool.name === 'easynote_create_note'));
@@ -124,14 +135,21 @@ test('MCP searches, reads and writes through the EasyNote API', async () => {
 
     const evaluationSearch = await client.callTool({
       name: 'easynote_search_notes',
-      arguments: { query: '法兰克福', limit: 10 },
+      arguments: { query: '法兰克福', view: 'any', limit: 10 },
     });
     const evaluationNotes = (evaluationSearch.structuredContent as {
       notes: Array<{
         id: string;
         title: string;
         uri: string;
-        matches: Array<{ field: string; line: number | null; heading: string | null; snippet: string }>;
+        matches: Array<{
+          field: string;
+          line: number | null;
+          heading: string | null;
+          startOffset: number | null;
+          endOffset: number | null;
+          snippet: string;
+        }>;
       }>;
     }).notes;
     const acceptance = evaluationNotes.find((item) => item.title === 'Atlas 发布验收');
@@ -140,14 +158,22 @@ test('MCP searches, reads and writes through the EasyNote API', async () => {
       .find((item) => item.title === 'Atlas 事故复盘');
     assert.ok(atlas);
     assert.equal(atlas.uri, `easynote://notes/${atlas.id}.md`);
-    assert.ok(atlas.matches.some((match) =>
-      match.field === 'content' && match.heading === '影响' && match.snippet.includes('法兰克福')));
+    const atlasMatch = atlas.matches.find((match) =>
+      match.field === 'content' && match.heading === '影响' && match.snippet.includes('法兰克福'));
+    assert.ok(atlasMatch?.startOffset !== null && atlasMatch?.startOffset !== undefined);
+    assert.equal(atlasMatch.endOffset, atlasMatch.startOffset + '法兰克福'.length);
 
     const read = await client.callTool({
       name: 'easynote_read_note',
       arguments: { id: atlas.id, limit: 100 },
     });
     assert.match((read.structuredContent as { content: string }).content, /47 分钟/);
+
+    const focusedRead = await client.callTool({
+      name: 'easynote_read_note',
+      arguments: { id: atlas.id, offset: atlasMatch.startOffset, limit: 20 },
+    });
+    assert.match((focusedRead.structuredContent as { content: string }).content, /^法兰克福/);
 
     const batchRead = await client.callTool({
       name: 'easynote_read_notes',
@@ -213,7 +239,7 @@ test('MCP searches, reads and writes through the EasyNote API', async () => {
 });
 
 test('read-only MCP credentials do not expose write tools', async () => {
-  const client = await connectMcp(await writeConfig('read', readSecret));
+  const client = await connectMcp(readSecret);
   try {
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((tool) => tool.name), [
