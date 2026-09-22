@@ -955,7 +955,7 @@ dialog.pdf-export-dialog {
 dialog.pdf-export-dialog[open] { display: flex; flex-direction: column; }
 .pdf-export-dialog .dialog-header { flex-shrink: 0; }
 .setting-row { padding: 18px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 14px; font-size: 14px; }
-.setting-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.setting-row > span:first-child { min-width: 0; flex-shrink: 0; white-space: nowrap; }
 .setting-row > select { max-width: min(220px, 55%); }
 .setting-row:last-child { border: 0; }
 .setting-value { color: var(--muted); font-size: 12px; }

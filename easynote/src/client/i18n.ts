@@ -213,11 +213,13 @@ Object.assign(exact, {
   '标题': 'Title', '正文': 'Content', '置顶状态': 'Pin Status', '归档状态': 'Archive Status', '删除状态': 'Delete Status',
   '无标签': 'No tags', '已置顶': 'Pinned', '未置顶': 'Not pinned', '未归档': 'Not archived',
   '（空）': '(empty)', '等待初始化': 'Waiting for initialization', '登录笔记': 'Sign in to Notes',
+  '示例：': 'Example:', 'manifest.json 示例：': 'manifest.json Example:',
 });
 
 const ignored = '.note-row, .note-title, .cm-editor, .markdown, .tag-nav, .tag-picker label, .task-center-copy, .version-preview, pre, code, [data-i18n-ignore]';
 
-function translate(value: string) {
+export function translate(value: string) {
+  if (uiLanguage() !== 'en') return value;
   const trimmed = value.trim();
   if (!trimmed) return value;
   const match = exact[trimmed];
