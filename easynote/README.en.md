@@ -2,9 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.0`
+Current Version: `0.7.1`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.1 Updates
+
+- **Fixed Desktop Layout**: Resolved an issue where mobile navigation, search, and compose controls were inadvertently visible on desktop screens, causing note list title wrapping and extraneous controls. Restored proper word count styling.
 
 ## 0.7.0 Updates
 

@@ -552,6 +552,8 @@ nav button.active svg { color: var(--accent); }
 .document-footer .icon-button { width: 28px; height: 28px; flex-basis: 28px; }
 .mobile-pdf-action, .mobile-share-action,
 .mobile-menu-trigger, .mobile-search-trigger,
+.mobile-compose, .mobile-note-menu-trigger { display: none; }
+.word-count { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .note-tags-bar {
   display: flex;
   align-items: center;
