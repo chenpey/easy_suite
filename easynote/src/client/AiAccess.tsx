@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, KeyRound, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
 import type { IntegrationToken } from '../shared/types';
 import { api } from './api';
+import { dateLocale } from './i18n';
 
 interface Props {
   disabled: boolean;
@@ -9,7 +10,7 @@ interface Props {
   notify(message: string): void;
 }
 
-const expiry = (value: number | null) => value === null ? '永久有效' : `有效至 ${new Date(value).toLocaleDateString('zh-CN', {
+const expiry = (value: number | null) => value === null ? '永久有效' : `有效至 ${new Date(value).toLocaleDateString(dateLocale(), {
   year: 'numeric', month: 'short', day: 'numeric',
 })}`;
 

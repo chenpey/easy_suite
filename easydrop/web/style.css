@@ -89,6 +89,10 @@ body {
 .login-language { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 14px; color: var(--muted); font-size: 13px; }
 .login-language select { width: auto; min-width: 96px; padding: 6px 28px 6px 8px; }
 .language-setting { margin-bottom: 14px; }
+.language-setting .group-row { justify-content: space-between; }
+.language-setting .group-row > label { width: auto; color: var(--text); font-weight: 500; }
+.language-setting .group-field { flex: 0 0 auto; }
+.language-setting select { width: auto !important; min-width: 72px; text-align: right; text-align-last: right; cursor: pointer; }
 html[lang="en"] button, html[lang="en"] label, html[lang="en"] .modal-tab { overflow-wrap: anywhere; }
 
 button, input, textarea { font: inherit; }

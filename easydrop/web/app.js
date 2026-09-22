@@ -7,6 +7,7 @@ const renderIcons = () => createIcons({ icons });
 const $ = (id) => document.getElementById(id);
 const languageKey = "easydrop-language";
 const uiLanguage = localStorage.getItem(languageKey) === "en" ? "en" : "zh";
+const dateLocale = uiLanguage === "en" ? "en-US" : "zh-CN";
 const translations = {
   "账户与设置": "Account & Settings", "个人设置": "Profile", "用户管理": "User Management", "语言": "Language",
   "登录": "Sign In", "注册": "Register", "用户名": "Username", "密码": "Password", "忘记密码": "Forgot password",
@@ -22,7 +23,7 @@ const translations = {
   "上传文件": "Upload Files", "选择文件": "Choose Files", "暂停上传": "Pause Upload", "继续上传": "Resume Upload",
   "修改密码": "Change Password", "生成恢复码": "Generate Recovery Code", "重新生成恢复码": "Regenerate Recovery Code",
   "注销账号": "Delete Account", "自助注册": "Self-registration", "添加用户": "Add User", "用户列表": "User List",
-  "角色": "Role", "状态": "Status", "普通用户": "User", "管理员": "Administrator", "启用账号": "Enable Account",
+  "角色": "Role", "状态": "Status", "用户": "User", "普通用户": "User", "管理员": "Administrator", "启用账号": "Enable Account",
   "取消编辑": "Cancel Editing", "关闭": "Close", "取消": "Cancel", "确认删除": "Confirm Delete", "此操作不可恢复。": "This action cannot be undone.",
   "复制文本": "Copy Text", "复制文件链接": "Copy File Link", "下载文件": "Download File", "预览图片": "Preview Image",
   "创建临时链接": "Create Temporary Link", "管理临时链接": "Manage Temporary Link", "删除记录": "Delete Item",
@@ -30,11 +31,37 @@ const translations = {
   "删除": "Delete", "确认": "Confirm", "保存修改": "Save Changes", "编辑用户": "Edit User",
   "删除用户": "Delete User", "启用用户": "Enable User", "禁用用户": "Disable User", "待启用": "Pending", "已启用": "Enabled", "已禁用": "Disabled",
   "账户和个人空间中的全部内容将被删除。": "Your account and all personal content will be deleted.", "输入用户名确认": "Enter username to confirm",
+  "输入要分享的文本 (支持 Cmd/Ctrl+Enter 发送)": "Enter text to share (Cmd/Ctrl+Enter to send)",
+  "刷新历史": "Refresh History", "选择或取消选择本页记录": "Select or deselect all items on this page",
+  "当前页历史记录类型筛选": "Filter history by type", "分享历史分页": "Share history pagination",
+  "站点访问二维码": "Site Access QR Code", "关闭图片预览": "Close Image Preview",
+  "临时文件链接二维码": "Temporary File Link QR Code", "账户入口": "Account Entrance",
+  "新密码（留空则不修改）": "New Password (leave blank to keep)", "两次输入的密码不一致": "Passwords do not match",
+  "删除这条记录？": "Delete this item?", "清空所有分享记录和文件？": "Clear all shared items and files?",
+  "正在暂停": "Pausing", "正在删除…": "Deleting…", "会话已结束": "Session ended",
+  "服务端分片配置已变化，请重新选择文件。": "Server chunk configuration changed, please reselect file.",
+  "已分享": "Shared", "已将剪贴板内容填入文本框": "Pasted clipboard text into input",
+  "批量选择": "Select Multiple",
+  "EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具": "EasyDrop - Lightweight, Secure & Fast Local File & Text Transfer",
 };
 const translationPhrases = [
-  ["第", "Page "], ["页", ""], ["已选 ", "Selected "], [" 条", " items"], [" 个文件", " files"],
-  ["有效至 ", "Expires "], ["单文件上限 ", "Per-file limit "], ["正在", ""], ["已上传", "Uploaded"],
+  ["当前链接有效至 ", "Current link expires "], ["有效至 ", "Expires "],
+  ["单文件上限 ", "Per-file limit "], [" 超过单文件上限", " exceeds per-file limit"],
+  [" 个文件上传失败", " file(s) failed to upload"], [" 个文件", " files"],
+  ["删除所选 ", "Delete selected "], ["已删除 ", "Deleted "],
+  [" 条记录？", " items?"], [" 条记录", " items"],
+  ["已选 ", "Selected "], [" 条", " items"],
+  ["第", "Page "], ["页", ""], ["正在", ""],
+  ["已上传（无缩略图）", "Uploaded (no thumbnail)"], ["已上传", "Uploaded"],
   ["上传完成", "Upload complete"], ["上传已暂停", "Upload paused"], ["网络错误", "Network error"],
+  ["删除用户 ", "Delete user "],
+  ["点击预览图片 ", "Click to preview image "], [" 缩略图", " thumbnail"],
+  ["下载文件 ", "Download file "], [" 文件链接二维码", " file link QR code"],
+  ["预览图片 ", "Preview image "], ["选择记录：", "Select item: "],
+  [" 上传进度", " upload progress"], ["校验文件 ", "Verifying file "],
+  [" 分片上传超时", " chunk upload timed out"], [" 上传中止", " upload aborted"],
+  ["上传分片 ", "Uploading chunk "], ["重试分片 ", "Retrying chunk "],
+  ["已从剪贴板添加 ", "Added from clipboard: "],
 ];
 Object.assign(translations, {
   "站点访问二维码预览": "Site QR Code Preview", "分享文本": "Share Text", "输入要分享的文本": "Enter text to share",
@@ -65,7 +92,7 @@ function translateUi(value) {
 }
 function translateElement(element) {
   if (element.closest("pre, code, [data-i18n-ignore]")) return;
-  for (const attribute of ["aria-label", "title", "placeholder"]) {
+  for (const attribute of ["aria-label", "title", "placeholder", "alt"]) {
     const value = element.getAttribute(attribute);
     const translated = value && translateUi(value);
     if (value && translated !== value) element.setAttribute(attribute, translated);
@@ -78,6 +105,11 @@ function translateElement(element) {
 function installUiLanguage() {
   document.documentElement.lang = uiLanguage === "en" ? "en" : "zh-CN";
   if (uiLanguage !== "en") return;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) {
+    const desc = metaDesc.getAttribute("content");
+    if (desc) metaDesc.setAttribute("content", translateUi(desc));
+  }
   const apply = (root) => {
     if (root instanceof Element) translateElement(root);
     root.querySelectorAll?.("*").forEach(translateElement);
@@ -86,7 +118,7 @@ function installUiLanguage() {
   new MutationObserver((records) => records.forEach((record) => {
     if (record.type === "attributes") translateElement(record.target);
     record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement));
-  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder"] });
+  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder", "alt"] });
 }
 installUiLanguage();
 for (const id of ["language-select", "login-language-select"]) {
@@ -465,7 +497,7 @@ async function initializeAuth() {
   const path = location.pathname;
   const view = path === "/register" ? "register" : path === "/reset-password" ? "reset" : "login";
   for (const name of ["login", "register", "reset"]) $(`${name}-view`).hidden = name !== view;
-  document.title = `${view === "register" ? "注册" : view === "reset" ? "重置密码" : "登录"} | EasyDrop`;
+  document.title = `${view === "register" ? (uiLanguage === "en" ? "Register" : "注册") : view === "reset" ? (uiLanguage === "en" ? "Reset Password" : "重置密码") : (uiLanguage === "en" ? "Sign In" : "登录")} | EasyDrop`;
   for (const name of ["login", "register"]) {
     const tab = $(`${name}-tab`);
     if (name === view) tab.setAttribute("aria-current", "page");
@@ -560,7 +592,7 @@ function renderTemporaryShare(item, result = null) {
   const active = Number(expiresAt) > Math.floor(Date.now() / 1000);
   $("temporary-share-file").textContent = item.name;
   $("temporary-share-status").textContent = active
-    ? `当前链接有效至 ${new Date(expiresAt * 1000).toLocaleString()}`
+    ? `当前链接有效至 ${new Date(expiresAt * 1000).toLocaleString(dateLocale)}`
     : "当前未启用临时访问";
   $("temporary-share-actions").hidden = !active && !result;
   $("temporary-share-revoke").hidden = !active;
@@ -577,7 +609,7 @@ function renderTemporaryShare(item, result = null) {
   $("temporary-share-url").href = result.url;
   $("temporary-share-url").download = item.name;
   $("temporary-share-url").textContent = result.url;
-  $("temporary-share-expiry").textContent = `有效至 ${new Date(result.expiresAt * 1000).toLocaleString()}`;
+  $("temporary-share-expiry").textContent = `有效至 ${new Date(result.expiresAt * 1000).toLocaleString(dateLocale)}`;
   $("temporary-share-qr").hidden = false;
   QRCode.toCanvas($("temporary-share-qr"), result.url, { width: 200, margin: 2 }).catch((error) => {
     console.error("Temporary file QR generation failed:", error);
@@ -651,7 +683,7 @@ function historyRow(item) {
   const time = document.createElement("time");
   time.className = "muted";
   time.dateTime = new Date(item.created_at * 1000).toISOString();
-  time.textContent = new Date(item.created_at * 1000).toLocaleString();
+  time.textContent = new Date(item.created_at * 1000).toLocaleString(dateLocale);
   const body = document.createElement("p");
   body.className = item.type === "text" ? "item-text" : "item-name";
   if (item.type === "text") appendLinkifiedText(body, item.content);

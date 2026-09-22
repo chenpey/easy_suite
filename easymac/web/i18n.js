@@ -20,8 +20,21 @@
     "迁移脚本已下载": "Migration script downloaded", "尚未选择项目": "No items selected", "当前脚本只会列出需要手动处理的项目": "The script lists items that need manual action",
     "当前脚本只会列出网页应用及清理跟踪参数后的地址": "The script lists web apps and URLs without tracking parameters",
     "当前脚本只会列出手动安装提醒": "The script lists manual installation reminders",
+    "自动准备所选项目的前置依赖": "Automatically prepare prerequisites for selected items",
+    "# 选择项目后，这里会显示完整迁移脚本。": "# The complete migration script will appear here after selecting items.",
+    "脚本会先安装 Homebrew 和 mas，再处理所选项目": "The script will install Homebrew and mas before processing selected items.",
+    "脚本会先检测并按需安装 Homebrew": "The script will detect and install Homebrew if needed.",
+    "在旧 Mac 本地扫描应用并生成迁移安装脚本": "Scan apps on your old Mac and generate a migration install script",
   };
-  const phrases = [[" 个结果", " results"], ["已选择 ", "Selected "], [" 个项目", " items"], [" 扫描", " scan"]];
+  const phrases = [
+    [" 个结果", " results"],
+    ["已选择当前结果中的 ", "Selected "],
+    ["已选择 ", "Selected "],
+    [" 个可自动安装项目", " automatic items"],
+    [" 个项目", " items"],
+    [" 扫描", " scan"],
+    ["选择 ", "Select "],
+  ];
   function translate(value) {
     const trimmed = value.trim();
     if (!trimmed) return value;
@@ -32,7 +45,7 @@
   }
   function translateElement(element) {
     if (element.closest("pre, code, [data-i18n-ignore]")) return;
-    for (const attribute of ["aria-label", "title", "placeholder"]) {
+    for (const attribute of ["aria-label", "title", "placeholder", "alt"]) {
       const value = element.getAttribute(attribute);
       if (value) element.setAttribute(attribute, translate(value));
     }
@@ -56,7 +69,14 @@
   document.querySelector("#settingsButton").addEventListener("click", () => dialog.showModal());
   document.querySelector("#settingsClose").addEventListener("click", () => dialog.close());
   if (language !== "en") return;
+  const metaDesc = document.querySelector('meta[name="description"]');
+  if (metaDesc) {
+    const desc = metaDesc.getAttribute("content");
+    if (desc) metaDesc.setAttribute("content", translate(desc));
+  }
   apply(document.body);
-  new MutationObserver((records) => records.forEach((record) => record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement))))
-    .observe(document.body, { childList: true, subtree: true });
+  new MutationObserver((records) => records.forEach((record) => {
+    if (record.type === "attributes") translateElement(record.target);
+    record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement));
+  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder", "alt"] });
 })();

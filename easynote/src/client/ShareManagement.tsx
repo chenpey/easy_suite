@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarPlus, FileText, Infinity as InfinityIcon, LoaderCircle, Trash2 } from 'lucide-react';
 import type { ManagedNoteShare } from '../shared/types';
 import { api } from './api';
+import { dateLocale } from './i18n';
 
 interface Props {
   disabled: boolean;
@@ -10,7 +11,7 @@ interface Props {
   reportError(message: string): void;
 }
 
-const dateTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
+const dateTime = (value: number) => new Date(value).toLocaleString(dateLocale(), {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
