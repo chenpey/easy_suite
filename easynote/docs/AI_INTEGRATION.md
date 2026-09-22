@@ -51,6 +51,7 @@ bearer_token_env_var = "EASYNOTE_TOKEN"
 | `easynote_read_note` | 只读 | 分段读取一篇完整笔记 |
 | `easynote_read_notes` | 只读 | 批量读取最多 20 篇笔记 |
 | `easynote_connection_status` | 只读 | 验证账号、令牌名称和权限 |
+| `easynote_note_stats` | 只读 | 精确统计正常、归档、回收站及全部笔记数量 |
 | `easynote_create_note` | 读写 | 创建笔记 |
 | `easynote_update_note` | 读写 | 更新笔记 |
 | `easynote_archive_note` | 读写 | 归档或取消归档 |
@@ -66,6 +67,7 @@ bearer_token_env_var = "EASYNOTE_TOKEN"
 
 ```text
 检索时先调用 easynote_search_notes；默认 view=any，不遗漏归档知识。
+统计笔记数量时调用 easynote_note_stats，不要使用分页搜索结果或 Resource 数量推算。
 正文命中结果提供 startOffset 和 endOffset，可将 startOffset 交给 easynote_read_note，只读取相关区段。
 需要多篇正文时优先调用 easynote_read_notes。
 修改前调用 easynote_read_note 获取最新 revision，并作为 expected_revision。
