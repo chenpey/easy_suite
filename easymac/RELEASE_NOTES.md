@@ -1,3 +1,9 @@
+## EasyMac 0.4.3
+
+- 重构国际化体系为独立字典（`i18n.js`），支持 `t(key, ...args)` 参数插值。
+- HTML 采用 `data-i18n*` 标记静态文案，JS 动态文案统一使用 `t(...)` 获取，移除 `MutationObserver`。
+- 新增 `scripts/check-i18n.mjs` 自动化 Key 对齐检查，确保中英文完全对称。
+
 ## EasyMac 0.4.2
 
 - 统一设置面板语言标签为「语言/Language」，保持语言选择器中的「中文」与「English」原样显示。

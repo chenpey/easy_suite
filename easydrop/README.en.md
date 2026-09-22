@@ -2,11 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.2.4`
+Current Version: `1.2.5`
 
 EasyDrop is a text and file sharing tool built on Cloudflare Workers, using username and password authentication, a D1 database, and private R2 object storage. Once deployed, computers, phones, and tablets can exchange content across networks via a single HTTPS address.
 
 Ideal for personal cross-device text and file transfers, it also supports multiple users on the same instance with isolated personal workspaces. Administrators manage registration and accounts, while content access remains strictly segregated per user.
+
+## 1.2.5 Updates
+
+- **i18n Architecture Refactoring**: Consolidated all copy into an independent dictionary (`web/i18n.js`) supporting `t(key, ...args)` parameter interpolation.
+- **Static & Dynamic Decoupling**: HTML static copy uses `data-i18n*` attributes rendered once on load, while JS dynamic copy uses explicit `t(...)` calls, completely removing the `MutationObserver` text replacement hack.
+- **Automated Key Alignment Script**: Added `scripts/check-i18n.mjs` integrated into `check` and `test` pipelines, blocking builds if translations are missing or misaligned.
 
 ## 1.2.4 Updates
 

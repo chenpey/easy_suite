@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0071e3">
   <meta name="application-name" content="EasyDrop">
-  <meta name="description" content="EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具">
+  <meta name="description" content="EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具" data-i18n-content="meta_description">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="EasyDrop">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>登录 | EasyDrop</title>
+  <title data-i18n="login_page_title">登录 | EasyDrop</title>
   <link rel="icon" href="/favicon.ico" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -19,91 +19,91 @@
 <body data-page="login">
   <main class="login-layout">
     <div class="brand"><img class="brand-icon" src="/favicon.svg" alt=""><h1>EasyDrop</h1></div>
-    <p class="brand-subtitle">轻量 · 极速 · 跨设备互传</p>
+    <p class="brand-subtitle" data-i18n="brand_subtitle">轻量 · 极速 · 跨设备互传</p>
     <label class="login-language">语言/Language<select id="login-language-select"><option value="zh">中文</option><option value="en">English</option></select></label>
-    <nav class="auth-tabs" aria-label="账户入口">
-      <a id="login-tab" href="/login">登录</a>
-      <a id="register-tab" href="/register" hidden>注册</a>
+    <nav class="auth-tabs" aria-label="账户入口" data-i18n-aria-label="account_entrance">
+      <a id="login-tab" href="/login" data-i18n="login">登录</a>
+      <a id="register-tab" href="/register" hidden data-i18n="register">注册</a>
     </nav>
     <section id="login-view">
-      <h2>登录</h2>
+      <h2 data-i18n="login">登录</h2>
       <form id="login-form">
-        <label for="username">用户名</label>
+        <label for="username" data-i18n="username">用户名</label>
         <input id="username" name="username" type="text" autocomplete="username" minlength="3" maxlength="32" required autofocus>
-        <label for="password">密码</label>
+        <label for="password" data-i18n="password">密码</label>
         <div class="password-field">
           <input id="password" name="password" type="password" autocomplete="current-password" required minlength="12" maxlength="32"
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
         </div>
-        <button class="primary" type="submit"><i data-lucide="log-in"></i><span>登录</span></button>
+        <button class="primary" type="submit"><i data-lucide="log-in"></i><span data-i18n="login">登录</span></button>
       </form>
-      <a class="auth-secondary-link" href="/reset-password">忘记密码</a>
+      <a class="auth-secondary-link" href="/reset-password" data-i18n="forgot_password">忘记密码</a>
     </section>
     <section id="register-view" hidden>
-      <h2>注册</h2>
+      <h2 data-i18n="register">注册</h2>
       <form id="register-form">
-        <label for="register-username">用户名</label>
+        <label for="register-username" data-i18n="username">用户名</label>
         <input id="register-username" name="username" type="text" autocomplete="username" minlength="3" maxlength="32" required>
-        <label for="register-password">密码</label>
+        <label for="register-password" data-i18n="password">密码</label>
         <div class="password-field">
           <input id="register-password" name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
         </div>
         <div id="register-password-rules" class="password-rules">
-          <span class="password-rule" data-rule="length"><i data-lucide="x"></i>至少 12 位</span>
-          <span class="password-rule" data-rule="upper"><i data-lucide="x"></i>包含大写字母</span>
-          <span class="password-rule" data-rule="lower"><i data-lucide="x"></i>包含小写字母</span>
-          <span class="password-rule" data-rule="number"><i data-lucide="x"></i>包含数字</span>
+          <span class="password-rule" data-rule="length"><i data-lucide="x"></i><span data-i18n="at_least_12_chars">至少 12 位</span></span>
+          <span class="password-rule" data-rule="upper"><i data-lucide="x"></i><span data-i18n="contains_uppercase">包含大写字母</span></span>
+          <span class="password-rule" data-rule="lower"><i data-lucide="x"></i><span data-i18n="contains_lowercase">包含小写字母</span></span>
+          <span class="password-rule" data-rule="number"><i data-lucide="x"></i><span data-i18n="contains_number">包含数字</span></span>
         </div>
-        <label for="register-password-confirm">确认密码</label>
+        <label for="register-password-confirm" data-i18n="confirm_password">确认密码</label>
         <div class="password-field">
           <input id="register-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
         </div>
-        <button class="primary" type="submit"><i data-lucide="user-plus"></i><span>提交注册</span></button>
+        <button class="primary" type="submit"><i data-lucide="user-plus"></i><span data-i18n="submit_registration">提交注册</span></button>
       </form>
-      <div id="registration-closed" class="auth-message" hidden>当前未开放注册</div>
+      <div id="registration-closed" class="auth-message" hidden data-i18n="registration_closed">当前未开放注册</div>
       <div id="registration-result" class="recovery-result" hidden>
-        <p>注册已提交，等待管理员启用。</p>
+        <p data-i18n="registration_submitted_wait">注册已提交，等待管理员启用。</p>
         <code id="registration-recovery-code"></code>
-        <button id="copy-registration-code" class="secondary" type="button"><i data-lucide="copy"></i>复制恢复码</button>
+        <button id="copy-registration-code" class="secondary" type="button"><i data-lucide="copy"></i><span data-i18n="copy_recovery_code">复制恢复码</span></button>
         <p id="registration-copy-notice" class="copy-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
     <section id="reset-view" hidden>
-      <h2>重置密码</h2>
+      <h2 data-i18n="reset_password">重置密码</h2>
       <form id="reset-form">
-        <label for="reset-username">用户名</label>
+        <label for="reset-username" data-i18n="username">用户名</label>
         <input id="reset-username" name="username" type="text" autocomplete="username" minlength="3" maxlength="32" required>
-        <label for="recovery-code">恢复码</label>
+        <label for="recovery-code" data-i18n="recovery_code">恢复码</label>
         <input id="recovery-code" type="text" autocomplete="off" required maxlength="71">
-        <label for="reset-password">新密码</label>
+        <label for="reset-password" data-i18n="new_password">新密码</label>
         <div class="password-field">
           <input id="reset-password" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
         </div>
         <div id="reset-password-rules" class="password-rules">
-          <span class="password-rule" data-rule="length"><i data-lucide="x"></i>至少 12 位</span>
-          <span class="password-rule" data-rule="upper"><i data-lucide="x"></i>包含大写字母</span>
-          <span class="password-rule" data-rule="lower"><i data-lucide="x"></i>包含小写字母</span>
-          <span class="password-rule" data-rule="number"><i data-lucide="x"></i>包含数字</span>
+          <span class="password-rule" data-rule="length"><i data-lucide="x"></i><span data-i18n="at_least_12_chars">至少 12 位</span></span>
+          <span class="password-rule" data-rule="upper"><i data-lucide="x"></i><span data-i18n="contains_uppercase">包含大写字母</span></span>
+          <span class="password-rule" data-rule="lower"><i data-lucide="x"></i><span data-i18n="contains_lowercase">包含小写字母</span></span>
+          <span class="password-rule" data-rule="number"><i data-lucide="x"></i><span data-i18n="contains_number">包含数字</span></span>
         </div>
-        <label for="reset-password-confirm">确认新密码</label>
+        <label for="reset-password-confirm" data-i18n="confirm_new_password">确认新密码</label>
         <div class="password-field">
           <input id="reset-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
             pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}">
-          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+          <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
         </div>
-        <button class="primary" type="submit"><i data-lucide="key-round"></i><span>重置密码</span></button>
+        <button class="primary" type="submit"><i data-lucide="key-round"></i><span data-i18n="reset_password">重置密码</span></button>
       </form>
-      <a class="auth-secondary-link" href="/login">返回登录</a>
+      <a class="auth-secondary-link" href="/login" data-i18n="back_to_login">返回登录</a>
     </section>
     <div id="notice" role="status" aria-live="polite"></div>
-    <details id="error-details" hidden><summary>错误详情</summary><pre id="error-body"></pre></details>
+    <details id="error-details" hidden><summary data-i18n="error_details">错误详情</summary><pre id="error-body"></pre></details>
   </main>
 </body>
 </html>

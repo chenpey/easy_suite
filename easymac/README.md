@@ -2,13 +2,19 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.4.2`
+当前版本：`0.4.3`
 
 [EasyMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
 EasyMac 在旧 Mac 上扫描已安装应用，让用户搜索、筛选和选择需要迁移的项目，然后导出可在新 Mac 上运行的安装脚本。
 
 工具由一个轻量本地启动器和本地网页组成，不需要安装应用、Xcode、开发者账号或额外运行环境。
+
+## 0.4.3 更新
+
+- **国际化架构重构**：所有文本收口到独立字典（`web/i18n.js`），支持 `t(key, ...args)` 参数插值。
+- **静态与动态解耦**：HTML 静态文案采用 `data-i18n*` 标记并一次性渲染，JS 动态文案统一调用 `t(...)` 获取，移除 `MutationObserver`。
+- **自动化 Key 对齐检查**：增加 `scripts/check-i18n.mjs`，确保中英文字典与模板/代码引用完全对称。
 
 ## 0.4.2 更新
 

@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.5`
+Current Version: `0.7.6`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.6 Updates
+
+- **i18n Architecture Refactoring**: Consolidated all copy into an independent dictionary (`src/client/i18n.ts`) supporting `t(key, ...args)` parameter interpolation.
+- **Removed MutationObserver**: Eliminated runtime DOM text replacement listeners; dynamic notices, controls, and dialog copy now use explicit `t(...)` calls, improving rendering performance and stability.
+- **Automated Key Alignment Script**: Added `scripts/check-i18n.mjs` integrated into `npm run check`, blocking builds if translations are missing or misaligned.
 
 ## 0.7.5 Updates
 

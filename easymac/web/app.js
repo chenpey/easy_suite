@@ -4,56 +4,66 @@
   const FILTERS = [
     {
       id: "all",
-      label: "全部项目",
+      labelKey: "filter_all",
       icon: "apps",
       predicate: () => true,
     },
     {
       id: "automatic",
-      label: "可自动安装",
+      labelKey: "filter_automatic",
       icon: "wand",
       predicate: EasyMacCore.isAutomatic,
     },
     {
       id: "cask",
-      label: "图形应用",
+      labelKey: "filter_cask",
       icon: "package",
       predicate: (item) => item.kind === "cask",
     },
     {
       id: "mas",
-      label: "App Store",
+      labelKey: "filter_mas",
       icon: "store",
       predicate: (item) => item.kind === "mas",
     },
     {
       id: "formula",
-      label: "命令行工具",
+      labelKey: "filter_formula",
       icon: "terminal",
       predicate: (item) => item.kind === "formula",
     },
     {
       id: "pwa",
-      label: "网页应用",
+      labelKey: "filter_pwa",
       icon: "globe",
       predicate: (item) => item.kind === "pwa",
     },
     {
       id: "manual",
-      label: "手动安装",
+      labelKey: "filter_manual",
       icon: "hand",
       predicate: (item) => item.kind === "manual",
     },
   ];
 
-  const KIND_LABELS = {
-    homebrew: "Homebrew",
-    cask: "Homebrew Cask",
-    formula: "命令行工具",
-    mas: "App Store",
-    pwa: "网页应用",
-    manual: "手动安装",
-  };
+  function kindLabel(kind) {
+    switch (kind) {
+      case "homebrew":
+        return "Homebrew";
+      case "cask":
+        return "Homebrew Cask";
+      case "formula":
+        return window.t("kind_formula");
+      case "mas":
+        return "App Store";
+      case "pwa":
+        return window.t("kind_pwa");
+      case "manual":
+        return window.t("kind_manual");
+      default:
+        return kind;
+    }
+  }
 
   const state = {
     items: [],
@@ -129,7 +139,7 @@
 
   function itemDetail(item) {
     if (item.kind === "manual") {
-      return item.bundleId || item.path || "未识别安装来源";
+      return item.bundleId || item.path || window.t("unknown_install_source");
     }
     if (item.kind === "mas") {
       return `App Store ID ${item.installId}`;
@@ -139,11 +149,11 @@
         ? "Chrome"
         : item.bundleId.startsWith("com.microsoft.edgemac.app.")
           ? "Edge"
-          : "浏览器";
+          : window.t("browser");
       return `${browser} · ${item.installId}`;
     }
     if (item.kind === "homebrew") {
-      return "自动准备所选项目的前置依赖";
+      return window.t("homebrew_dep_detail");
     }
     return item.installId;
   }
@@ -163,7 +173,7 @@
       );
 
       const label = document.createElement("span");
-      label.textContent = filter.label;
+      label.textContent = window.t(filter.labelKey);
       const output = document.createElement("output");
       output.textContent = String(count);
 
@@ -175,8 +185,8 @@
   function renderList() {
     const items = visibleItems();
     const filter = FILTERS.find((entry) => entry.id === state.filter);
-    elements.libraryTitle.textContent = filter?.label || "全部项目";
-    elements.resultSummary.textContent = `${items.length} 个结果`;
+    elements.libraryTitle.textContent = filter ? window.t(filter.labelKey) : window.t("filter_all");
+    elements.resultSummary.textContent = window.t("result_summary", items.length);
     elements.appList.replaceChildren();
     elements.appList.hidden = items.length === 0;
     elements.emptyState.hidden = items.length !== 0;
@@ -191,7 +201,7 @@
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = state.selected.has(item.id);
-      checkbox.setAttribute("aria-label", `选择 ${item.name}`);
+      checkbox.setAttribute("aria-label", window.t("select_item_aria", item.name));
 
       const main = document.createElement("div");
       main.className = "app-main";
@@ -224,7 +234,7 @@
       ]
         .filter(Boolean)
         .join(" ");
-      badge.textContent = KIND_LABELS[item.kind];
+      badge.textContent = kindLabel(item.kind);
 
       row.append(checkbox, main, badge);
       fragment.append(row);
@@ -242,11 +252,11 @@
     elements.pwaCount.textContent = String(summary.pwa);
     elements.manualCount.textContent = String(summary.manual);
     elements.selectedSummary.textContent =
-      summary.total === 0 ? "尚未选择项目" : `已选择 ${summary.total} 个项目`;
+      summary.total === 0 ? window.t("no_items_selected") : window.t("selected_summary", summary.total);
     elements.downloadButton.disabled = summary.total === 0;
     elements.scriptPreview.textContent =
       summary.total === 0
-        ? "# 选择项目后，这里会显示完整迁移脚本。"
+        ? window.t("script_preview_empty")
         : state.script;
 
     elements.dependencyStatus.classList.toggle(
@@ -256,21 +266,21 @@
     const statusTitle = elements.dependencyStatus.querySelector("strong");
     const statusDescription = elements.dependencyStatus.querySelector("span");
     if (summary.homebrew) {
-      statusTitle.textContent = "需要 Homebrew";
+      statusTitle.textContent = window.t("homebrew_required");
       statusDescription.textContent =
         summary.appStore > 0
-          ? "脚本会先安装 Homebrew 和 mas，再处理所选项目"
-          : "脚本会先检测并按需安装 Homebrew";
+          ? window.t("homebrew_mas_desc")
+          : window.t("homebrew_desc");
     } else {
-      statusTitle.textContent = "无需 Homebrew";
+      statusTitle.textContent = window.t("homebrew_not_needed");
       if (summary.pwa > 0 && summary.manual > 0) {
-        statusDescription.textContent = "当前脚本只会列出需要手动处理的项目";
+        statusDescription.textContent = window.t("homebrew_pwa_manual_desc");
       } else if (summary.pwa > 0) {
-        statusDescription.textContent = "当前脚本只会列出网页应用及清理跟踪参数后的地址";
+        statusDescription.textContent = window.t("homebrew_pwa_desc");
       } else if (summary.manual > 0) {
-        statusDescription.textContent = "当前脚本只会列出手动安装提醒";
+        statusDescription.textContent = window.t("homebrew_manual_desc");
       } else {
-        statusDescription.textContent = "选择可自动安装项目后会自动加入";
+        statusDescription.textContent = window.t("homebrew_not_needed_desc");
       }
     }
   }
@@ -326,7 +336,7 @@
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast("迁移脚本已下载");
+    showToast(window.t("migration_script_downloaded"));
   }
 
   function bindEvents() {
@@ -354,7 +364,7 @@
       const items = visibleItems();
       items.forEach((item) => state.selected.add(item.id));
       render();
-      showToast(`已选择当前结果中的 ${items.length} 个项目`);
+      showToast(window.t("toast_selected_visible", items.length));
     });
 
     elements.clearSelectionButton.addEventListener("click", () => {
@@ -366,7 +376,7 @@
       const items = state.items.filter(EasyMacCore.isAutomatic);
       items.forEach((item) => state.selected.add(item.id));
       render();
-      showToast(`已选择 ${items.length} 个可自动安装项目`);
+      showToast(window.t("toast_selected_automatic", items.length));
     });
 
     elements.downloadButton.addEventListener("click", downloadScript);
@@ -374,16 +384,17 @@
 
   function formatScanSource(scan) {
     const date = new Date(scan.scannedAt);
+    const locale = window.EasyMacI18n?.getLanguage?.() === "en" ? "en-US" : "zh-CN";
     const time = Number.isNaN(date.getTime())
       ? ""
-      : new Intl.DateTimeFormat("zh-CN", {
+      : new Intl.DateTimeFormat(locale, {
           month: "numeric",
           day: "numeric",
           hour: "2-digit",
           minute: "2-digit",
         }).format(date);
 
-    return [scan.computerName, time ? `${time} 扫描` : ""]
+    return [scan.computerName, time ? window.t("scan_source_time", time) : ""]
       .filter(Boolean)
       .join(" · ");
   }
@@ -406,7 +417,7 @@
         );
       });
       elements.scanSource.textContent =
-        formatScanSource(scan) || "本地扫描结果";
+        formatScanSource(scan) || window.t("local_scan_results");
       elements.scanCount.textContent = String(state.items.length);
       elements.workspace.hidden = false;
       elements.scanStatus.hidden = true;
@@ -415,7 +426,7 @@
       render();
     } catch (error) {
       console.error(error);
-      elements.scanSource.textContent = "未找到本地扫描结果";
+      elements.scanSource.textContent = window.t("no_local_scan_results");
       elements.workspace.hidden = true;
       elements.scanStatus.hidden = true;
       elements.loadError.hidden = false;

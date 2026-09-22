@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, KeyRound, LoaderCircle, Plus, Trash2, X } from 'lucide-react';
 import type { IntegrationToken } from '../shared/types';
 import { api } from './api';
-import { dateLocale } from './i18n';
+import { dateLocale, t } from './i18n';
 
 interface Props {
   disabled: boolean;
@@ -10,9 +10,9 @@ interface Props {
   notify(message: string): void;
 }
 
-const expiry = (value: number | null) => value === null ? '永久有效' : `有效至 ${new Date(value).toLocaleDateString(dateLocale(), {
+const expiry = (value: number | null) => value === null ? t('never_expires') : t('share_until', new Date(value).toLocaleDateString(dateLocale(), {
   year: 'numeric', month: 'short', day: 'numeric',
-})}`;
+}));
 
 export function AiAccess({ disabled, reportError, notify }: Props) {
   const [tokens, setTokens] = useState<IntegrationToken[]>([]);
@@ -42,7 +42,7 @@ export function AiAccess({ disabled, reportError, notify }: Props) {
       setTokens((current) => [result.token, ...current]);
       setSecret(result.secret);
       setName('');
-      notify('AI 接入令牌已创建');
+      notify(t('token_created'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -56,7 +56,7 @@ export function AiAccess({ disabled, reportError, notify }: Props) {
       await api.revokeIntegrationToken(id);
       setTokens((current) => current.filter((item) => item.id !== id));
       setConfirmRevoke('');
-      notify('AI 接入令牌已撤销');
+      notify(t('token_revoked'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -66,49 +66,49 @@ export function AiAccess({ disabled, reportError, notify }: Props) {
 
   return <section className="ai-access" aria-labelledby="ai-access-title">
     <div className="setting-row ai-access-heading">
-      <span id="ai-access-title">AI 接入</span>
+      <span id="ai-access-title">{t('ai_access')}</span>
       <KeyRound size={17} />
     </div>
     {secret && <div className="token-secret" role="status">
-      <div><Check size={15} /><strong>令牌仅显示一次</strong></div>
+      <div><Check size={15} /><strong>{t('token_shown_once')}</strong></div>
       <code>{secret}</code>
-      <button onClick={() => void navigator.clipboard.writeText(secret).then(() => notify('令牌已复制')).catch((error) => reportError(String(error)))}>
-        <Copy size={15} />复制令牌
+      <button onClick={() => void navigator.clipboard.writeText(secret).then(() => notify(t('token_copied'))).catch((error) => reportError(String(error)))}>
+        <Copy size={15} />{t('copy_token')}
       </button>
       <code>{codexConfig}</code>
-      <button onClick={() => void navigator.clipboard.writeText(codexConfig).then(() => notify('Codex 配置已复制')).catch((error) => reportError(String(error)))}>
-        <Copy size={15} />复制 Codex 配置
+      <button onClick={() => void navigator.clipboard.writeText(codexConfig).then(() => notify(t('codex_copied'))).catch((error) => reportError(String(error)))}>
+        <Copy size={15} />{t('copy_codex_config')}
       </button>
     </div>}
     <form className="token-form" onSubmit={(event) => {
       event.preventDefault();
       void create();
     }}>
-      <label>名称<input required maxLength={40} placeholder="例如：本机 AI" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label>权限<select value={access} onChange={(event) => setAccess(event.target.value as IntegrationToken['access'])}>
-        <option value="read-write">读取和写入</option>
-        <option value="read">只读</option>
+      <label>{t('name')}<input required maxLength={40} placeholder={t('token_placeholder')} value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label>{t('access')}<select value={access} onChange={(event) => setAccess(event.target.value as IntegrationToken['access'])}>
+        <option value="read-write">{t('read_and_write')}</option>
+        <option value="read">{t('read_only')}</option>
       </select></label>
-      <label>有效期<select value={expiresInDays} onChange={(event) => setExpiresInDays(event.target.value)}>
-        <option value={30}>30 天</option>
-        <option value={90}>90 天</option>
-        <option value={365}>365 天</option>
-        <option value="permanent">永久</option>
+      <label>{t('expiration')}<select value={expiresInDays} onChange={(event) => setExpiresInDays(event.target.value)}>
+        <option value={30}>{t('days_30')}</option>
+        <option value={90}>{t('days_90')}</option>
+        <option value={365}>{t('days_365')}</option>
+        <option value="permanent">{t('permanent')}</option>
       </select></label>
       <button className="primary" disabled={disabled || working || !name.trim()}>
-        {working ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />}创建令牌
+        {working ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />}{t('create_token')}
       </button>
     </form>
-    <div className="token-list" aria-label="AI 接入令牌">
-      {loading ? <div className="token-empty">正在读取令牌…</div> :
-        !tokens.length ? <div className="token-empty">暂无有效令牌</div> :
+    <div className="token-list" aria-label={t('ai_access')}>
+      {loading ? <div className="token-empty">{t('loading_tokens')}</div> :
+        !tokens.length ? <div className="token-empty">{t('no_active_tokens')}</div> :
           tokens.map((item) => <div className="token-row" key={item.id}>
-            <div><strong>{item.name}</strong><span>{item.access === 'read-write' ? '读取和写入' : '只读'} · {expiry(item.expiresAt)}</span></div>
+            <div><strong>{item.name}</strong><span>{item.access === 'read-write' ? t('read_and_write') : t('read_only')} · {expiry(item.expiresAt)}</span></div>
             {confirmRevoke === item.id ? <div className="token-actions">
-              <button className="danger" disabled={working} onClick={() => void revoke(item.id)}><Trash2 size={14} />确认撤销</button>
-              <button aria-label="取消撤销" disabled={working} onClick={() => setConfirmRevoke('')}><X size={14} /></button>
+              <button className="danger" disabled={working} onClick={() => void revoke(item.id)}><Trash2 size={14} />{t('confirm_revoke')}</button>
+              <button aria-label={t('cancel_revoke')} disabled={working} onClick={() => setConfirmRevoke('')}><X size={14} /></button>
             </div> :
-              <button className="icon-button" title="撤销令牌" aria-label={`撤销令牌 ${item.name}`} disabled={disabled || working} onClick={() => setConfirmRevoke(item.id)}><Trash2 size={16} /></button>}
+              <button className="icon-button" title={t('revoke_token')} aria-label={item.name} disabled={disabled || working} onClick={() => setConfirmRevoke(item.id)}><Trash2 size={16} /></button>}
           </div>)}
     </div>
   </section>;

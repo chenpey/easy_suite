@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.7.5`
+当前版本：`0.7.6`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 0.7.6 更新
+
+- **国际化架构重构**：所有文本收口到独立字典（`src/client/i18n.ts`），支持 `t(key, ...args)` 参数插值。
+- **移除 MutationObserver**：移除 DOM 文本模糊替换监听器，动态通知、控件与对话框文案全面采用 `t(...)` 获取，提升渲染性能与稳定性。
+- **自动化 Key 对齐检查**：新增 `scripts/check-i18n.mjs` 并接入 `npm run check`，缺少翻译或未对齐直接阻断构建。
 
 ## 0.7.5 更新
 

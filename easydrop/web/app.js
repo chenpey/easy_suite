@@ -1,143 +1,20 @@
 import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound } from "lucide";
 import QRCode from "qrcode";
+import { t, uiLanguage, dateLocale, setLanguage, renderStaticI18n } from "./i18n.js";
 
 const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound };
 const APP_VERSION = __EASYDROP_VERSION__;
 const renderIcons = () => createIcons({ icons });
 const $ = (id) => document.getElementById(id);
-const languageKey = "easydrop-language";
-const uiLanguage = localStorage.getItem(languageKey) === "en" ? "en" : "zh";
-const dateLocale = uiLanguage === "en" ? "en-US" : "zh-CN";
-const translations = {
-  "账户与设置": "Account & Settings", "个人设置": "Profile", "用户管理": "User Management", "语言": "Language",
-  "登录": "Sign In", "注册": "Register", "用户名": "Username", "密码": "Password", "忘记密码": "Forgot password",
-  "提交注册": "Submit Registration", "重置密码": "Reset Password", "返回登录": "Back to Sign In", "恢复码": "Recovery Code",
-  "新密码": "New Password", "确认密码": "Confirm Password", "确认新密码": "Confirm New Password", "当前密码": "Current Password",
-  "显示密码": "Show password", "隐藏密码": "Hide password", "至少 12 位": "At least 12 characters",
-  "包含大写字母": "Contains uppercase letter", "包含小写字母": "Contains lowercase letter", "包含数字": "Contains number",
-  "当前未开放注册": "Registration is closed", "注册已提交，等待管理员启用。": "Registration submitted. Waiting for administrator approval.",
-  "复制恢复码": "Copy Recovery Code", "错误详情": "Error Details", "轻量 · 极速 · 跨设备互传": "Light · Fast · Cross-device transfer",
-  "拖放文件至此处上传": "Drop files here to upload", "访问二维码": "Access QR Code", "退出登录": "Sign Out",
-  "正在加载...": "Loading...", "文本": "Text", "文件": "Files", "发送": "Send", "刷新": "Refresh",
-  "分享历史": "Share History", "清空历史": "Clear History", "上一页": "Previous", "下一页": "Next",
-  "上传文件": "Upload Files", "选择文件": "Choose Files", "暂停上传": "Pause Upload", "继续上传": "Resume Upload",
-  "修改密码": "Change Password", "生成恢复码": "Generate Recovery Code", "重新生成恢复码": "Regenerate Recovery Code",
-  "注销账号": "Delete Account", "自助注册": "Self-registration", "添加用户": "Add User", "用户列表": "User List",
-  "角色": "Role", "状态": "Status", "用户": "User", "普通用户": "User", "管理员": "Administrator", "启用账号": "Enable Account",
-  "取消编辑": "Cancel Editing", "关闭": "Close", "取消": "Cancel", "确认删除": "Confirm Delete", "此操作不可恢复。": "This action cannot be undone.",
-  "复制文本": "Copy Text", "复制文件链接": "Copy File Link", "下载文件": "Download File", "预览图片": "Preview Image",
-  "创建临时链接": "Create Temporary Link", "管理临时链接": "Manage Temporary Link", "删除记录": "Delete Item",
-  "暂无分享记录": "No shared items", "本页当前分类暂无记录": "No items in this category", "已复制": "Copied",
-  "删除": "Delete", "确认": "Confirm", "保存修改": "Save Changes", "编辑用户": "Edit User",
-  "删除用户": "Delete User", "启用用户": "Enable User", "禁用用户": "Disable User", "待启用": "Pending", "已启用": "Enabled", "已禁用": "Disabled",
-  "账户和个人空间中的全部内容将被删除。": "Your account and all personal content will be deleted.", "输入用户名确认": "Enter username to confirm",
-  "输入要分享的文本 (支持 Cmd/Ctrl+Enter 发送)": "Enter text to share (Cmd/Ctrl+Enter to send)",
-  "刷新历史": "Refresh History", "选择或取消选择本页记录": "Select or deselect all items on this page",
-  "当前页历史记录类型筛选": "Filter history by type", "分享历史分页": "Share history pagination",
-  "站点访问二维码": "Site Access QR Code", "关闭图片预览": "Close Image Preview",
-  "临时文件链接二维码": "Temporary File Link QR Code", "账户入口": "Account Entrance",
-  "新密码（留空则不修改）": "New Password (leave blank to keep)", "两次输入的密码不一致": "Passwords do not match",
-  "删除这条记录？": "Delete this item?", "清空所有分享记录和文件？": "Clear all shared items and files?",
-  "正在暂停": "Pausing", "正在删除…": "Deleting…", "会话已结束": "Session ended",
-  "服务端分片配置已变化，请重新选择文件。": "Server chunk configuration changed, please reselect file.",
-  "已分享": "Shared", "已将剪贴板内容填入文本框": "Pasted clipboard text into input",
-  "批量选择": "Select Multiple",
-  "EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具": "EasyDrop - Lightweight, Secure & Fast Local File & Text Transfer",
-  "选择或拖拽文件到此处": "Select or drag files here",
-  "本页": "This page",
-  "第1/1页": "Page 1/1",
-  "访问地址": "Access Address",
-  "复制地址": "Copy Address",
-  "图片预览": "Image Preview",
-  "下载原图": "Download Original",
-  "有效时长（小时）": "Duration (hours)",
-  "创建链接": "Create Link",
-  "账号和个人空间中的全部内容将被删除。": "All contents of this account and personal space will be deleted.",
-};
-const translationPhrases = [
-  ["当前链接有效至 ", "Current link expires "], ["有效至 ", "Expires "],
-  ["单文件上限 ", "Per-file limit "], [" 超过单文件上限", " exceeds per-file limit"],
-  [" 个文件上传失败", " file(s) failed to upload"], [" 个文件", " files"],
-  ["删除所选 ", "Delete selected "], ["已删除 ", "Deleted "],
-  [" 条记录？", " items?"], [" 条记录", " items"],
-  ["已选 ", "Selected "], [" 条", " items"],
-  ["正在", ""],
-  ["已上传（无缩略图）", "Uploaded (no thumbnail)"], ["已上传", "Uploaded"],
-  ["上传完成", "Upload complete"], ["上传已暂停", "Upload paused"], ["网络错误", "Network error"],
-  ["删除用户 ", "Delete user "],
-  ["点击预览图片 ", "Click to preview image "], [" 缩略图", " thumbnail"],
-  ["下载文件 ", "Download file "], [" 文件链接二维码", " file link QR code"],
-  ["预览图片 ", "Preview image "], ["选择记录：", "Select item: "],
-  [" 上传进度", " upload progress"], ["校验文件 ", "Verifying file "],
-  [" 分片上传超时", " chunk upload timed out"], [" 上传中止", " upload aborted"],
-  ["上传分片 ", "Uploading chunk "], ["重试分片 ", "Retrying chunk "],
-  ["已从剪贴板添加 ", "Added from clipboard: "],
-];
-Object.assign(translations, {
-  "站点访问二维码预览": "Site QR Code Preview", "分享文本": "Share Text", "输入要分享的文本": "Enter text to share",
-  "文件上传": "File Upload", "分享记录": "Shared Items", "全部": "All", "图片": "Images", "其他文件": "Other Files",
-  "选择全部": "Select All", "删除所选": "Delete Selected", "扫码后登录下载": "Scan to sign in and download",
-  "临时访问": "Temporary Access", "临时链接": "Temporary Link", "复制链接": "Copy Link", "撤销链接": "Revoke Link",
-  "当前未启用临时访问": "Temporary access is not active", "图片加载失败": "Image failed to load", "正在加载图片...": "Loading image...",
-  "暂停": "Pause", "继续": "Resume", "可恢复": "Resumable", "待上传": "Waiting", "初始化": "Initializing", "检查恢复点": "Checking resume point",
-  "正在合并": "Merging", "已暂停": "Paused", "失败": "Failed", "已上传（无缩略图）": "Uploaded (no thumbnail)",
-  "上传进度": "Upload Progress", "账户": "Account", "普通用户": "User", "已设置恢复码": "Recovery code set",
-  "尚未设置恢复码": "Recovery code not set", "恢复码已更新": "Recovery code updated", "允许新用户注册账号，需管理员启用后方可登录": "Allow new registrations. An administrator must enable each account before sign-in.",
-  "输入当前密码": "Enter current password", "输入当前密码验证": "Enter current password to verify", "再次输入新密码": "Enter new password again",
-  "12~32位，含大小写和数字": "12–32 characters with upper/lowercase letters and a number", "输入用户名": "Enter username",
-  "至少12位，包含大小写和数字": "At least 12 characters with upper/lowercase letters and a number", "确认注销": "Confirm Account Deletion",
-  "关闭账户设置": "Close Account Settings", "关闭注销账号": "Close Account Deletion", "访问二维码": "Access QR Code",
-  "分享历史已自动更新": "Share history updated", "同步已恢复": "Sync restored", "已刷新": "Refreshed", "已删除": "Deleted", "已清空": "Cleared",
-  "登录成功，正在下载文件": "Signed in. Downloading file", "密码已重置，请返回登录": "Password reset. Return to sign in",
-  "密码已修改": "Password changed", "临时链接已创建": "Temporary link created", "临时链接已撤销": "Temporary link revoked",
-  "已开放自助注册": "Self-registration enabled", "已关闭自助注册": "Self-registration disabled", "用户已添加": "User added", "用户已更新并下线": "User updated and signed out",
-});
-function translateUi(value) {
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  if (translations[trimmed]) return value.replace(trimmed, translations[trimmed]);
-  let translated = value;
-  for (const [source, target] of translationPhrases) translated = translated.replaceAll(source, target);
-  return translated;
-}
-function translateElement(element) {
-  if (element.closest("pre, code, [data-i18n-ignore]")) return;
-  for (const attribute of ["aria-label", "title", "placeholder", "alt", "data-copy-feedback"]) {
-    const value = element.getAttribute(attribute);
-    const translated = value && translateUi(value);
-    if (value && translated !== value) element.setAttribute(attribute, translated);
-  }
-  for (const node of element.childNodes) if (node.nodeType === Node.TEXT_NODE && node.textContent) {
-    const translated = translateUi(node.textContent);
-    if (translated !== node.textContent) node.textContent = translated;
-  }
-}
-function installUiLanguage() {
-  document.documentElement.lang = uiLanguage === "en" ? "en" : "zh-CN";
-  if (uiLanguage !== "en") return;
-  const metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) {
-    const desc = metaDesc.getAttribute("content");
-    if (desc) metaDesc.setAttribute("content", translateUi(desc));
-  }
-  const apply = (root) => {
-    if (root instanceof Element) translateElement(root);
-    root.querySelectorAll?.("*").forEach(translateElement);
-  };
-  apply(document.body);
-  new MutationObserver((records) => records.forEach((record) => {
-    if (record.type === "attributes") translateElement(record.target);
-    record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement));
-  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder", "alt", "data-copy-feedback"] });
-}
-installUiLanguage();
+
+renderStaticI18n();
+
 for (const id of ["language-select", "login-language-select"]) {
   const select = $(id);
   if (!select) continue;
   select.value = uiLanguage;
   select.addEventListener("change", () => {
-    localStorage.setItem(languageKey, select.value);
-    location.reload();
+    setLanguage(select.value);
   });
 }
 const isLogin = document.body.dataset.page === "login";
@@ -340,8 +217,8 @@ function setupPasswordToggles(root = document) {
       if (!input) return;
       const isPassword = input.type === "password";
       input.type = isPassword ? "text" : "password";
-      toggle.title = isPassword ? "隐藏密码" : "显示密码";
-      toggle.setAttribute("aria-label", isPassword ? "隐藏密码" : "显示密码");
+      toggle.title = isPassword ? t("hide_password") : t("show_password");
+      toggle.setAttribute("aria-label", isPassword ? t("hide_password") : t("show_password"));
       toggle.replaceChildren(icon(isPassword ? "eye-off" : "eye"));
       renderIcons();
     });
@@ -351,10 +228,10 @@ function setupPasswordToggles(root = document) {
 function setupPasswordRules(input, rulesContainer) {
   if (!input || !rulesContainer) return;
   const rules = {
-    length: { el: rulesContainer.querySelector('[data-rule="length"]'), label: "至少 12 位" },
-    upper: { el: rulesContainer.querySelector('[data-rule="upper"]'), label: "包含大写字母" },
-    lower: { el: rulesContainer.querySelector('[data-rule="lower"]'), label: "包含小写字母" },
-    number: { el: rulesContainer.querySelector('[data-rule="number"]'), label: "包含数字" },
+    length: { el: rulesContainer.querySelector('[data-rule="length"]'), label: t("at_least_12_chars") },
+    upper: { el: rulesContainer.querySelector('[data-rule="upper"]'), label: t("contains_uppercase") },
+    lower: { el: rulesContainer.querySelector('[data-rule="lower"]'), label: t("contains_lowercase") },
+    number: { el: rulesContainer.querySelector('[data-rule="number"]'), label: t("contains_number") },
   };
   const check = () => {
     const val = input.value;
@@ -391,8 +268,8 @@ function resetUserForm() {
   $("user-id").value = "";
   $("user-enabled").checked = true;
   $("user-password").required = true;
-  $("user-password-label").textContent = "密码";
-  $("user-submit-label").textContent = "添加用户";
+  $("user-password-label").textContent = t("password");
+  $("user-submit-label").textContent = t("add_user");
   $("user-cancel").hidden = true;
 }
 
@@ -419,7 +296,7 @@ async function loadUsers() {
 
     const roleBadge = document.createElement("span");
     roleBadge.className = `badge ${user.role === "admin" ? "badge-admin" : "badge-user"}`;
-    roleBadge.textContent = user.role === "admin" ? "管理员" : "用户";
+    roleBadge.textContent = user.role === "admin" ? t("admin_user") : t("regular_user");
 
     const sep = document.createElement("span");
     sep.className = "user-sep";
@@ -427,7 +304,7 @@ async function loadUsers() {
 
     const statusBadge = document.createElement("span");
     const statusClass = user.pendingApproval ? "badge-warning" : user.enabled ? "badge-success" : "badge-muted";
-    const state = user.pendingApproval ? "待启用" : user.enabled ? "已启用" : "已禁用";
+    const state = user.pendingApproval ? t("pending_approval") : user.enabled ? t("enabled") : t("disabled");
     statusBadge.className = `badge ${statusClass}`;
     statusBadge.textContent = state;
 
@@ -436,24 +313,24 @@ async function loadUsers() {
 
     const actions = document.createElement("div");
     actions.className = "item-actions";
-    const edit = actionButton("编辑用户", "pencil", () => {
+    const edit = actionButton(t("edit_user"), "pencil", () => {
       $("user-id").value = user.id;
       $("user-name").value = user.username;
       $("user-password").value = "";
       $("user-password").required = false;
-      $("user-password-label").textContent = "新密码（留空则不修改）";
+      $("user-password-label").textContent = t("new_password_keep");
       $("user-role").value = user.role;
       $("user-enabled").checked = user.enabled;
-      $("user-submit-label").textContent = "保存修改";
+      $("user-submit-label").textContent = t("save_changes");
       $("user-cancel").hidden = false;
       $("user-name").focus();
     });
-    const toggle = actionButton(user.enabled ? "禁用用户" : "启用用户", user.enabled ? "user-x" : "user-check", async () => {
+    const toggle = actionButton(user.enabled ? t("disable_user") : t("enable_user"), user.enabled ? "user-x" : "user-check", async () => {
       await api(`/api/users/${user.id}`, { method: "PATCH", data: { enabled: !user.enabled } });
       await loadUsers();
     });
-    const remove = actionButton("删除用户", "trash-2", async () => {
-      if (!await confirmDelete(`删除用户 ${user.username}？`)) return;
+    const remove = actionButton(t("delete_user"), "trash-2", async () => {
+      if (!await confirmDelete(t("delete_user_confirm", user.username))) return;
       await api(`/api/users/${user.id}`, { method: "DELETE" });
       await loadUsers();
     }, true);
@@ -478,9 +355,9 @@ function showCopyFeedback(button, status, popover) {
   clearCopyFeedback?.();
   notice("");
   clearTimeout(copyFeedbackTimers.get(button));
-  status.textContent = translateUi("已复制");
+  status.textContent = t("copied");
   if (popover) {
-    button.dataset.copyFeedback = translateUi("已复制");
+    button.dataset.copyFeedback = t("copied");
     button.classList.add("copy-confirmed");
   }
   clearCopyFeedback = () => {
@@ -500,14 +377,14 @@ async function copy(value, button, status) {
 }
 
 function requireMatchingPasswords(passwordId, confirmationId) {
-  if ($(passwordId).value !== $(confirmationId).value) throw new Error("两次输入的密码不一致");
+  if ($(passwordId).value !== $(confirmationId).value) throw new Error(t("passwords_dont_match"));
 }
 
 async function initializeAuth() {
   const path = location.pathname;
   const view = path === "/register" ? "register" : path === "/reset-password" ? "reset" : "login";
   for (const name of ["login", "register", "reset"]) $(`${name}-view`).hidden = name !== view;
-  document.title = `${view === "register" ? (uiLanguage === "en" ? "Register" : "注册") : view === "reset" ? (uiLanguage === "en" ? "Reset Password" : "重置密码") : (uiLanguage === "en" ? "Sign In" : "登录")} | EasyDrop`;
+  document.title = t(`${view}_page_title`);
   for (const name of ["login", "register"]) {
     const tab = $(`${name}-tab`);
     if (name === view) tab.setAttribute("aria-current", "page");
@@ -535,7 +412,7 @@ async function initializeAuth() {
         location.replace("/");
         return;
       }
-      notice("登录成功，正在下载文件");
+      notice(t("signed_in_downloading"));
       const link = document.createElement("a");
       link.href = downloadPath;
       link.download = "";
@@ -581,7 +458,7 @@ async function initializeAuth() {
       });
       $("reset-form").reset();
       $("reset-form").hidden = true;
-      notice("密码已重置，请返回登录");
+      notice(t("password_reset_return"));
     });
   });
 
@@ -602,8 +479,8 @@ function renderTemporaryShare(item, result = null) {
   const active = Number(expiresAt) > Math.floor(Date.now() / 1000);
   $("temporary-share-file").textContent = item.name;
   $("temporary-share-status").textContent = active
-    ? `当前链接有效至 ${new Date(expiresAt * 1000).toLocaleString(dateLocale)}`
-    : "当前未启用临时访问";
+    ? t("current_link_expires_at", new Date(expiresAt * 1000).toLocaleString(dateLocale))
+    : t("temporary_access_not_active");
   $("temporary-share-actions").hidden = !active && !result;
   $("temporary-share-revoke").hidden = !active;
   $("temporary-share-result").hidden = !result;
@@ -619,7 +496,7 @@ function renderTemporaryShare(item, result = null) {
   $("temporary-share-url").href = result.url;
   $("temporary-share-url").download = item.name;
   $("temporary-share-url").textContent = result.url;
-  $("temporary-share-expiry").textContent = `有效至 ${new Date(result.expiresAt * 1000).toLocaleString(dateLocale)}`;
+  $("temporary-share-expiry").textContent = t("expires_at", new Date(result.expiresAt * 1000).toLocaleString(dateLocale));
   $("temporary-share-qr").hidden = false;
   QRCode.toCanvas($("temporary-share-qr"), result.url, { width: 200, margin: 2 }).catch((error) => {
     console.error("Temporary file QR generation failed:", error);
@@ -644,7 +521,7 @@ function openImagePreview(item, fileUrl) {
   image.hidden = true;
   image.alt = item.name;
   status.hidden = false;
-  status.textContent = "正在加载图片...";
+  status.textContent = t("loading_image");
   image.onload = () => {
     image.hidden = false;
     status.hidden = true;
@@ -652,7 +529,7 @@ function openImagePreview(item, fileUrl) {
   image.onerror = () => {
     image.hidden = true;
     status.hidden = false;
-    status.textContent = "图片加载失败";
+    status.textContent = t("image_load_failed");
   };
   image.src = `/images/${item.id}/${encodeURIComponent(item.name)}`;
   $("image-preview-dialog").showModal();
@@ -675,7 +552,7 @@ function applyHistoryFilter() {
     if (!empty) {
       empty = document.createElement("p");
       empty.className = "empty empty-filter";
-      empty.textContent = "本页当前分类暂无记录";
+      empty.textContent = t("empty_category");
       list.append(empty);
     }
   } else if (empty) {
@@ -702,7 +579,7 @@ function historyRow(item) {
   const actions = document.createElement("div");
   actions.className = "item-actions";
   if (item.type === "text") {
-    actions.append(actionButton("复制文本", "copy", (button) => copy(item.content, button)));
+    actions.append(actionButton(t("copy_text"), "copy", (button) => copy(item.content, button)));
   } else {
     const fileUrl = new URL(`/uploads/${item.id}/${encodeURIComponent(item.name)}`, location.origin).href;
     const imageUrl = `/images/${item.id}/${encodeURIComponent(item.name)}`;
@@ -710,13 +587,13 @@ function historyRow(item) {
       const thumbnailLink = document.createElement("button");
       thumbnailLink.type = "button";
       thumbnailLink.className = "thumbnail-link";
-      thumbnailLink.title = "预览图片";
-      thumbnailLink.setAttribute("aria-label", `点击预览图片 ${item.name}`);
+      thumbnailLink.title = t("preview_image");
+      thumbnailLink.setAttribute("aria-label", t("preview_image_aria", item.name));
       thumbnailLink.addEventListener("click", () => openImagePreview(item, fileUrl));
       const thumbnail = document.createElement("img");
       thumbnail.className = "file-thumbnail";
       thumbnail.src = `/previews/${item.id}`;
-      thumbnail.alt = `${item.name} 缩略图`;
+      thumbnail.alt = t("thumbnail_alt", item.name);
       thumbnail.loading = "lazy";
       thumbnail.decoding = "async";
       thumbnail.addEventListener("load", () => {
@@ -736,13 +613,13 @@ function historyRow(item) {
     link.className = "icon-button";
     link.href = fileUrl;
     link.download = item.name;
-    link.title = "下载文件";
-    link.setAttribute("aria-label", `下载文件 ${item.name}`);
+    link.title = t("download_file");
+    link.setAttribute("aria-label", t("download_file_aria", item.name));
     link.append(icon("download"));
     const qr = document.createElement("div");
     qr.className = "qr-popover file-link-qr";
     const hint = document.createElement("span");
-    hint.textContent = "扫码后登录下载";
+    hint.textContent = t("scan_to_download");
     qr.append(hint);
     preview.append(link, qr);
     let qrStarted = false;
@@ -752,7 +629,7 @@ function historyRow(item) {
       const canvas = document.createElement("canvas");
       canvas.width = 168;
       canvas.height = 168;
-      canvas.setAttribute("aria-label", `${item.name} 文件链接二维码`);
+      canvas.setAttribute("aria-label", t("file_qr_aria", item.name));
       qr.prepend(canvas);
       QRCode.toCanvas(canvas, fileUrl, { width: 168, margin: 1 }).catch((error) => {
         console.error("File QR generation failed:", error);
@@ -762,22 +639,22 @@ function historyRow(item) {
     preview.addEventListener("pointerenter", renderQr, { once: true });
     preview.addEventListener("focusin", renderQr, { once: true });
     const temporaryShare = actionButton(
-      temporaryShareActive(item) ? "管理临时链接" : "创建临时链接",
+      temporaryShareActive(item) ? t("manage_temporary_link") : t("create_temporary_link"),
       "share-2",
       () => openTemporaryShare(item),
     );
     temporaryShare.classList.toggle("active-share", temporaryShareActive(item));
     if (item.media_type) {
-      actions.append(actionButton(`预览图片 ${item.name}`, "eye", () => openImagePreview(item, fileUrl)));
+      actions.append(actionButton(t("preview_image_named", item.name), "eye", () => openImagePreview(item, fileUrl)));
     }
-    actions.append(preview, actionButton("复制文件链接", "copy", (button) => copy(fileUrl, button)), temporaryShare);
+    actions.append(preview, actionButton(t("copy_file_link"), "copy", (button) => copy(fileUrl, button)), temporaryShare);
   }
-  actions.append(actionButton("删除记录", "trash-2", async () => {
-    if (!await confirmDelete("删除这条记录？")) return;
+  actions.append(actionButton(t("delete_record"), "trash-2", async () => {
+    if (!await confirmDelete(t("delete_record_confirm"))) return;
     await api(`/api/history/${item.id}`, { method: "DELETE" });
     row.remove();
     updateHistorySelection();
-    notice("已删除");
+    notice(t("deleted"));
     await loadHistory();
   }, true));
   const selection = document.createElement("div");
@@ -785,7 +662,7 @@ function historyRow(item) {
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.className = "history-select";
-  checkbox.setAttribute("aria-label", `选择记录：${item.name || item.content}`);
+  checkbox.setAttribute("aria-label", t("select_item_aria", item.name || item.content));
   checkbox.addEventListener("change", updateHistorySelection);
   selection.append(checkbox, icon(item.type === "text" ? "file-text" : item.media_type ? "image" : "files"));
   row.append(selection, content, actions);
@@ -799,8 +676,8 @@ function updateHistorySelection() {
   $("select-all").checked = boxes.length > 0 && count === boxes.length;
   $("select-all").indeterminate = count > 0 && count < boxes.length;
   $("history-count").hidden = count > 0;
-  $("selection-count").textContent = count ? `已选 ${count} 条` : "";
-  const label = count ? `删除所选 ${count} 条记录` : "清空历史";
+  $("selection-count").textContent = count ? t("selected_items_count", count) : "";
+  const label = count ? t("delete_selected_items_aria", count) : t("clear_history");
   $("clear").title = label;
   $("clear").setAttribute("aria-label", label);
   $("history-count").textContent = String(historyTotal);
@@ -843,7 +720,7 @@ function pruneHistoryRowCache() {
 }
 
 function updateHistoryPagination() {
-  $("history-page").textContent = uiLanguage === "en" ? `Page ${historyPage + 1}/${historyTotalPages}` : `第${historyPage + 1}/${historyTotalPages}页`;
+  $("history-page").textContent = t("pagination_page", historyPage + 1, historyTotalPages);
   $("history-prev").disabled = loading || historyPage === 0;
   $("history-next").disabled = loading || !nextCursor;
 }
@@ -864,7 +741,7 @@ function renderHistory(data, page = 0) {
   if (!data.items.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "暂无分享记录";
+    empty.textContent = t("empty_history");
     list.append(empty);
   }
   applyHistoryFilter();
@@ -959,8 +836,8 @@ async function checkForHistoryUpdates() {
       updated = true;
     }
     if (!deletingHistory) {
-      if (updated) notice("分享历史已自动更新");
-      else if (pollFailureCount) notice("同步已恢复");
+      if (updated) notice(t("history_updated"));
+      else if (pollFailureCount) notice(t("sync_restored"));
     }
     pollFailureCount = 0;
   } catch (error) {
@@ -1028,12 +905,12 @@ function uploadButton(name, label, disabled = false) {
 function updateUploadControls() {
   const pending = uploadQueue.some((entry) => !entry.done);
   if (uploading) {
-    uploadButton("pause", pauseRequested ? "正在暂停" : "暂停上传", pauseRequested);
+    uploadButton("pause", pauseRequested ? t("pausing") : t("pause_upload"), pauseRequested);
   } else {
-    uploadButton("play", "继续上传", !pending);
+    uploadButton("play", t("resume_upload"), !pending);
   }
   $("upload").hidden = !uploading && !pending;
-  $("file-count").textContent = uploadQueue.length ? `${uploadQueue.length} 个文件` : "";
+  $("file-count").textContent = uploadQueue.length ? t("files_count", uploadQueue.length) : "";
   $("file-input").disabled = uploading;
   $("clear").disabled = uploading || !session;
 }
@@ -1047,11 +924,11 @@ function makeUploadRow(file, saved) {
   name.textContent = `${file.name} (${size(file.size)})`;
   const state = document.createElement("span");
   state.className = "muted";
-  state.textContent = saved ? "可恢复" : "待上传";
+  state.textContent = saved ? t("resumable") : t("waiting_upload");
   const progress = document.createElement("progress");
   progress.max = 100;
   progress.value = 0;
-  progress.setAttribute("aria-label", `${file.name} 上传进度`);
+  progress.setAttribute("aria-label", t("upload_progress_aria", file.name));
   row.append(name, state);
   li.append(row, progress);
   $("upload-list").append(li);
@@ -1112,7 +989,7 @@ async function prepareFile(entry) {
   const checksums = [];
   for (let index = 0; index < totalParts; index++) {
     if (pauseRequested) throw new UploadPaused("Upload paused.");
-    entry.state.textContent = `校验文件 ${index + 1}/${totalParts}`;
+    entry.state.textContent = t("verifying_file", index + 1, totalParts);
     checksums.push(await partChecksum(entry.file.slice(index * chunkSize, Math.min((index + 1) * chunkSize, entry.file.size))));
   }
   const manifest = JSON.stringify(["multipart-file-v1", entry.file.size, chunkSize, checksums]);
@@ -1169,9 +1046,9 @@ function uploadPart(entry, partNumber, blob, checksum) {
       updateUploadProgress(entry);
       resolve();
     };
-    xhr.onerror = () => reject(new Error(`PUT ${path}: ${entry.file.name} 网络错误`));
-    xhr.ontimeout = () => reject(new Error(`PUT ${path}: ${entry.file.name} 分片上传超时`));
-    xhr.onabort = () => reject(pauseRequested ? new UploadPaused("Upload paused.") : new Error(`PUT ${path}: ${entry.file.name} 上传中止`));
+    xhr.onerror = () => reject(new Error(`PUT ${path}: ${t("network_error", entry.file.name)}`));
+    xhr.ontimeout = () => reject(new Error(`PUT ${path}: ${t("chunk_timeout", entry.file.name)}`));
+    xhr.onabort = () => reject(pauseRequested ? new UploadPaused("Upload paused.") : new Error(`PUT ${path}: ${t("upload_aborted", entry.file.name)}`));
     xhr.send(blob);
   });
 }
@@ -1180,7 +1057,7 @@ async function uploadFile(entry) {
   saveUpload(entry);
   const previewPromise = createImagePreview(entry.file);
   const prepared = await prepareFile(entry);
-  entry.state.textContent = entry.id ? "检查恢复点" : "初始化";
+  entry.state.textContent = entry.id ? t("checking_resume_point") : t("initializing");
   const upload = await api("/api/uploads", {
     method: "POST",
     data: {
@@ -1202,14 +1079,14 @@ async function uploadFile(entry) {
   });
   if (upload.complete) {
     await previewUpload;
-    if (sessionEnded) throw new Error("会话已结束");
+    if (sessionEnded) throw new Error(t("session_ended"));
     entry.done = true;
     entry.progress.value = 100;
-    entry.state.textContent = entry.previewFailed ? "已上传（无缩略图）" : "已上传";
+    entry.state.textContent = entry.previewFailed ? t("uploaded_no_thumbnail") : t("uploaded");
     forgetUpload(entry.key);
     return;
   }
-  if (upload.chunkSize !== prepared.chunkSize) throw new Error("服务端分片配置已变化，请重新选择文件。");
+  if (upload.chunkSize !== prepared.chunkSize) throw new Error(t("server_chunk_config_changed"));
 
   const remote = new Map(upload.uploadedParts.map((part) => [part.partNumber, part]));
   entry.completed.clear();
@@ -1231,8 +1108,8 @@ async function uploadFile(entry) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       if (pauseRequested) throw new UploadPaused("Upload paused.");
       entry.state.textContent = attempt === 1
-        ? `上传分片 ${partNumber}/${upload.totalParts}`
-        : `重试分片 ${partNumber}/${upload.totalParts} (${attempt}/3)`;
+        ? t("uploading_chunk", partNumber, upload.totalParts)
+        : t("retrying_chunk", partNumber, upload.totalParts, attempt);
       try {
         await uploadPart(entry, partNumber, blob, checksum);
         return;
@@ -1257,15 +1134,15 @@ async function uploadFile(entry) {
   };
   const concurrency = Math.min(upload.uploadConcurrency || session.uploadConcurrency || 1, upload.totalParts);
   await Promise.all([...Array.from({ length: concurrency }, worker), previewUpload]);
-  if (sessionEnded) throw new Error("会话已结束");
+  if (sessionEnded) throw new Error(t("session_ended"));
   if (firstError) throw firstError;
   if (pauseRequested) throw new UploadPaused("Upload paused.");
 
-  if (upload.totalParts > 1) entry.state.textContent = "正在合并";
+  if (upload.totalParts > 1) entry.state.textContent = t("merging");
   await api(`/api/uploads/${entry.id}/complete`, { method: "POST" });
   entry.done = true;
   entry.progress.value = 100;
-  entry.state.textContent = entry.previewFailed ? "已上传（无缩略图）" : "已上传";
+  entry.state.textContent = entry.previewFailed ? t("uploaded_no_thumbnail") : t("uploaded");
   forgetUpload(entry.key);
 }
 
@@ -1285,7 +1162,7 @@ async function startUpload() {
         const entry = pending[cursor++];
         if (!entry) return;
         try {
-          if (entry.file.size > session.maxUploadBytes) throw new Error(`${entry.file.name} 超过单文件上限`);
+          if (entry.file.size > session.maxUploadBytes) throw new Error(t("file_exceeds_limit", entry.file.name));
           await uploadFile(entry);
           void loadHistory(0).catch(report);
           setTimeout(() => {
@@ -1295,12 +1172,12 @@ async function startUpload() {
           }, 8000);
         } catch (error) {
           if (error instanceof UploadPaused) {
-            entry.state.textContent = "已暂停";
+            entry.state.textContent = t("paused");
             paused = true;
             return;
           }
           failures++;
-          entry.state.textContent = "失败";
+          entry.state.textContent = t("failed");
           errors.push(error.details || error.message);
         }
       }
@@ -1312,11 +1189,11 @@ async function startUpload() {
     await Promise.all(Array.from({ length: concurrency }, worker));
     if (pauseRequested) paused = true;
     if (failures) {
-      const error = new Error(`${failures} 个文件上传失败`);
+      const error = new Error(t("files_failed_to_upload", failures));
       error.details = errors.join("\n\n");
       report(error);
-    } else if (paused && session) notice("上传已暂停");
-    else if (session) notice("上传完成", false, 8000);
+    } else if (paused && session) notice(t("upload_paused"));
+    else if (session) notice(t("upload_complete"), false, 8000);
     if (session) await loadHistory();
   } catch (error) {
     report(error);
@@ -1367,7 +1244,7 @@ async function initializeApp() {
   profileTab.addEventListener("click", () => setAccountTab("profile"));
   usersTab.addEventListener("click", () => setAccountTab("users"));
 
-  $("upload-limit").textContent = `单文件上限 ${size(session.maxUploadBytes)}`;
+  $("upload-limit").textContent = t("upload_limit", size(session.maxUploadBytes));
   const updateCount = () => {
     const bytes = new TextEncoder().encode($("text-input").value).length;
     $("text-count").textContent = `${size(bytes)} / ${size(session.maxTextBytes)}`;
@@ -1416,7 +1293,7 @@ async function initializeApp() {
       await api("/api/text", { method: "POST", data: { text }, operationKey: textOperation.key });
       textOperation = null;
       if ($("text-input").value === text) $("text-input").value = "";
-      notice("已分享");
+      notice(t("shared"));
       await loadHistory(0);
     });
     textSubmitting = false;
@@ -1464,7 +1341,7 @@ async function initializeApp() {
     if (isInput || !inCompose || document.querySelector("dialog[open]")) return;
     if (e.clipboardData?.files?.length) {
       e.preventDefault();
-      if (enqueueFiles(e.clipboardData.files)) notice(`已从剪贴板添加 ${e.clipboardData.files.length} 个文件`);
+      if (enqueueFiles(e.clipboardData.files)) notice(t("added_files_from_clipboard", e.clipboardData.files.length));
       return;
     }
     if (e.clipboardData?.types?.includes("text/plain")) {
@@ -1475,7 +1352,7 @@ async function initializeApp() {
         input.value = (input.value ? input.value + "\n" : "") + text;
         updateCount();
         input.focus();
-        notice("已将剪贴板内容填入文本框");
+        notice(t("pasted_clipboard_text"));
       }
     }
   });
@@ -1498,7 +1375,7 @@ async function initializeApp() {
   $("upload").addEventListener("click", () => uploading ? pauseUpload() : startUpload());
   $("refresh").addEventListener("click", () => busy($("refresh"), async () => {
     await loadHistory();
-    notice("已刷新");
+    notice(t("refreshed"));
     pollingStopped = false;
     pollFailureCount = 0;
     schedulePoll();
@@ -1513,12 +1390,12 @@ async function initializeApp() {
     if (uploading) return;
     const rows = [...$("history-list").querySelectorAll(".history-item")]
       .filter((row) => !row.hidden && row.querySelector(".history-select").checked);
-    if (!await confirmDelete(rows.length ? `删除所选 ${rows.length} 条记录？` : "清空所有分享记录和文件？")) return;
+    if (!await confirmDelete(rows.length ? t("delete_selected_confirm", rows.length) : t("clear_all_confirm"))) return;
     const removed = [];
     deletingHistory = true;
     document.querySelector(".history").inert = true;
     for (const row of rows) row.hidden = true;
-    notice("正在删除…", false, 0);
+    notice(t("deleting"), false, 0);
     try {
       if (rows.length) {
         for (const row of rows) {
@@ -1531,7 +1408,7 @@ async function initializeApp() {
         historyRowCache.clear();
         updateHistorySelection();
       }
-      notice(rows.length ? `已删除 ${rows.length} 条记录` : "已清空");
+      notice(rows.length ? t("deleted_items", rows.length) : t("cleared"));
     } finally {
       for (const row of removed) {
         row.remove();
@@ -1562,13 +1439,13 @@ async function initializeApp() {
     if ($("account-avatar")) $("account-avatar").textContent = username.charAt(0).toUpperCase() || "U";
     if ($("account-role-badge")) {
       const isAdmin = session.user.role === "admin";
-      $("account-role-badge").textContent = isAdmin ? "管理员" : "普通用户";
+      $("account-role-badge").textContent = isAdmin ? t("admin_user") : t("regular_user");
       $("account-role-badge").className = `badge ${isAdmin ? "badge-admin" : "badge-user"}`;
     }
     $("recovery-status").textContent = session.user.hasRecoveryCode
-      ? "已设置恢复码"
-      : "尚未设置恢复码";
-    $("recovery-submit-label").textContent = session.user.hasRecoveryCode ? "重新生成恢复码" : "生成恢复码";
+      ? t("recovery_code_set")
+      : t("recovery_code_not_set");
+    $("recovery-submit-label").textContent = session.user.hasRecoveryCode ? t("regenerate_recovery_code") : t("generate_recovery_code");
     $("account-dialog").showModal();
   });
   $("account-close").addEventListener("click", () => $("account-dialog").close());
@@ -1596,8 +1473,8 @@ async function initializeApp() {
       $("recovery-form").reset();
       $("account-recovery-code").textContent = result.recoveryCode;
       $("account-recovery-result").hidden = false;
-      $("recovery-status").textContent = "恢复码已更新";
-      $("recovery-submit-label").textContent = "重新生成恢复码";
+      $("recovery-status").textContent = t("recovery_code_updated");
+      $("recovery-submit-label").textContent = t("regenerate_recovery_code");
       session.user.hasRecoveryCode = true;
     });
   });
@@ -1670,7 +1547,7 @@ async function initializeApp() {
       }
       item.share_expires_at = result.expiresAt;
       renderTemporaryShare(item, result);
-      notice("临时链接已创建");
+      notice(t("temporary_link_created"));
       await loadHistory();
     });
   });
@@ -1687,7 +1564,7 @@ async function initializeApp() {
     }
     item.share_expires_at = null;
     renderTemporaryShare(item);
-    notice("临时链接已撤销");
+    notice(t("temporary_link_revoked"));
     await loadHistory();
   }));
   $("registration-enabled").addEventListener("change", async () => {
@@ -1696,7 +1573,7 @@ async function initializeApp() {
     input.disabled = true;
     try {
       await api("/api/settings/registration", { method: "PATCH", data: { enabled } });
-      notice(enabled ? "已开放自助注册" : "已关闭自助注册");
+      notice(enabled ? t("registration_enabled_notice") : t("registration_disabled_notice"));
     } catch (error) {
       input.checked = !enabled;
       report(error);
@@ -1725,7 +1602,7 @@ async function initializeApp() {
       }
       resetUserForm();
       await loadUsers();
-      notice(id ? "用户已更新并下线" : "用户已添加");
+      notice(id ? t("user_updated_signout") : t("user_added"));
     });
   });
   window.addEventListener("pageshow", (event) => { if (event.persisted) location.reload(); });
