@@ -1,5 +1,7 @@
 # EasyNote
 
+[简体中文](README.md) | [English](README.en.md)
+
 当前版本：`0.4.4`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
@@ -9,6 +11,13 @@
 - 笔记列表只向读屏器播报标题与更新时间，不再朗读整段正文摘要。
 - 在线和离线列表统一每批显示 50 篇，继续使用“加载更多”按需展开，减少大量离线笔记的初始渲染量。
 - 移动端笔记列表恢复显示更新时间，便于判断笔记新旧。
+
+## 0.4.0 - 0.4.3 更新
+
+- **远程 MCP 工具与 Resources**：支持以标准 Model Context Protocol (MCP) 对接 AI，提供安全受限的搜索、批量读取与受控写入能力。
+- **Durable Object 实时变更通知**：多端多设备笔记变动通过 WebSocket 毫秒级广播与增量同步，轮询降级为断线兜底。
+- **任务中心**：全局聚合所有笔记中的 Markdown 待办事项，支持快速跳转与定位源码位置。
+- **配置与稳定性优化**：优化 Codex MCP 路由配置，修复精确笔记统计与离线附件加载性能。
 
 ## 0.3.2 更新
 
@@ -131,7 +140,7 @@ bash dev.sh
 node scripts/version.mjs bump easynote patch
 node scripts/version.mjs check
 git add .
-git commit -m "发布：EasyNote v0.3.2"
+git commit -m "发布：EasyNote v0.4.4"
 ```
 
 `minor` 用于新增功能，`major` 用于不兼容变更。脚本会同步本 README、根 README、`package.json`、锁文件和应用显示版本。

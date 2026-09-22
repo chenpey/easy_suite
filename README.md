@@ -1,5 +1,7 @@
 # Easy Suite
 
+[简体中文](README.md) | [English](README.en.md)
+
 Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
 
 ## 版本
@@ -49,7 +51,7 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 三个项目相互独立，所有命令都应在对应项目目录中执行：
 
 - EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
-- EasyMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyMac.app` 即可使用。
+- EasyMac 需要 macOS 13 或更新版本，解压发布包后按“首次使用.txt”在终端完成单次授权即可打开使用，以后可直接双击 `EasyMac.app`。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
 

@@ -1,5 +1,7 @@
 # EasyMac
 
+[简体中文](README.md) | [English](README.en.md)
+
 当前版本：`0.3.3`
 
 [EasyMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
@@ -149,8 +151,8 @@ node ../scripts/version.mjs check
 推送 `easymac-v<版本>` 标签后，GitHub Actions 会在 macOS Runner 上重新测试和构建，并创建 GitHub Release：
 
 ```bash
-git tag -a easymac-v0.1.0 -m "发布：EasyMac v0.1.0"
-git push origin easymac-v0.1.0
+git tag -a easymac-v0.3.3 -m "发布：EasyMac v0.3.3"
+git push origin easymac-v0.3.3
 ```
 
 Release 附件为版本化 ZIP 和对应的 SHA-256 文件，不使用或上传本地 `build/`、`dist/` 中的历史产物。
