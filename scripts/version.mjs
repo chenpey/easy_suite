@@ -84,10 +84,26 @@ function versionReadmeLine(version) {
   return `当前版本：\`${version}\``;
 }
 
+function versionReadmeEnLine(version) {
+  return `Current Version: \`${version}\``;
+}
+
 function rootReadmeBlock(versions) {
   return [
     '<!-- versions:start -->',
     '| 项目 | 当前版本 |',
+    '| --- | --- |',
+    `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
+    `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
+    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
+    '<!-- versions:end -->',
+  ].join('\n');
+}
+
+function rootReadmeEnBlock(versions) {
+  return [
+    '<!-- versions:start -->',
+    '| Project | Current Version |',
     '| --- | --- |',
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
@@ -125,6 +141,20 @@ async function syncProjectReadme(project, version) {
     content = content.replace(new RegExp(`^(# ${project.title}\\n)`), `$1\n${line}\n`);
   }
   await writeIfChanged(path, content);
+
+  const enPath = resolve(root, project.directory, 'README.en.md');
+  try {
+    let enContent = await readFile(enPath, 'utf8');
+    const enLine = versionReadmeEnLine(version);
+    if (/^Current Version: .*$/m.test(enContent)) {
+      enContent = enContent.replace(/^Current Version: .*$/m, enLine);
+    } else {
+      enContent = enContent.replace(new RegExp(`^(# ${project.title}\\n)`), `$1\n${enLine}\n`);
+    }
+    await writeIfChanged(enPath, enContent);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
 }
 
 async function syncRuntimeVersion(project, version) {
@@ -143,6 +173,18 @@ async function syncReadme(versions) {
     content = content.replace(/^(Easy Suite[\s\S]*?\n\n)/, `$1## 版本\n\n${block}\n\n`);
   }
   await writeIfChanged(path, content);
+
+  const enPath = resolve(root, 'README.en.md');
+  try {
+    let enContent = await readFile(enPath, 'utf8');
+    const enBlock = rootReadmeEnBlock(versions);
+    if (/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/.test(enContent)) {
+      enContent = enContent.replace(/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/, enBlock);
+    }
+    await writeIfChanged(enPath, enContent);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
 }
 
 async function syncAll(versions) {
@@ -172,6 +214,15 @@ async function checkVersions(versions) {
     }
     const readme = await readFile(resolve(root, project.readmePath), 'utf8');
     if (!readme.includes(versionReadmeLine(versions[name]))) errors.push(`${project.readmePath} is missing ${versions[name]}`);
+    const enPath = resolve(root, project.directory, 'README.en.md');
+    try {
+      const enReadme = await readFile(enPath, 'utf8');
+      if (!enReadme.includes(versionReadmeEnLine(versions[name]))) {
+        errors.push(`${project.directory}/README.en.md is missing ${versions[name]}`);
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
     if (project.runtimePath) {
       const runtime = await readFile(resolve(root, project.runtimePath), 'utf8');
       if (!runtime.includes(`EASYNOTE_VERSION = '${versions[name]}'`)) errors.push(`${project.runtimePath} is stale`);
@@ -179,6 +230,15 @@ async function checkVersions(versions) {
   }
   const rootReadme = await readFile(resolve(root, 'README.md'), 'utf8');
   if (!rootReadme.includes(rootReadmeBlock(versions))) errors.push('README.md version table is stale');
+  const rootReadmeEnPath = resolve(root, 'README.en.md');
+  try {
+    const rootReadmeEn = await readFile(rootReadmeEnPath, 'utf8');
+    if (!rootReadmeEn.includes(rootReadmeEnBlock(versions))) {
+      errors.push('README.en.md version table is stale');
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
   if (errors.length) fail(`Version files are out of sync:\n${errors.map((error) => `- ${error}`).join('\n')}`);
 }
 
