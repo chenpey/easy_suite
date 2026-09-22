@@ -2,13 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.4.1`
+当前版本：`0.4.2`
 
 [EasyMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
 EasyMac 在旧 Mac 上扫描已安装应用，让用户搜索、筛选和选择需要迁移的项目，然后导出可在新 Mac 上运行的安装脚本。
 
 工具由一个轻量本地启动器和本地网页组成，不需要安装应用、Xcode、开发者账号或额外运行环境。
+
+## 0.4.2 更新
+
+- 统一设置面板语言标签为「语言/Language」，保持语言选择器中的「中文」与「English」原样显示。
 
 ## 0.4.1 更新
 

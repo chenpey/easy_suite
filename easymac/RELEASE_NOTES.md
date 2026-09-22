@@ -1,3 +1,7 @@
+## EasyMac 0.4.2
+
+- 统一设置面板语言标签为「语言/Language」，保持语言选择器中的「中文」与「English」原样显示。
+
 ## EasyMac 0.4.1
 
 - 增强动态属性监听（`aria-label`、`title`、`placeholder`、`alt`），提升英文切换完整度。

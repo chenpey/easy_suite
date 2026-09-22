@@ -1594,6 +1594,21 @@ test('a second tab cannot overwrite this browser profile local drafts', async ({
   await other.close();
 });
 
+test('a second tab can take over the editor lock when clicking reopen', async ({ page, context }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  const other = await context.newPage();
+  await other.goto('/');
+  await expect(other.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await other.getByRole('button', { name: '重新打开' }).click();
+  await expect(other.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await expect(page.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重新打开' }).click();
+  await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await expect(other.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await other.close();
+});
+
 test('dark theme persists and the narrow mobile layout has no horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('/');
