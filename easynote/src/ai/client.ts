@@ -43,7 +43,7 @@ export function validateServerUrl(value: string): string {
 export class EasyNoteClient {
   readonly baseUrl: string;
 
-  constructor(private config: BridgeConfig) {
+  constructor(private config: BridgeConfig, private request: typeof fetch = fetch) {
     this.baseUrl = validateServerUrl(config.url);
     if (!/^enai_[a-f0-9]{64}$/.test(config.token)) throw new Error('The integration token has an invalid format.');
   }
@@ -53,7 +53,7 @@ export class EasyNoteClient {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const method = init.method ?? 'GET';
     try {
-      const response = await fetch(`${this.baseUrl}${path}`, {
+      const response = await this.request(`${this.baseUrl}${path}`, {
         ...init,
         signal: controller.signal,
         headers: {
@@ -92,7 +92,7 @@ export class EasyNoteClient {
 
   search(query: {
     q?: string;
-    view?: 'all' | 'archive';
+    view?: 'all' | 'archive' | 'any';
     tag?: string;
     sort?: 'default' | 'updated';
     offset?: number;

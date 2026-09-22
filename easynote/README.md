@@ -1,6 +1,6 @@
 # EasyNote
 
-当前版本：`0.3.2`
+当前版本：`0.4.0`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
 
@@ -32,7 +32,7 @@
 - 可安装 PWA，提供独立窗口、桌面/主屏幕图标、应用外壳离线缓存和离线冷启动。
 - 常用键盘操作、可搜索命令面板、大纲、稳定内部链接和反向链接。
 - 标签重命名、合并、删除，以及笔记批量归档和加标签。
-- AI 读写分离接入：受限令牌、FTS5 相关度搜索、最近笔记、批量读取、MCP Resources 和写入工具；AI 修改进入正常版本历史。
+- AI 读写分离接入：受限令牌、跨正常/归档笔记的 FTS5 相关度搜索、命中字符范围、批量读取、MCP Resources 和写入工具；AI 修改进入正常版本历史。
 - 桌面/手机布局、深浅主题、EasyNote ZIP 导出恢复，以及 Obsidian 目录、通用 Markdown/TXT ZIP、`.md` / `.markdown` / `.txt` 导入和本地链接转换。
 - 可撤销的限时或永久只读分享链接；桌面端和移动端均可集中查看、延期或取消分享，分享 Token 只保存哈希，附件访问绑定到分享笔记的当前修订。
 - 定时清理过期会话、分享、登录计数、未引用文件、失败上传和已申请删除的租户数据。
@@ -67,9 +67,8 @@ easynote/
 │   │   ├── images.ts         # 私有文件、配额预留、状态及清理
 │   │   └── core.ts           # 配置验证、大小限制、错误及公共类型
 │   ├── ai/
-│   │   ├── index.ts          # 跨平台 MCP stdio 服务与工具
-│   │   ├── client.ts         # 带令牌认证的 EasyNote API 客户端
-│   │   └── config.ts         # 交互式本地令牌配置
+│   │   ├── index.ts          # 远程 MCP 工具与 Resources
+│   │   └── client.ts         # MCP 内部 API 客户端
 │   └── shared/types.ts
 ├── docs/AI_INTEGRATION.md    # 用户与 AI 接入指南
 ├── migrations/               # 新安装使用的 D1 Schema 基线
@@ -116,8 +115,7 @@ bash dev.sh
 | `bash backup.sh --remote` | 创建并校验完整 D1/R2 灾备 |
 | `bash restore.sh <目录> --remote --check` | 只执行恢复预检 |
 | `bash restore.sh <目录> --remote` | 恢复至空的 D1/R2 资源 |
-| `npm run ai:setup` | 交互式配置 MCP 地址和令牌 |
-| `npm run ai:mcp` | 启动本地 MCP stdio 服务 |
+| `npm run test:ai` | 测试远程 Streamable HTTP MCP |
 
 ### 版本更新
 
@@ -142,7 +140,7 @@ git commit -m "发布：EasyNote v0.3.2"
 | `deploy.sh` | Cloudflare 自定义 API Token | 构建通过后隐藏输入，用于资源发现、创建和部署 |
 | `../reset.sh easynote --remote` | Cloudflare 自定义 API Token | 用户确认清空后隐藏输入，Token 仅用于本次进程 |
 | `backup.sh --remote`、`restore.sh --remote`、`reset-password.sh --remote` | Cloudflare 自定义 API Token | 每次运行重新隐藏输入 |
-| `npm run ai:setup` | EasyNote AI 集成令牌 | 由已登录用户在应用内创建，与 Cloudflare Token 无关 |
+| Codex `/mcp` | EasyNote AI 集成令牌 | 由已登录用户在应用内创建，与 Cloudflare Token 无关 |
 
 远程部署和维护使用一个具备所需权限、限定到目标账号的 Cloudflare 自定义 API Token。脚本在每次远程操作时通过终端隐藏读取 Token，其生命周期限定在本次运行。`wrangler.deploy.json` 以 `0600` 权限保存 Account ID、Worker 名和 D1/R2 资源标识。
 
@@ -184,14 +182,7 @@ Service Worker 只预缓存应用外壳，不缓存 `/api`、登录会话、笔�
 
 EasyNote 的 AI 接入采用独立权限：MCP 读取工具直接搜索和读取 EasyNote API；创建、修改、归档和移入回收站使用可写令牌。AI 无法永久删除笔记，也不持有浏览器 Cookie 或账号密码，不在本地复制笔记正文。
 
-在 PWA“设置 → AI 接入”中创建令牌后，执行：
-
-```bash
-npm run build
-npm run ai:setup
-```
-
-设置程序会输出可直接加入 AI 客户端的 MCP 配置。完整的 macOS、Windows、Linux 接入步骤、工具清单、安全约束和故障排查见 [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md)。
+在 PWA“设置 → AI 接入”中创建令牌后，直接连接 `https://你的域名/mcp`。无需下载源码、安装 Node.js 或运行本地桥接器。Codex 配置、工具清单、安全约束和故障排查见 [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md)。
 
 ## 费用与用量估算
 
@@ -581,7 +572,7 @@ API 测试使用内存 D1 / R2；浏览器测试自动在 `127.0.0.1:8792` 启�
 ## 适用范围
 
 - 离线镜像沿用浏览器配置文件和设备账号的安全边界，敏感设备建议启用系统磁盘加密。
-- 功能聚焦 Markdown 笔记、单篇只读分享和本地 MCP 桥接；AI 通过用户主动创建的受限令牌访问所属租户。
+- 功能聚焦 Markdown 笔记、单篇只读分享和远程 MCP；AI 通过用户主动创建的受限令牌访问所属租户。
 - AI 检索采用 FTS5 trigram、BM25 和参数化 `LIKE`，覆盖关键词及连续子串；语义向量检索可按实际需求后续扩展。
 - 列表使用 offset 分页，跨设备新增内容后可手动刷新页边界。
 - 历史版本按配置保留，完整灾难恢复通过显式 D1/R2 备份完成。

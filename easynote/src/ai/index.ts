@@ -1,8 +1,4 @@
-#!/usr/bin/env node
-/// <reference types="node" />
-import { randomUUID } from 'node:crypto';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import {
   idPattern,
@@ -13,7 +9,6 @@ import {
 } from '../shared/types.js';
 import { EASYNOTE_VERSION } from '../shared/version.js';
 import { EasyNoteClient } from './client.js';
-import { configPathFromArgs, loadConfig, setupConfig } from './config.js';
 
 const noteMetadataSchema = z.object({
   id: z.string(),
@@ -36,6 +31,8 @@ const noteSearchMatchSchema = z.object({
   field: z.enum(['title', 'content']),
   line: z.number().int().positive().nullable(),
   heading: z.string().nullable(),
+  startOffset: z.number().int().nonnegative().nullable(),
+  endOffset: z.number().int().positive().nullable(),
   snippet: z.string(),
 });
 
@@ -99,7 +96,7 @@ async function save(
   id: string,
   input: NoteInput,
   revision: number,
-  operationId = randomUUID(),
+    operationId = crypto.randomUUID(),
 ) {
   const result = await client.save(id, input, revision, operationId);
   return noteResult(result.note, operationId);
@@ -149,17 +146,17 @@ function resourceMarkdown(note: Note): string {
   return `# ${title}\n\n${note.content}`;
 }
 
-async function createMcpServer(client: EasyNoteClient): Promise<McpServer> {
+export async function createMcpServer(client: EasyNoteClient): Promise<McpServer> {
   const status = await client.status();
   const server = new McpServer({ name: 'easynote-mcp-server', version: EASYNOTE_VERSION });
 
   server.registerTool('easynote_search_notes', {
     title: 'Search EasyNote Notes',
-    description: 'Search active or archived EasyNote notes by exact substring with full-text relevance ranking, optionally filtering by one exact tag. Returns up to three contextual matches per note plus metadata, resource URIs and offset pagination.',
+    description: 'Search active, archived, or all EasyNote notes by exact substring with full-text relevance ranking, optionally filtering by one exact tag. Content matches include character offsets for focused follow-up reads.',
     inputSchema: z.object({
       query: z.string().max(200).default('').describe('Text matched against title and Markdown body. Chinese substring search is supported.'),
       tag: z.string().max(40).default('').describe('Optional exact tag filter.'),
-      view: z.enum(['all', 'archive']).default('all').describe('all means active, non-archived notes; archive means archived notes.'),
+      view: z.enum(['all', 'archive', 'any']).default('any').describe('any searches active and archived notes; all means active notes only; archive means archived notes only.'),
       limit: z.number().int().min(1).max(20).default(20),
       offset: z.number().int().min(0).default(0),
     }).strict(),
@@ -381,7 +378,7 @@ async function createMcpServer(client: EasyNoteClient): Promise<McpServer> {
     annotations: writeAnnotations,
   }, async ({ title, content, tags, pinned, archived }) => {
     try {
-      return await save(client, randomUUID(), {
+      return await save(client, crypto.randomUUID(), {
         title,
         content,
         tags: [...new Set(tags)],
@@ -470,35 +467,3 @@ async function createMcpServer(client: EasyNoteClient): Promise<McpServer> {
 
   return server;
 }
-
-const help = `EasyNote MCP bridge
-
-Usage:
-  node dist/ai/index.js setup [--config PATH]
-  node dist/ai/index.js mcp [--config PATH]
-
-setup   Interactively store the EasyNote URL and integration token.
-mcp     Serve EasyNote read and write tools over MCP stdio.
-`;
-
-async function main(): Promise<void> {
-  const [command = 'help', ...args] = process.argv.slice(2);
-  if (['help', '--help', '-h'].includes(command)) {
-    process.stdout.write(help);
-    return;
-  }
-  const configPath = configPathFromArgs(args);
-  if (command === 'setup') {
-    await setupConfig(configPath);
-    return;
-  }
-  if (command !== 'mcp') throw new Error(`Unknown command: ${command}\n\n${help}`);
-  const config = await loadConfig(configPath);
-  const server = await createMcpServer(new EasyNoteClient(config));
-  await server.connect(new StdioServerTransport());
-}
-
-main().catch((error) => {
-  process.stderr.write(`EasyNote AI: ${error instanceof Error ? error.message : String(error)}\n`);
-  process.exitCode = 1;
-});

@@ -65,6 +65,8 @@ function searchMatches(row: NoteRow, query: string): NoteSearchMatch[] {
       field: 'title',
       line: null,
       heading: null,
+      startOffset: null,
+      endOffset: null,
       snippet: snippetAround(row.title, titleIndex, query.length),
     });
   }
@@ -80,6 +82,8 @@ function searchMatches(row: NoteRow, query: string): NoteSearchMatch[] {
         field: 'content',
         line,
         heading: closestHeading(content, index),
+        startOffset: index,
+        endOffset: index + query.length,
         snippet: snippetAround(content, index, query.length),
       });
       matchedLines.add(line);
@@ -96,7 +100,7 @@ async function searchNotes(request: Request, env: Env, user: IntegrationIdentity
     ? `"${query.replaceAll('"', '""')}"`
     : null;
   const view = url.searchParams.get('view') ?? 'all';
-  if (!['all', 'archive'].includes(view)) throw new ApiError(400, 'AI search only supports active or archived notes.');
+  if (!['all', 'archive', 'any'].includes(view)) throw new ApiError(400, 'AI search only supports active, archived, or all notes.');
   const offset = Number(url.searchParams.get('offset') ?? 0);
   if (!Number.isSafeInteger(offset) || offset < 0) throw new ApiError(400, 'Invalid offset.');
   const limit = Number(url.searchParams.get('limit') ?? 20);
@@ -111,7 +115,8 @@ async function searchNotes(request: Request, env: Env, user: IntegrationIdentity
     filters.push('notes_fts MATCH ?');
     binds.push(ftsQuery);
   }
-  filters.push('n.user_id=?', 'n.deleted_at IS NULL', `n.archived=${view === 'archive' ? 1 : 0}`);
+  filters.push('n.user_id=?', 'n.deleted_at IS NULL');
+  if (view !== 'any') filters.push(`n.archived=${view === 'archive' ? 1 : 0}`);
   binds.push(user.id);
   if (query && !ftsQuery) {
     filters.push("(n.title LIKE ? ESCAPE '\\' OR n.content LIKE ? ESCAPE '\\')");
