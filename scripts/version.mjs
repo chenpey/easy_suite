@@ -90,8 +90,8 @@ function rootReadmeBlock(versions) {
     '| 项目 | 当前版本 |',
     '| --- | --- |',
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
-    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
+    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
 }
