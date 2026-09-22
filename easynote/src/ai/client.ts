@@ -11,6 +11,13 @@ export interface IntegrationStatus {
   access: 'read' | 'read-write';
 }
 
+export interface NoteStats {
+  active: number;
+  archived: number;
+  trash: number;
+  total: number;
+}
+
 export interface SearchPage {
   notes: IntegrationNoteSummary[];
   nextOffset: number | null;
@@ -88,6 +95,10 @@ export class EasyNoteClient {
 
   status(): Promise<IntegrationStatus> {
     return this.json('/api/integrations/status');
+  }
+
+  stats(): Promise<NoteStats> {
+    return this.json('/api/integrations/stats');
   }
 
   search(query: {

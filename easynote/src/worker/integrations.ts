@@ -254,6 +254,20 @@ export async function integrationRoutes(
   if (path === '/api/integrations/status' && request.method === 'GET') {
     return json({ account: user.username, integration: user.actorName, access: user.access });
   }
+  if (path === '/api/integrations/stats' && request.method === 'GET') {
+    const counts = await env.DB.prepare(`SELECT
+      SUM(CASE WHEN deleted_at IS NULL AND archived=0 THEN 1 ELSE 0 END) AS active,
+      SUM(CASE WHEN deleted_at IS NULL AND archived=1 THEN 1 ELSE 0 END) AS archived,
+      SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END) AS trash,
+      COUNT(*) AS total FROM notes WHERE user_id=?`).bind(user.id)
+      .first<{ active: number; archived: number; trash: number; total: number }>();
+    return json({
+      active: counts?.active ?? 0,
+      archived: counts?.archived ?? 0,
+      trash: counts?.trash ?? 0,
+      total: counts?.total ?? 0,
+    });
+  }
   if (path === '/api/integrations/notes' && request.method === 'GET') {
     return searchNotes(request, env, user);
   }

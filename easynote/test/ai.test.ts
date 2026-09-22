@@ -107,7 +107,14 @@ test('MCP searches, reads and writes through the EasyNote API', async () => {
     assert.ok(tools.tools.some((tool) => tool.name === 'easynote_read_note'));
     assert.ok(tools.tools.some((tool) => tool.name === 'easynote_read_notes'));
     assert.ok(tools.tools.some((tool) => tool.name === 'easynote_connection_status'));
+    assert.ok(tools.tools.some((tool) => tool.name === 'easynote_note_stats'));
     assert.ok(!tools.tools.some((tool) => tool.name.includes('sync') || tool.name.includes('purge')));
+
+    const stats = (await client.callTool({
+      name: 'easynote_note_stats', arguments: {},
+    })).structuredContent as { active: number; archived: number; trash: number; total: number };
+    assert.equal(stats.total, stats.active + stats.archived + stats.trash);
+    assert.ok(stats.active > 0);
 
     const recentResult = await client.callTool({
       name: 'easynote_list_recent',
@@ -248,6 +255,7 @@ test('read-only MCP credentials do not expose write tools', async () => {
       'easynote_read_note',
       'easynote_read_notes',
       'easynote_connection_status',
+      'easynote_note_stats',
     ]);
   } finally {
     await client.close();

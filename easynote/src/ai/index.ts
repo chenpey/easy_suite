@@ -329,6 +329,34 @@ export async function createMcpServer(client: EasyNoteClient): Promise<McpServer
     }
   });
 
+  server.registerTool('easynote_note_stats', {
+    title: 'Count EasyNote Notes',
+    description: 'Return exact database counts for active, archived, trashed, and total notes. Use active plus archived for the knowledge-base count; do not infer totals from paginated search results or Resources.',
+    inputSchema: z.object({}).strict(),
+    outputSchema: z.object({
+      active: z.number().int().nonnegative(),
+      archived: z.number().int().nonnegative(),
+      trash: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+    }),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  }, async () => {
+    try {
+      const result = await client.stats();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
   const noteTemplate = new ResourceTemplate('easynote://notes/{id}.md', {
     list: async () => {
       const notes = (await Promise.all([

@@ -99,6 +99,8 @@ test('AI tokens are scoped, revocable and preserve revision history', async () =
   const bearer = { Authorization: `Bearer ${credential.secret}`, Cookie: '', 'X-CSRF-Token': '' };
   const status = await request('/api/integrations/status', 'GET', undefined, bearer);
   assert.deepEqual(await status.json(), { account: 'tester', integration: '测试 AI', access: 'read-write' });
+  const emptyStats = await (await request('/api/integrations/stats', 'GET', undefined, bearer)).json() as any;
+  assert.deepEqual(emptyStats, { active: 0, archived: 0, trash: 0, total: 0 });
 
   const id = randomUUID();
   const longQuery = '跨设备检索'.repeat(5);
@@ -144,6 +146,8 @@ test('AI tokens are scoped, revocable and preserve revision history', async () =
     ...base, title: '批量读取第二篇', archived: false, revision: secondNote.revision, operationId: randomUUID(),
   }, bearer);
   assert.equal(unarchive.status, 200, await unarchive.clone().text());
+  const stats = await (await request('/api/integrations/stats', 'GET', undefined, bearer)).json() as any;
+  assert.deepEqual(stats, { active: 2, archived: 0, trash: 0, total: 2 });
   const batch = await (await request(
     `/api/integrations/notes/batch?ids=${encodeURIComponent(`${secondId},${id}`)}`,
     'GET',
