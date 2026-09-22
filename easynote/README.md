@@ -2,9 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.5.0`
+当前版本：`0.5.1`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 0.5.1 更新
+
+- 已有标签选择器移至标签输入框左侧，并修复选择器文字裁切问题。
 
 ## 0.5.0 更新
 
