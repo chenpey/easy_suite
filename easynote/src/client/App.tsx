@@ -54,7 +54,7 @@ function Modal({ title, children, close, className }: { title: string; children:
   }, [registerFeedback]);
   return <dialog className={className} ref={ref}
     onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === ref.current) close(); }}>
-    <header className="dialog-header"><h2>{title}</h2><IconButton label="关闭" onClick={close}><X size={18} /></IconButton></header>
+    <header className="dialog-header"><h2>{translate(title)}</h2><IconButton label="关闭" onClick={close}><X size={18} /></IconButton></header>
     <div className="dialog-feedback-anchor" ref={feedbackRef} />
     {children}
   </dialog>;
@@ -1111,7 +1111,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <div className="list-heading">
           <IconButton label="打开导航菜单" className="icon-button mobile-menu-trigger" onClick={() => setMobileNavigation(true)}><Menu size={21} /></IconButton>
           {!sidebar && <IconButton label="展开侧栏" onClick={() => setSidebar(true)}><MoreHorizontal size={18} /></IconButton>}
-          <h1>{activeView}</h1>
+          <h1 title={activeView}>{activeView}</h1>
           {!(mobileSearch || book.query) && (
             <IconButton label="搜索笔记" className="icon-button mobile-search-trigger" onClick={toggleMobileSearch}>
               <Search size={20} />

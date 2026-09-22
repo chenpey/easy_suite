@@ -187,7 +187,7 @@ h1, h2, h3, p { margin-top: 0; }
 .app-shell {
   display: grid;
   overflow: clip;
-  grid-template-columns: 220px var(--note-list-width, 300px) 5px minmax(0, 1fr);
+  grid-template-columns: 200px var(--note-list-width, 300px) 5px minmax(0, 1fr);
   height: 100dvh;
   min-height: 420px;
   background: var(--canvas);
@@ -311,10 +311,17 @@ nav button.active svg { color: var(--accent); }
   flex: 1;
   min-width: 0;
   margin: 0;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+}
+.list-heading .icon-button {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
 }
 .bulk-toolbar {
   display: grid;
@@ -1330,7 +1337,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .login-form > .primary { width: 100%; height: 42px; margin-top: 4px; }
 .error-box { margin-top: 20px; color: var(--danger); }
 @media(max-width: 1100px) {
-  .app-shell { grid-template-columns: 204px var(--note-list-width, 300px) 5px minmax(0, 1fr); }
+  .app-shell { grid-template-columns: 200px var(--note-list-width, 300px) 5px minmax(0, 1fr); }
   .sidebar-hidden { grid-template-columns: var(--note-list-width, 300px) 5px minmax(0, 1fr); }
   .document-width-toggle { display: none; }
   .document-scroll { padding: 0 30px; }
