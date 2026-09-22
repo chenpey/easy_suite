@@ -331,6 +331,11 @@ async function loadUsers() {
     list.append(row);
   }
   renderIcons();
+  if (session?.user?.role === "admin") {
+    const activeAdminCount = data.users.filter((u) => u.role === "admin" && u.enabled && !u.pendingApproval).length;
+    session.user.canDeleteAccount = activeAdminCount >= 2;
+    updateDeleteAccountVisibility();
+  }
 }
 
 function showCopyFeedback(button, status, popover) {
@@ -1195,10 +1200,17 @@ function pauseUpload() {
   for (const xhr of activeUploads) xhr.abort();
 }
 
+function updateDeleteAccountVisibility() {
+  const canDelete = session?.user?.role !== "admin" || Boolean(session?.user?.canDeleteAccount);
+  if ($("account-danger")) $("account-danger").hidden = !canDelete;
+  if ($("delete-account-open")) $("delete-account-open").hidden = !canDelete;
+}
+
 async function initializeApp() {
   const bootstrap = await api("/api/bootstrap");
   session = bootstrap.session;
   setupPasswordToggles();
+  updateDeleteAccountVisibility();
   $("account-tabs").hidden = session.user.role !== "admin";
   const profileTab = $("tab-profile");
   const usersTab = $("tab-users");
@@ -1404,6 +1416,7 @@ async function initializeApp() {
   }));
   $("account-open").addEventListener("click", () => {
     setAccountTab("profile");
+    updateDeleteAccountVisibility();
     $("password-form").reset();
     $("recovery-form").reset();
     $("account-recovery-result").hidden = true;

@@ -166,7 +166,12 @@ export async function getSession(request, env, ttl, renewInterval) {
   const tokenHash = await digest(token);
   const session = await env.DB.prepare(
     `SELECT s.token_hash, s.user_id, s.csrf_token, s.expires_at, u.username, u.role, u.auth_version,
-      u.content_revision AS revision, u.recovery_code_hash IS NOT NULL AS has_recovery_code
+      u.content_revision AS revision, u.recovery_code_hash IS NOT NULL AS has_recovery_code,
+      (u.role != 'admin' OR EXISTS (
+        SELECT 1 FROM users AS other
+        WHERE other.role = 'admin' AND other.enabled = 1
+         AND other.deletion_requested_at IS NULL AND other.id != u.id
+      )) AS can_delete_account
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ? AND s.auth_version = u.auth_version
       AND u.enabled = 1 AND u.deletion_requested_at IS NULL`,

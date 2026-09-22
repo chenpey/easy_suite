@@ -1131,6 +1131,7 @@ function sessionPayload(session, config) {
       username: session.username,
       role: session.role,
       hasRecoveryCode: Boolean(session.has_recovery_code),
+      canDeleteAccount: Boolean(session.can_delete_account),
     },
     maxUploadBytes: config.uploadLimit,
     uploadChunkBytes: config.uploadChunkBytes,

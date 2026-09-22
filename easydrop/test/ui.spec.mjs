@@ -430,6 +430,35 @@ test("administrator can create, edit, disable, enable and delete a user", async 
   await expect(row).toHaveCount(0);
 });
 
+test("sole administrator cannot see delete account button, but normal user or multiple admins can", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await page.getByRole("button", { name: "账户与设置" }).click();
+  await expect(page.locator("#delete-account-open")).toBeHidden();
+  await expect(page.locator("#account-danger")).toBeHidden();
+
+  await page.getByRole("button", { name: "用户管理" }).click();
+  await page.getByLabel("用户名", { exact: true }).fill("second-admin");
+  await page.getByLabel("密码", { exact: true }).fill("SecondAdminPass123!");
+  await page.locator("#user-role").selectOption("admin");
+  await page.getByRole("button", { name: "添加用户" }).click();
+  await expect(page.locator(".user-row").filter({ hasText: "second-admin" })).toBeVisible();
+
+  await page.getByRole("button", { name: "个人设置" }).click();
+  await expect(page.locator("#delete-account-open")).toBeVisible();
+  await expect(page.locator("#account-danger")).toBeVisible();
+
+  await page.getByRole("button", { name: "用户管理" }).click();
+  const secondAdminRow = page.locator(".user-row").filter({ hasText: "second-admin" });
+  await secondAdminRow.getByRole("button", { name: "删除用户" }).click();
+  await page.getByRole("button", { name: "确认删除" }).click();
+  await expect(secondAdminRow).toHaveCount(0);
+
+  await page.getByRole("button", { name: "个人设置" }).click();
+  await expect(page.locator("#delete-account-open")).toBeHidden();
+  await expect(page.locator("#account-danger")).toBeHidden();
+});
+
 test("registration, recovery, password change and self-deletion work end to end", async ({ page, context, browser }) => {
   const adminHeaders = await loginContext(context);
   await page.goto(preview.url);
