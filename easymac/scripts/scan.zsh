@@ -257,7 +257,7 @@ scanned_at="$(/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
 computer_name="$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hostname -s)"
 
 {
-  print 'window.EASYNEWMAC_SCAN = Object.freeze({'
+  print 'window.EASYMAC_SCAN = Object.freeze({'
   print '  schemaVersion: 1,'
   printf '  scannedAt: "%s",\n' "$(encode "$scanned_at")"
   printf '  computerName: "%s",\n' "$(encode "$computer_name")"
@@ -265,6 +265,7 @@ computer_name="$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hostnam
   /bin/cat "$ROWS_FILE"
   print '  ]'
   print '});'
+  print 'window.EASYNEWMAC_SCAN = window.EASYMAC_SCAN;'
 } > "$OUTPUT_TMP"
 
 /bin/chmod 600 "$OUTPUT_TMP"

@@ -12,7 +12,7 @@
       id: "automatic",
       label: "可自动安装",
       icon: "wand",
-      predicate: EasyNewMacCore.isAutomatic,
+      predicate: EasyMacCore.isAutomatic,
     },
     {
       id: "cask",
@@ -219,7 +219,7 @@
       const badge = document.createElement("span");
       badge.className = [
         "kind-badge",
-        EasyNewMacCore.isAutomatic(item) ? "automatic" : "",
+        EasyMacCore.isAutomatic(item) ? "automatic" : "",
         item.kind === "pwa" ? "pwa" : "",
       ]
         .filter(Boolean)
@@ -234,8 +234,8 @@
 
   function renderPlan() {
     const items = selectedItems();
-    const summary = EasyNewMacCore.summarize(items);
-    state.script = EasyNewMacCore.generateInstallScript(items);
+    const summary = EasyMacCore.summarize(items);
+    state.script = EasyMacCore.generateInstallScript(items);
 
     elements.selectionCount.textContent = String(summary.total);
     elements.automaticCount.textContent = String(summary.automatic);
@@ -278,7 +278,7 @@
   function renderSelectionControls() {
     elements.clearSelectionButton.disabled = state.selected.size === 0;
     elements.selectAutomaticButton.disabled =
-      state.items.filter(EasyNewMacCore.isAutomatic).length === 0;
+      state.items.filter(EasyMacCore.isAutomatic).length === 0;
   }
 
   function render() {
@@ -312,8 +312,8 @@
     const items = selectedItems();
     if (items.length === 0) return;
 
-    const zipBytes = EasyNewMacCore.createExecutableZip(
-      "EasyNewMac-Migration.command",
+    const zipBytes = EasyMacCore.createExecutableZip(
+      "EasyMac-Migration.command",
       state.script,
     );
     const blob = new Blob([zipBytes], { type: "application/zip" });
@@ -321,7 +321,7 @@
     const anchor = document.createElement("a");
     const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     anchor.href = url;
-    anchor.download = `EasyNewMac-Migration-${date}.zip`;
+    anchor.download = `EasyMac-Migration-${date}.zip`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -363,7 +363,7 @@
     });
 
     elements.selectAutomaticButton.addEventListener("click", () => {
-      const items = state.items.filter(EasyNewMacCore.isAutomatic);
+      const items = state.items.filter(EasyMacCore.isAutomatic);
       items.forEach((item) => state.selected.add(item.id));
       render();
       showToast(`已选择 ${items.length} 个可自动安装项目`);
@@ -390,7 +390,9 @@
 
   function initialize() {
     try {
-      const scan = EasyNewMacCore.decodeScanPayload(window.EASYNEWMAC_SCAN);
+      const scan = EasyMacCore.decodeScanPayload(
+        window.EASYMAC_SCAN || window.EASYNEWMAC_SCAN,
+      );
       state.items = scan.items.sort((left, right) => {
         const order = ["homebrew", "cask", "mas", "formula", "pwa", "manual"];
         const kindDifference =
@@ -421,14 +423,16 @@
   }
 
   function loadScanData() {
+    delete window.EASYMAC_PENDING;
     delete window.EASYNEWMAC_PENDING;
+    delete window.EASYMAC_SCAN;
     delete window.EASYNEWMAC_SCAN;
 
     const script = document.createElement("script");
     script.src = `data.js?${Date.now()}`;
     script.addEventListener("load", () => {
       script.remove();
-      if (window.EASYNEWMAC_PENDING) {
+      if (window.EASYMAC_PENDING || window.EASYNEWMAC_PENDING) {
         window.setTimeout(loadScanData, 800);
         return;
       }
@@ -438,7 +442,7 @@
       script.remove();
       initialize();
     });
-    document.head.append(script);
+    document.body.append(script);
   }
 
   loadScanData();

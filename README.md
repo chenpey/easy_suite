@@ -7,8 +7,8 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 <!-- versions:start -->
 | 项目 | 当前版本 |
 | --- | --- |
-| [EasyDrop](easydrop/) | `1.1.6` |
-| [EasyNewMac](easynewmac/) | `0.3.2` |
+| [EasyDrop](easydrop/) | `1.1.7` |
+| [EasyMac](easymac/) | `0.3.2` |
 | [EasyNote](easynote/) | `0.4.4` |
 <!-- versions:end -->
 
@@ -34,22 +34,22 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 详细说明见 [EasyNote README](easynote/README.md)。
 
-### [EasyNewMac](easynewmac/)
+### [EasyMac](easymac/)
 
-用于从旧 Mac 扫描 Homebrew、Mac App Store 和普通应用，让用户搜索、筛选并选择需要迁移的项目，预览后导出新 Mac 安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境；扫描清单不上传，EasyNewMac 本身也不执行安装。
+用于从旧 Mac 扫描 Homebrew、Mac App Store 和普通应用，让用户搜索、筛选并选择需要迁移的项目，预览后导出新 Mac 安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境；扫描清单不上传，EasyMac 本身也不执行安装。
 
-发布下载：[EasyNewMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easynewmac-latest)
+发布下载：[EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
 技术栈：AppleScript、Zsh、HTML、CSS、JavaScript。
 
-详细说明见 [EasyNewMac README](easynewmac/README.md)。
+详细说明见 [EasyMac README](easymac/README.md)。
 
 ## 使用
 
 三个项目相互独立，所有命令都应在对应项目目录中执行：
 
 - EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
-- EasyNewMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyNewMac.app` 即可使用。
+- EasyMac 需要 macOS 13 或更新版本，解压发布包后双击 `EasyMac.app` 即可使用。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
 
@@ -59,11 +59,11 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 ```bash
 node scripts/version.mjs bump easynote patch
-# 或：node scripts/version.mjs bump easynewmac minor
+# 或：node scripts/version.mjs bump easymac minor
 node scripts/version.mjs check
 ```
 
-脚本会同步项目的版本文件、`package.json`、锁文件、运行时版本、README 和根目录版本表。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyNewMac v0.1.0`。
+脚本会同步项目的版本文件、`package.json`、锁文件、运行时版本、README 和根目录版本表。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyMac v0.1.0`。
 
 ## 清空重建
 

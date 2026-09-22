@@ -23,11 +23,11 @@ const projects = {
     lockPath: 'easydrop/package-lock.json',
     readmePath: 'easydrop/README.md',
   },
-  easynewmac: {
-    title: 'EasyNewMac',
-    directory: 'easynewmac',
-    readmePath: 'easynewmac/README.md',
-    versionPath: 'easynewmac/VERSION',
+  easymac: {
+    title: 'EasyMac',
+    directory: 'easymac',
+    readmePath: 'easymac/README.md',
+    versionPath: 'easymac/VERSION',
   },
 };
 
@@ -36,7 +36,7 @@ function fail(message) {
 }
 
 function validateProject(name) {
-  if (!projects[name]) fail(`Unknown project "${name}". Use easynote, easydrop or easynewmac.`);
+  if (!projects[name]) fail(`Unknown project "${name}". Use easynote, easydrop or easymac.`);
   return projects[name];
 }
 
@@ -90,7 +90,7 @@ function rootReadmeBlock(versions) {
     '| 项目 | 当前版本 |',
     '| --- | --- |',
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
-    `| [EasyNewMac](easynewmac/) | \`${versions.easynewmac}\` |`,
+    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
@@ -197,7 +197,7 @@ function usage() {
   node scripts/version.mjs bump <project> <major|minor|patch>
 
 From a project directory, the project name may be omitted:
-  cd easynewmac && node ../scripts/version.mjs bump patch`;
+  cd easymac && node ../scripts/version.mjs bump patch`;
 }
 
 async function main() {

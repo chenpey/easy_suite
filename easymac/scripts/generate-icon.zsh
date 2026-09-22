@@ -4,10 +4,10 @@ emulate -L zsh
 set -euo pipefail
 
 PROJECT_DIR="${0:A:h:h}"
-SOURCE="$PROJECT_DIR/web/easynewmac-icon.svg"
-OUTPUT="${1:-$PROJECT_DIR/build/EasyNewMac.icns}"
-work_dir="$(/usr/bin/mktemp -d -t easynewmac-icon)"
-iconset="$work_dir/EasyNewMac.iconset"
+SOURCE="$PROJECT_DIR/web/easymac-icon.svg"
+OUTPUT="${1:-$PROJECT_DIR/build/EasyMac.icns}"
+work_dir="$(/usr/bin/mktemp -d -t easymac-icon)"
+iconset="$work_dir/EasyMac.iconset"
 master="$work_dir/icon-1024.png"
 
 cleanup() {

@@ -6,11 +6,11 @@ set -euo pipefail
 PROJECT_DIR="${0:A:h:h}"
 BUILD_DIR="$PROJECT_DIR/build"
 DIST_DIR="$PROJECT_DIR/dist"
-PACKAGE_NAME="EasyNewMac"
+PACKAGE_NAME="EasyMac"
 VERSION="$(<"$PROJECT_DIR/VERSION")"
 VERSION="${VERSION//$'\r'/}"
 VERSION="${VERSION//$'\n'/}"
-STAGING_DIR="$(/usr/bin/mktemp -d -t easynewmac-release)"
+STAGING_DIR="$(/usr/bin/mktemp -d -t easymac-release)"
 
 cleanup() {
   rm -rf -- "$STAGING_DIR"
@@ -50,12 +50,12 @@ mkdir -p -- "$BUILD_DIR" "$DIST_DIR" "$RELEASE_DIR"
 
 APP_RESOURCES="$APP_PATH/Contents/Resources"
 mkdir -p "$APP_RESOURCES/web" "$APP_RESOURCES/catalog"
-cp "$ICON_PATH" "$APP_RESOURCES/EasyNewMac.icns"
+cp "$ICON_PATH" "$APP_RESOURCES/EasyMac.icns"
 cp "$PROJECT_DIR/scripts/app-launch.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/scripts/first-open.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/scripts/scan.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/catalog/casks.tsv.gz" "$APP_RESOURCES/catalog/"
-cp "$PROJECT_DIR"/web/{app.js,core.js,easynewmac-icon.svg,index.html,style.css} \
+cp "$PROJECT_DIR"/web/{app.js,core.js,easymac-icon.svg,index.html,style.css} \
   "$APP_RESOURCES/web/"
 chmod 755 \
   "$APP_RESOURCES/app-launch.zsh" \
@@ -64,14 +64,14 @@ chmod 755 \
 
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :LSUIElement bool true" "$INFO_PLIST"
-/usr/libexec/PlistBuddy -c "Set :CFBundleIconFile EasyNewMac.icns" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIconFile EasyMac.icns" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$INFO_PLIST"
-/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string party.tiandi.easynewmac" "$INFO_PLIST"
+/usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string party.tiandi.easymac" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$INFO_PLIST"
 /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $VERSION" "$INFO_PLIST"
 
 # osacompile adds its own asset-catalog icon. Modern macOS prefers that over
-# CFBundleIconFile, so remove the defaults and leave EasyNewMac.icns authoritative.
+# CFBundleIconFile, so remove the defaults and leave EasyMac.icns authoritative.
 rm -f -- "$APP_RESOURCES/Assets.car" "$APP_RESOURCES/applet.icns"
 
 /usr/bin/codesign --force --deep --sign - "$APP_PATH"

@@ -175,7 +175,7 @@
       "typeset -a failed_items failed_reasons skipped_items skipped_reasons",
       "failed_items=() failed_reasons=() skipped_items=() skipped_reasons=()",
       "verified_count=0",
-      'print -- "EasyNewMac 迁移安装"',
+      'print -- "EasyMac 迁移安装"',
       'print -- "===================="',
       "print -- \"\"",
       "",
@@ -203,7 +203,7 @@
         '  print -u2 -- "自动安装需要 macOS 14 或更新版本。"',
         "  exit 1",
         "fi",
-        'log_dir="$HOME/Library/Logs/EasyNewMac"',
+        'log_dir="$HOME/Library/Logs/EasyMac"',
         'previous_umask="$(umask)"',
         'umask 077',
         '/bin/mkdir -p "$log_dir" || exit 1',
@@ -279,7 +279,7 @@
         "}",
         "read_shell_config() {",
         "  local snapshot config_status=0",
-        "  snapshot=\"$(/usr/bin/mktemp -t easynewmac.shell)\" || return 1",
+        "  snapshot=\"$(/usr/bin/mktemp -t easymac.shell)\" || return 1",
         "  if ! login_shell 'printf \"%s\\0%s\\0\" \"${NVM_DIR:-}\" \"${ZDOTDIR:-$HOME}\" >&3' 3>\"$snapshot\"; then",
         "    config_status=1",
         "  else",
@@ -299,10 +299,10 @@
         "  (( shell_config_ok )) || return 1",
         "  local brew_path brew_line",
         "  brew_path=\"$(whence -p brew)\" || return 1",
-        "  login_shell 'candidate=\"$(whence -p brew)\" && [[ \"${candidate:A}\" == \"${1:A}\" ]]' easynewmac \"$brew_path\" && return 0",
+        "  login_shell 'candidate=\"$(whence -p brew)\" && [[ \"${candidate:A}\" == \"${1:A}\" ]]' easymac \"$brew_path\" && return 0",
         "  printf -v brew_line 'eval \"$(%q shellenv)\"' \"$brew_path\"",
         "  append_profile_line \"$shell_dir/.zprofile\" \"$brew_line\" || return 1",
-        "  login_shell 'candidate=\"$(whence -p brew)\" && [[ \"${candidate:A}\" == \"${1:A}\" ]]' easynewmac \"$brew_path\"",
+        "  login_shell 'candidate=\"$(whence -p brew)\" && [[ \"${candidate:A}\" == \"${1:A}\" ]]' easymac \"$brew_path\"",
         "}",
         "configure_homebrew_shell || record_failure \"Homebrew PATH\" \"无法配置或验证独立登录 shell 的 brew，请检查 zsh 启动文件\"",
         "",
@@ -322,11 +322,11 @@
       ].map((item) => [`${item.kind}:${item.installId}`, item])).values()];
       if (brewItems.length > 0) {
         lines.push(
-          'brewfile="$(/usr/bin/mktemp -t easynewmac.Brewfile)" || exit 1',
+          'brewfile="$(/usr/bin/mktemp -t easymac.Brewfile)" || exit 1',
           'trap \'/bin/rm -f -- "$brewfile"\' EXIT',
-          'cat > "$brewfile" <<\'EASYNEWMAC_BREWFILE\'',
+          'cat > "$brewfile" <<\'EASYMAC_BREWFILE\'',
           ...brewItems.map((item) => `${item.kind === "formula" ? "brew" : "cask"} ${brewfileQuote(item.installId)}`),
-          "EASYNEWMAC_BREWFILE",
+          "EASYMAC_BREWFILE",
           'brew_retry=0',
           'print -- "正在安装或升级所选项目（最多 3 个并发下载）..."',
           'if ! HOMEBREW_DOWNLOAD_CONCURRENCY=3 brew bundle --file="$brewfile"; then',
@@ -636,6 +636,7 @@ fi`),
     validInstallItems,
   });
 
+  global.EasyMacCore = api;
   global.EasyNewMacCore = api;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
