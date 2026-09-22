@@ -2,9 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.2`
+Current Version: `0.7.3`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.3 Updates
+
+- **Modal Title & Layout Optimizations**: Fixed modal dialog titles (e.g. Move to Trash) to translate directly in the React VDOM layer; optimized sidebar width (adjusted to 200px) and toolbar button sizes, with note list headers set to single-line ellipsis to prevent wrapping on longer English titles like `Archived Notes`; added translations for icon button tooltips and fixed settings panel text wrapping.
 
 ## 0.7.2 Updates
 
