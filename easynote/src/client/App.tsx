@@ -68,15 +68,15 @@ function PdfPagePreview({ pages, progress, error }: { pages: Blob[]; progress: s
     setUrls(next);
     return () => next.forEach((url) => URL.revokeObjectURL(url));
   }, [pages]);
-  return <section className="pdf-preview-panel" aria-label="PDF 分页预览" aria-busy={!!progress}>
-    <header><strong>分页预览</strong><span>{pages.length ? `${pages.length} 页` : ''}</span></header>
+  return <section className="pdf-preview-panel" aria-label={t('PDF 分页预览')} aria-busy={!!progress}>
+    <header><strong>{t('分页预览')}</strong><span>{pages.length ? t('{0} 页', pages.length) : ''}</span></header>
     <div className="pdf-preview-pages">
       {progress || pages.length > 0 && !urls.length
-        ? <div className="pdf-preview-status"><LoaderCircle className="spin" size={18} />{progress || '正在打开分页预览'}</div>
+        ? <div className="pdf-preview-status"><LoaderCircle className="spin" size={18} />{progress || t('正在打开分页预览')}</div>
         : error
           ? <div className="pdf-preview-error" role="alert">{error}</div>
           : urls.map((url, index) => <figure key={url}>
-            <img src={url} alt={`PDF 第 ${index + 1} 页`} />
+            <img src={url} alt={t('PDF 第 {0} 页', index + 1)} />
             <figcaption>{index + 1} / {urls.length}</figcaption>
           </figure>)}
     </div>
@@ -121,7 +121,7 @@ function noteExcerptText(markdown: string, query: string) {
   const needle = query.trim().toLocaleLowerCase();
   return markdown
     .replace(/!\[([^\]]*)\]\(([^)]*)\)/g, (source, alt: string, href: string) => {
-      const label = alt ? `[图片：${alt}]` : '[图片]';
+      const label = alt ? `[${t('图片')}：${alt}]` : `[${t('图片')}]`;
       return needle && !label.toLocaleLowerCase().includes(needle) && href.toLocaleLowerCase().includes(needle)
         ? `${label} ${source}`
         : label;
@@ -139,11 +139,11 @@ const conflictFieldName: Record<NoteConflictField, string> = {
 };
 
 function conflictFieldValue(note: Note, field: NoteConflictField): string {
-  if (field === 'tags') return note.tags.join('、') || '无标签';
-  if (field === 'pinned') return note.pinned ? '已置顶' : '未置顶';
-  if (field === 'archived') return note.archived ? '已归档' : '未归档';
-  if (field === 'deletedAt') return note.deletedAt ? '已移入回收站' : '正常笔记';
-  return note[field] || '（空）';
+  if (field === 'tags') return note.tags.join('、') || t('无标签');
+  if (field === 'pinned') return note.pinned ? t('已置顶') : t('未置顶');
+  if (field === 'archived') return note.archived ? t('已归档') : t('未归档');
+  if (field === 'deletedAt') return note.deletedAt ? t('已移入回收站') : t('正常笔记');
+  return note[field] || t('（空）');
 }
 
 function nextFrame() {
@@ -173,7 +173,7 @@ async function waitForPrintReady() {
     if (root && diagramsReady && imagesReady && fontsReady) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error('PDF 内容准备超时，请检查笔记中的图片或图表后重试。');
+  throw new Error(t('PDF 内容准备超时，请检查笔记中的图片或图表后重试。'));
 }
 
 function canSharePdf(file: File) {
@@ -192,18 +192,18 @@ function SharedPage({ token }: { token: string }) {
   useEffect(() => {
     void api.sharedNote(token).then(({ note: value }) => {
       setNote(value);
-      document.title = `${value.title || '未命名笔记'} · EasyNote`;
+      document.title = `${value.title || t('untitled_note')} · EasyNote`;
     }).catch((reason: unknown) => setError(String(reason)));
   }, [token]);
   return <main className="shared-page">
-    <header><div className="brand"><BrandIcon size={25} /><span>EasyNote</span></div><span>只读分享</span></header>
-    {error ? <div className="shared-error"><h1>链接不可用</h1><p>分享链接不存在、已撤销或已经过期。</p></div> :
-      !note ? <div className="shared-loading"><LoaderCircle className="spin" size={22} />正在读取笔记…</div> :
+    <header><div className="brand"><BrandIcon size={25} /><span>EasyNote</span></div><span>{t('只读分享')}</span></header>
+    {error ? <div className="shared-error"><h1>{t('链接不可用')}</h1><p>{t('分享链接不存在、已撤销或已经过期。')}</p></div> :
+      !note ? <div className="shared-loading"><LoaderCircle className="spin" size={22} />{t('正在读取笔记…')}</div> :
         <article className="shared-document">
-          <h1>{note.title || '未命名笔记'}</h1>
+          <h1>{note.title || t('untitled_note')}</h1>
           <div className="document-meta">
-            <time>更新于 {new Date(note.updatedAt).toLocaleString(dateLocale())}</time>
-            <span>{note.expiresAt === null ? '永久有效' : `有效至 ${new Date(note.expiresAt).toLocaleString(dateLocale())}`}</span>
+            <time>{t('更新于 {0}', new Date(note.updatedAt).toLocaleString(dateLocale()))}</time>
+            <span>{note.expiresAt === null ? t('永久有效') : t('有效至 {0}', new Date(note.expiresAt).toLocaleString(dateLocale()))}</span>
           </div>
           <Preview content={note.content} onImage={(src) => window.open(src, '_blank', 'noopener,noreferrer')} />
         </article>}
@@ -237,7 +237,7 @@ function PrivateApp() {
     applySession(value);
     if (!cached?.user || cached.user.id === value.user?.id) return;
     setPassword('');
-    setBootError(value.user ? '' : '登录已过期，请重新登录。');
+    setBootError(value.user ? '' : t('登录已过期，请重新登录。'));
     try { await clearAccountStorage(cached.user.id); }
     catch (error) { setBootError((message) => `${message}\n${String(error)}`.trim()); }
   };
@@ -267,7 +267,7 @@ function PrivateApp() {
       bootGeneration.current++;
       setBooting(false);
       setPassword('');
-      setBootError('登录已过期，请重新登录。');
+      setBootError(t('登录已过期，请重新登录。'));
       updateSession((current) => {
         if (current?.user) void forgetCachedSession(current.user.id);
         return current ? { ...current, user: null, csrf: null, expiresAt: null, offline: false } : current;
@@ -313,8 +313,8 @@ function PrivateApp() {
   if (booting && !session) return <main className="login">
     <div className="login-form" role="status" aria-live="polite">
       <div className="brand login-brand"><BrandIcon size={32} /><h1>EasyNote</h1></div>
-      <div className="login-heading">正在连接</div>
-      <LoaderCircle className="spin" size={22} aria-label="正在连接" />
+      <div className="login-heading">{t('正在连接')}</div>
+      <LoaderCircle className="spin" size={22} aria-label={t('正在连接')} />
     </div>
   </main>;
   if (session?.user) return <AccountWorkspace
@@ -331,7 +331,7 @@ function PrivateApp() {
       setBooting(false);
       let storageError = '';
       try { await clearAccountStorage(session.user!.id); }
-      catch (error) { storageError = `本机离线数据清理失败：${String(error)}`; }
+      catch (error) { storageError = t('本机离线数据清理失败：{0}', String(error)); }
       setPassword('');
       setBootError(storageError);
       applySession({ ...session, user: null, csrf: null, expiresAt: null, offline: false });
@@ -344,48 +344,48 @@ function PrivateApp() {
         ? api.login(username, password).then((value) => { applySession(value); setPassword(''); })
         : authMode === 'register'
           ? password !== confirmation
-            ? Promise.reject(new Error('两次输入的密码不一致。'))
+            ? Promise.reject(new Error(t('两次输入的密码不一致。')))
             : api.register(username, password).then((value) => {
               setIssuedRecoveryCode(value.recoveryCode);
               setPassword('');
               setConfirmation('');
             })
           : password !== confirmation
-            ? Promise.reject(new Error('两次输入的新密码不一致。'))
+            ? Promise.reject(new Error(t('两次输入的新密码不一致。')))
             : api.resetPassword(username, recoveryCode, password).then(() => {
               setAuthMode('login');
               setPassword('');
               setConfirmation('');
               setRecoveryCode('');
-              setBootError('密码已重置，请登录。');
+              setBootError(t('密码已重置，请登录。'));
             });
       void action.catch((error: unknown) => setBootError(String(error))).finally(() => setBusy(false));
     }}>
       <div className="brand login-brand"><BrandIcon size={32} /><h1>EasyNote</h1></div>
-      <div className="login-heading">{authMode === 'register' ? '创建账户' : authMode === 'reset' ? '恢复账户' :
-        session ? session.configured ? '登录笔记' : '等待初始化' : '登录笔记'}</div>
+      <div className="login-heading">{authMode === 'register' ? t('创建账户') : authMode === 'reset' ? t('恢复账户') :
+        session ? session.configured ? t('登录笔记') : t('等待初始化') : t('登录笔记')}</div>
       {issuedRecoveryCode && <div className="recovery-result" role="status">
-        <strong>保存恢复代码</strong>
+        <strong>{t('保存恢复代码')}</strong>
         <code>{issuedRecoveryCode}</code>
-        <p>账号需要管理员批准后才能登录，此代码仅显示一次。</p>
-        <button type="button" onClick={() => void navigator.clipboard.writeText(issuedRecoveryCode)}>复制恢复代码</button>
+        <p>{t('账号需要管理员批准后才能登录，此代码仅显示一次。')}</p>
+        <button type="button" onClick={() => void navigator.clipboard.writeText(issuedRecoveryCode)}>{t('复制恢复代码')}</button>
       </div>}
-      <label>用户名<input autoComplete="username" required maxLength={32} value={username} onChange={(e) => setUsername(e.target.value)} /></label>
-      {authMode === 'reset' && <label>恢复代码<input autoComplete="off" required value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} /></label>}
-      <label>{authMode === 'reset' ? '新密码' : '密码'}<input autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+      <label>{t('username')}<input autoComplete="username" required maxLength={32} value={username} onChange={(e) => setUsername(e.target.value)} /></label>
+      {authMode === 'reset' && <label>{t('恢复代码')}<input autoComplete="off" required value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} /></label>}
+      <label>{authMode === 'reset' ? t('新密码') : t('password')}<input autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
         type="password" required minLength={authMode === 'login' ? undefined : 12} maxLength={128}
         value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-      {authMode !== 'login' && <label>确认密码<input autoComplete="new-password" type="password" required minLength={12}
+      {authMode !== 'login' && <label>{t('确认密码')}<input autoComplete="new-password" type="password" required minLength={12}
         maxLength={128} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></label>}
       <button className="primary" disabled={busy || !session?.configured || authMode === 'register' && !session.registrationEnabled}>
-        {busy ? '处理中…' : authMode === 'register' ? '提交注册' : authMode === 'reset' ? '重置密码' : '登录'}
+        {busy ? t('处理中…') : authMode === 'register' ? t('提交注册') : authMode === 'reset' ? t('重置密码') : t('登录')}
       </button>
       <div className="login-actions">
-        {authMode !== 'login' ? <button type="button" onClick={() => { setAuthMode('login'); setBootError(''); }}>返回登录</button> :
-          <>{session?.registrationEnabled && <button type="button" onClick={() => { setAuthMode('register'); setIssuedRecoveryCode(''); }}>注册</button>}
-            <button type="button" onClick={() => setAuthMode('reset')}>使用恢复代码</button></>}
+        {authMode !== 'login' ? <button type="button" onClick={() => { setAuthMode('login'); setBootError(''); }}>{t('返回登录')}</button> :
+          <>{session?.registrationEnabled && <button type="button" onClick={() => { setAuthMode('register'); setIssuedRecoveryCode(''); }}>{t('注册')}</button>}
+            <button type="button" onClick={() => setAuthMode('reset')}>{t('使用恢复代码')}</button></>}
       </div>
-      {bootError && <div role="alert" className="error-box"><pre>{bootError}</pre><button type="button" onClick={boot}>重新连接</button></div>}
+      {bootError && <div role="alert" className="error-box"><pre>{bootError}</pre><button type="button" onClick={boot}>{t('重新连接')}</button></div>}
     </form>
   </main>;
 }
@@ -633,17 +633,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const generation = ++pdfGeneration.current;
     const timer = window.setTimeout(() => {
       setPrinting(true);
-      setPdfProgress('正在生成分页预览');
+      setPdfProgress(t('正在生成分页预览'));
       setPdfPreviewError('');
       setPdfPreviewFile(null);
       setPdfPreviewPages([]);
       void (async () => {
         await waitForPrintReady();
         const source = document.querySelector<HTMLElement>('.print-document[data-printing="true"]');
-        if (!source) throw new Error('PDF 内容尚未准备完成。');
+        if (!source) throw new Error(t('PDF 内容尚未准备完成。'));
         const file = await createPdfFile(source, printNote.title, printNote.title, pdfOptions);
         if (pdfGeneration.current !== generation) return;
-        setPdfProgress('正在渲染分页预览');
+        setPdfProgress(t('正在渲染分页预览'));
         const pages = await renderPdfPreviewPages(file);
         if (pdfGeneration.current !== generation) return;
         setPdfPreviewFile(file);
@@ -701,7 +701,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   });
   const insertFiles = async (files: File[], insertion?: string) => {
     if (!note || uploading) return;
-    if (!book.online || session.offline) { book.setError('附件需要联网上传。'); return; }
+    if (!book.online || session.offline) { book.setError(t('附件需要联网上传。')); return; }
     const target = note;
     const marker = insertion ?? pendingInsertion.current ?? editor.current?.markInsertion();
     pendingInsertion.current = null;
@@ -716,7 +716,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         if (!marker || !editor.current?.insertAt(marker, markdown)) book.append(target, markdown);
       }
       const onlyImages = files.every((file) => file.type.startsWith('image/'));
-      showNotice(onlyImages ? '图片已插入' : files.length === 1 ? '附件已插入' : `已插入 ${files.length} 个文件`);
+      showNotice(onlyImages ? t('图片已插入') : files.length === 1 ? t('附件已插入') : t('已插入 {0} 个文件', files.length));
     } catch (e) { book.setError(String(e)); }
     finally {
       if (marker) editor.current?.releaseInsertion(marker);
@@ -751,8 +751,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setSyncing(true);
     try {
       if (await book.retry(checkpointId)) {
-        showNotice(checkpointId ? '已保存并记录历史版本' :
-          hadPending ? '草稿已保存并同步' : '已同步，内容为最新');
+        showNotice(checkpointId ? t('已保存并记录历史版本') :
+          hadPending ? t('草稿已保存并同步') : t('已同步，内容为最新'));
       }
     } finally {
       setSyncing(false);
@@ -817,7 +817,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       setVersionList(null);
       setChosenVersion(null);
       setLayout('edit');
-      showNotice('已恢复版本，恢复前内容已保留');
+      showNotice(t('已恢复版本，恢复前内容已保留'));
     } finally {
       setSyncing(false);
     }
@@ -830,7 +830,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setPdfPreviewPages([]);
     setPdfPreviewError('');
     setPrintNote({ ...note, tags: [...note.tags] });
-    setPdfProgress('正在准备分页预览');
+    setPdfProgress(t('正在准备分页预览'));
     setPdfExport(true);
   };
   const closePdfExport = () => {
@@ -853,7 +853,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       try {
         await navigator.share({ files: [file], title: file.name });
         closePdfExport();
-        showNotice('PDF 已交给系统保存');
+        showNotice(t('PDF 已交给系统保存'));
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -861,7 +861,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
     downloadPdfFile(file);
     closePdfExport();
-    showNotice('PDF 已下载');
+    showNotice(t('PDF 已下载'));
   };
   const beginLinkInsertion = () => {
     pendingInsertion.current = editor.current?.markInsertion() ?? null;
@@ -882,7 +882,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     let url = href;
     if (!book.online || session.offline) {
       const cached = await book.cachedFile(id);
-      if (!cached) throw new Error('这个附件尚未保存到本机。');
+      if (!cached) throw new Error(t('这个附件尚未保存到本机。'));
       url = cached;
     }
     const anchor = document.createElement('a');
@@ -973,20 +973,20 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const ids = [...selected];
     const archived = book.view !== 'archive';
     const count = await book.bulkUpdate(ids, () => ({ archived, deletedAt: null }));
-    finishBulk(`${archived ? '已归档' : '已取消归档'} ${count} 篇笔记`);
+    finishBulk(archived ? t('已归档 {0} 篇笔记', count) : t('已取消归档 {0} 篇笔记', count));
   });
   const applyBulkTag = () => void run(async () => {
     const value = bulkTag.trim();
-    if (!value || value.length > 40) throw new Error('标签必须为 1-40 个字符。');
+    if (!value || value.length > 40) throw new Error(t('标签必须为 1-40 个字符。'));
     const count = await book.bulkUpdate([...selected], (item) => ({ tags: [...new Set([...item.tags, value])] }));
-    finishBulk(`已为 ${count} 篇笔记添加标签`);
+    finishBulk(t('已为 {0} 篇笔记添加标签', count));
   });
   const moveToTrash = (ids: string[]) => {
     const deletedAt = Date.now();
     return book.bulkUpdate(ids, () => ({ deletedAt, archived: false }));
   };
   const moveCurrentToTrash = async () => {
-    if (!note) throw new Error('当前笔记不可用，请刷新后重试。');
+    if (!note) throw new Error(t('当前笔记不可用，请刷新后重试。'));
     const index = book.notes.findIndex((item) => item.id === note.id);
     const next = index >= 0 ? book.notes[index + 1] : undefined;
     await moveToTrash([note.id]);
@@ -998,17 +998,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       setMobileSearch(false);
       chooseView('all');
     }
-    showNotice('已移入回收站');
+    showNotice(t('已移入回收站'));
   };
   const applyBulkTrash = async () => {
     const count = await moveToTrash([...selected]);
-    finishBulk(`已将 ${count} 篇笔记移入回收站`);
+    finishBulk(t('已将 {0} 篇笔记移入回收站', count));
   };
   const handleSaveEditTag = () => void run(async () => {
     if (!editingTag) return;
     const target = editingTagValue.trim();
     if (!target || target.length > 40 || target.includes(',') || target.includes('，')) {
-      throw new Error('标签必须为 1-40 个字符，且不能包含逗号。');
+      throw new Error(t('标签必须为 1-40 个字符，且不能包含逗号。'));
     }
     if (target === editingTag) {
       setEditingTag(null);
@@ -1016,7 +1016,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
     const count = await book.manageTag(editingTag, target);
     setEditingTag(null);
-    showNotice(`已将 #${editingTag} 重命名为 #${target}${count ? `，更新了 ${count} 篇笔记` : ''}`);
+    showNotice(count ? t('已将 #{0} 重命名为 #{1}，更新了 {2} 篇笔记', editingTag, target, count) : t('已将 #{0} 重命名为 #{1}', editingTag, target));
   });
   const handleConfirmMergeTag = () => void run(async () => {
     if (!mergingTag || !mergingTarget) return;
@@ -1024,21 +1024,21 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const to = mergingTarget;
     const count = await book.manageTag(from, to);
     setMergingTag(null);
-    showNotice(`已将 #${from} 合并到 #${to}${count ? `，更新了 ${count} 篇笔记` : ''}`);
+    showNotice(count ? t('已将 #{0} 合并到 #{1}，更新了 {2} 篇笔记', from, to, count) : t('已将 #{0} 合并到 #{1}', from, to));
   });
   const handleConfirmDeleteTag = () => void run(async () => {
     if (!deletingTag) return;
     const target = deletingTag;
     const count = await book.manageTag(target, null);
     setDeletingTag(null);
-    showNotice(`已删除标签 #${target}${count ? `，更新了 ${count} 篇笔记` : ''}`);
+    showNotice(count ? t('已删除标签 #{0}，更新了 {1} 篇笔记', target, count) : t('已删除标签 #{0}', target));
   });
   const goToHeading = (offset: number) => {
     editAt(offset);
   };
   const transferAction = async <T,>(action: () => Promise<T>, success: string | ((result: T) => string)) => {
-    if (book.pending.length || book.busy || uploading) { book.setError('还有未保存的内容，请先完成保存。'); return; }
-    setTransfer('正在准备…');
+    if (book.pending.length || book.busy || uploading) { book.setError(t('还有未保存的内容，请先完成保存。')); return; }
+    setTransfer(t('正在准备…'));
     try {
       const result = await action();
       showNotice(typeof success === 'function' ? success(result) : success);
@@ -1047,7 +1047,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     catch (e) { book.setError(String(e)); }
     finally { setTransfer(''); }
   };
-  const viewName = book.view === 'trash' ? '回收站' : book.view === 'archive' ? '归档笔记' : '全部笔记';
+  const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
   const activeView = book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
   const commandMatch = (...labels: string[]) => {
@@ -1056,17 +1056,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   };
   const commandActions = [
     {
-      id: 'new', label: '新建笔记', aliases: ['新建'], icon: <Plus size={16} />, shortcut: '',
+      id: 'new', label: t('新建笔记'), aliases: ['新建', 'new', 'create'], icon: <Plus size={16} />, shortcut: '',
       disabled: !!transfer || book.loading,
       action: () => { setCommandPalette(false); void createNote(); },
     },
     {
-      id: 'save', label: '同步并更新历史版本', aliases: ['保存', '同步', '保存并同步'], icon: <Save size={16} />, shortcut: 'Cmd/Ctrl+S',
+      id: 'save', label: t('sync_and_save_version'), aliases: ['保存', '同步', '保存并同步', 'save', 'sync'], icon: <Save size={16} />, shortcut: 'Cmd/Ctrl+S',
       disabled: disabled || (!note && !book.pending.length),
       action: () => { setCommandPalette(false); void syncNow(); },
     },
     {
-      id: 'search', label: '搜索笔记', aliases: ['搜索'], icon: <Search size={16} />, shortcut: '',
+      id: 'search', label: t('搜索笔记'), aliases: ['搜索', 'search', 'find'], icon: <Search size={16} />, shortcut: '',
       disabled: false,
       action: () => {
         book.setQuery(commandQuery);
@@ -1075,44 +1075,44 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       },
     },
     {
-      id: 'layout', label: layout === 'edit' ? '切换到预览模式' : '切换到编辑模式',
-      aliases: ['编辑', '预览', '切换'], icon: layout === 'edit' ? <BookOpen size={16} /> : <PenLine size={16} />,
+      id: 'layout', label: layout === 'edit' ? t('切换到预览模式') : t('切换到编辑模式'),
+      aliases: ['编辑', '预览', '切换', 'edit', 'preview'], icon: layout === 'edit' ? <BookOpen size={16} /> : <PenLine size={16} />,
       shortcut: 'Ctrl+E / Cmd+Enter', disabled: !note || !!note.deletedAt,
       action: () => { setCommandPalette(false); toggleLayout(); },
     },
     {
-      id: 'pin', label: note?.pinned ? '取消置顶' : '置顶笔记', aliases: ['置顶'],
+      id: 'pin', label: note?.pinned ? t('取消置顶') : t('置顶笔记'), aliases: ['置顶', 'pin', 'unpin'],
       icon: <Pin size={16} />, shortcut: '', disabled: !note || !!note.deletedAt || !!transfer,
       action: () => { setCommandPalette(false); if (note) setNoteFields({ pinned: !note.pinned }); },
     },
     {
-      id: 'archive', label: note?.archived ? '取消归档' : '归档笔记', aliases: ['归档'],
+      id: 'archive', label: note?.archived ? t('取消归档') : t('归档笔记'), aliases: ['归档', 'archive', 'unarchive'],
       icon: note?.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />, shortcut: '',
       disabled: !note || !!note.deletedAt || !!transfer,
       action: () => { setCommandPalette(false); if (note) setNoteFields({ archived: !note.archived }); },
     },
     {
-      id: 'history', label: '查看历史版本', aliases: ['历史', '版本'], icon: <History size={16} />,
+      id: 'history', label: t('查看历史版本'), aliases: ['历史', '版本', 'history', 'version'], icon: <History size={16} />,
       shortcut: '', disabled: disabled || !note || note.revision === 0,
       action: () => { setCommandPalette(false); openHistory(); },
     },
     {
-      id: 'outline', label: '打开大纲与反向链接', aliases: ['大纲', '反向链接'], icon: <ListTree size={16} />,
+      id: 'outline', label: t('打开大纲与反向链接'), aliases: ['大纲', '反向链接', 'outline', 'backlinks'], icon: <ListTree size={16} />,
       shortcut: '', disabled: !note,
       action: () => { setCommandPalette(false); setInspector(true); },
     },
     {
-      id: 'tasks', label: '打开任务中心', aliases: ['任务', '待办', 'TODO'], icon: <ClipboardList size={16} />,
+      id: 'tasks', label: t('打开任务中心'), aliases: ['任务', '待办', 'TODO', 'tasks', 'todo'], icon: <ClipboardList size={16} />,
       shortcut: '', disabled: false,
       action: () => { setCommandPalette(false); void openTaskCenter(); },
     },
     {
-      id: 'share-management', label: '打开分享管理', aliases: ['分享', '分享管理'], icon: <Share2 size={16} />,
+      id: 'share-management', label: t('打开分享管理'), aliases: ['分享', '分享管理', 'share', 'shares'], icon: <Share2 size={16} />,
       shortcut: '', disabled: !book.online || !!session.offline,
       action: () => { setCommandPalette(false); setShareManagement(true); },
     },
     {
-      id: 'link', label: '插入内部链接', aliases: ['链接'], icon: <Link2 size={16} />,
+      id: 'link', label: t('insert_internal_link'), aliases: ['链接', 'link', 'internal link'], icon: <Link2 size={16} />,
       shortcut: '', disabled: !note || !!note.deletedAt || !!transfer,
       action: () => {
         setCommandPalette(false);
@@ -1121,22 +1121,22 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       },
     },
     {
-      id: 'pdf', label: '导出当前笔记为 PDF', aliases: ['PDF', '打印', '导出'], icon: <Printer size={16} />,
+      id: 'pdf', label: t('导出当前笔记为 PDF'), aliases: ['PDF', '打印', '导出', 'pdf', 'export'], icon: <Printer size={16} />,
       shortcut: 'Cmd/Ctrl+P', disabled: !note || printing,
       action: () => { setCommandPalette(false); exportCurrentNote(); },
     },
     {
-      id: 'share', label: '创建只读分享链接', aliases: ['分享', '只读链接'], icon: <Share2 size={16} />,
+      id: 'share', label: t('创建只读分享链接'), aliases: ['分享', '只读链接', 'share', 'readonly'], icon: <Share2 size={16} />,
       shortcut: '', disabled: !note || note.revision === 0 || !!note.deletedAt || book.pending.some((item) => item.id === note.id),
       action: () => { setCommandPalette(false); setSharing(true); },
     },
     {
-      id: 'settings', label: '打开设置', aliases: ['设置'], icon: <Settings size={16} />,
+      id: 'settings', label: t('打开设置'), aliases: ['设置', 'settings', 'config'], icon: <Settings size={16} />,
       shortcut: '', disabled: false,
       action: () => { setCommandPalette(false); setSettings(true); },
     },
     {
-      id: 'shortcuts', label: '查看快捷键', aliases: ['快捷键', '帮助'], icon: <Keyboard size={16} />,
+      id: 'shortcuts', label: t('查看快捷键'), aliases: ['快捷键', '帮助', 'shortcuts', 'help'], icon: <Keyboard size={16} />,
       shortcut: 'Cmd/Ctrl+/', disabled: false, action: showShortcutHelp,
     },
   ].filter((command) => commandMatch(command.label, ...command.aliases));
@@ -1145,9 +1145,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     buttons[edge === 'first' ? 0 : buttons.length - 1]?.focus();
   };
   const errorFeedback = book.error && <div className="error-strip" role="alert">
-    <details><summary>操作未完成</summary><pre>{book.error}</pre></details>
-    <button onClick={() => void syncNow()} disabled={book.busy || syncing}>{syncing ? '正在重试…' : '重试'}</button>
-    <IconButton label="关闭错误" onClick={() => book.setError('')}><X size={15} /></IconButton>
+    <details><summary>{t('操作未完成')}</summary><pre>{book.error}</pre></details>
+    <button onClick={() => void syncNow()} disabled={book.busy || syncing}>{syncing ? t('正在重试…') : t('retry')}</button>
+    <IconButton label={t('关闭错误')} onClick={() => book.setError('')}><X size={15} /></IconButton>
   </div>;
   const noticeFeedback = notice && <div className="toast" role="status"><Check size={16} />{notice.text}</div>;
   return <DialogFeedbackContext.Provider value={registerDialogFeedback}>
@@ -1159,17 +1159,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="brand"><BrandIcon size={25} /><span>EasyNote</span>
         <IconButton label="收起侧栏" onClick={() => setSidebar(false)}><PanelLeftClose size={16} /></IconButton>
       </div>
-      <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />新建笔记</button>
-      <nav aria-label="笔记分类">
-        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={17} />全部笔记</button>
-        <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />任务中心</button>
-        <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />归档笔记</button>
+      <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
+      <nav aria-label={t('note_categories')}>
+        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={17} />{t('all_notes')}</button>
+        <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
+        <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
-          onClick={() => setShareManagement(true)}><Share2 size={17} />分享管理</button>
-        <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={17} />回收站</button>
+          onClick={() => setShareManagement(true)}><Share2 size={17} />{t('sharing')}</button>
+        <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={17} />{t('trash')}</button>
       </nav>
-      <div className="section-label"><span>标签</span><IconButton label="管理标签" onClick={() => setTagManager(true)}><Tags size={14} /></IconButton></div>
-      <nav className="tag-nav" aria-label="标签">{book.tags.map((tag) =>
+      <div className="section-label"><span>{t('tags')}</span><IconButton label="管理标签" onClick={() => setTagManager(true)}><Tags size={14} /></IconButton></div>
+      <nav className="tag-nav" aria-label={t('tags')}>{book.tags.map((tag) =>
         <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
       </nav>
       <div className="sidebar-bottom">
@@ -1199,16 +1199,16 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
         {selectionMode && <div className="bulk-toolbar">
           <div className="bulk-toolbar-header">
-            <span>已选 {selected.size} 篇</span>
-            <button aria-label={allVisibleSelected ? '取消全选' : '全部选中'} disabled={!book.notes.length} onClick={toggleSelectAll}>
-              {allVisibleSelected ? <Square size={14} /> : <CheckSquare size={14} />}{allVisibleSelected ? '取消全选' : '全选'}
+            <span>{uiLanguage() === 'en' ? `${selected.size} selected` : `已选 ${selected.size} 篇`}</span>
+            <button aria-label={allVisibleSelected ? t('clear_selection') : t('select_all')} disabled={!book.notes.length} onClick={toggleSelectAll}>
+              {allVisibleSelected ? <Square size={14} /> : <CheckSquare size={14} />}{allVisibleSelected ? t('clear_selection') : t('select_all')}
             </button>
-            <button aria-label="退出批量选择" onClick={exitSelectionMode}><X size={14} />退出</button>
+            <button aria-label={t('exit_selection')} onClick={exitSelectionMode}><X size={14} />{t('cancel')}</button>
           </div>
           <div className="bulk-toolbar-actions">
-            <button disabled={!selected.size || disabled} onClick={applyBulkArchive}>{book.view === 'archive' ? <ArchiveRestore size={14} /> : <Archive size={14} />}{book.view === 'archive' ? '取消归档' : '归档'}</button>
-            <button disabled={!selected.size || disabled} onClick={() => setBulkTagOpen(true)}><Tag size={14} />加标签</button>
-            <button className="danger" disabled={!selected.size || disabled} onClick={() => setConfirmAction('bulk-trash')}><Trash2 size={14} />删除</button>
+            <button disabled={!selected.size || disabled} onClick={applyBulkArchive}>{book.view === 'archive' ? <ArchiveRestore size={14} /> : <Archive size={14} />}{book.view === 'archive' ? t('unarchive') : t('archive')}</button>
+            <button disabled={!selected.size || disabled} onClick={() => setBulkTagOpen(true)}><Tag size={14} />{t('加标签')}</button>
+            <button className="danger" disabled={!selected.size || disabled} onClick={() => setConfirmAction('bulk-trash')}><Trash2 size={14} />{t('delete')}</button>
           </div>
         </div>}
         <div
@@ -1257,22 +1257,22 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
       </header>
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
-        {book.loading ? <div className="empty-state">正在加载…</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? '没有匹配的笔记' : '暂无笔记'}</span></div> : visibleNotes.map((item) =>
+        {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
           <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
-            aria-label={`${item.title || '未命名笔记'}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
+            aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
             onClick={() => selectionMode ? toggleSelected(item.id) : void openNote(item.id)}>
-            <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || '未命名笔记', book.query)}</span>{item.pinned && <Pin size={12} />}</div>
-            <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || '空白笔记', book.query)}</div>
-            <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title="本机草稿" />}</div>
+            <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || t('untitled_note'), book.query)}</span>{item.pinned && <Pin size={12} />}</div>
+            <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || t('empty_note'), book.query)}</div>
+            <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title={t('local_draft')} />}</div>
           </button>)}
         {(hasHiddenNotes || book.nextOffset !== null) && <button className="load-more" onClick={() => {
           setVisibleNoteLimit((value) => value + 50);
           if (!hasHiddenNotes && book.nextOffset !== null) void run(book.loadMore);
-        }}>加载更多<ChevronDown size={14} /></button>}
+        }}>{t('加载更多')}<ChevronDown size={14} /></button>}
       </div>
-      <footer className="list-footer">{book.notes.length} 篇{book.nextOffset !== null ? '+' : ''}
-        {(!book.online || session.offline) && <span><WifiOff size={11} />离线</span>}
+      <footer className="list-footer">{book.notes.length} {uiLanguage() === 'en' ? 'notes' : '篇'}{book.nextOffset !== null ? '+' : ''}
+        {(!book.online || session.offline) && <span><WifiOff size={11} />{t('offline')}</span>}
       </footer>
       <button className="mobile-compose" aria-label="新建笔记" disabled={!!transfer || book.loading} onClick={() => void createNote()}><PenLine size={23} /></button>
     </section>
@@ -1299,9 +1299,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     <main className="workspace">
       <header className="workspace-toolbar">
         <IconButton label="返回笔记列表" className="icon-button mobile-back" onClick={() => setMobileNote(false)}><ArrowLeft size={18} /></IconButton>
-        <span className={`save-status ${book.pending.length ? 'pending' : ''}`}><span className="status-dot" />{uploading ? '上传文件中' : syncing ? '正在同步' : note ? book.status : '笔记空间'}</span>
+        <span className={`save-status ${book.pending.length ? 'pending' : ''}`}><span className="status-dot" />{uploading ? t('uploading_files') : syncing ? t('syncing') : note ? book.status : t('note_workspace')}</span>
         <div className="toolbar-right">
-          {note && <><div className="segmented" aria-label="显示模式"><button title="编辑" aria-label="编辑模式" aria-pressed={layout === 'edit'} onClick={() => editAt(Math.min(editorCursor.current, note.content.length))}><PenLine size={16} /></button><button title="预览" aria-label="预览模式" aria-pressed={layout === 'preview'} onClick={showPreview}><BookOpen size={16} /></button></div>
+          {note && <><div className="segmented" aria-label={t('显示模式')}><button title={t('edit')} aria-label={t('编辑模式')} aria-pressed={layout === 'edit'} onClick={() => editAt(Math.min(editorCursor.current, note.content.length))}><PenLine size={16} /></button><button title={t('preview')} aria-label={t('预览模式')} aria-pressed={layout === 'preview'} onClick={showPreview}><BookOpen size={16} /></button></div>
             <IconButton label="插入内部链接" className="icon-button toolbar-link-action" disabled={!!note.deletedAt || !!transfer} onClick={beginLinkInsertion}><Link2 size={17} /></IconButton>
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
             <IconButton label={wideDocument ? '使用阅读宽度' : '使用宽屏'} className="icon-button document-width-toggle" aria-pressed={wideDocument} onClick={toggleDocumentWidth}>{wideDocument ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</IconButton>
@@ -1320,12 +1320,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </header>
       {!dialogFeedbackTarget && errorFeedback}
       {note ? <>
-        {note.deletedAt && <div className="trash-banner"><span>已移入回收站</span><button onClick={() => setConfirmAction('purge')} disabled={disabled || book.pending.some((n) => n.id === note.id)}>永久删除</button></div>}
+        {note.deletedAt && <div className="trash-banner"><span>{t('已移入回收站')}</span><button onClick={() => setConfirmAction('purge')} disabled={disabled || book.pending.some((n) => n.id === note.id)}>{t('delete_permanently')}</button></div>}
         <div className="workspace-body">
           <div className="document-scroll">
             <div className={`document ${wideDocument ? 'wide' : ''}`}>
-              <input className="note-title" aria-label="笔记标题" placeholder="未命名笔记" maxLength={256} value={note.title} readOnly={!!note.deletedAt || !!transfer} onChange={(e) => setNoteFields({ title: e.target.value })} />
-              <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>修订 {note.revision}</span></div>
+              <input className="note-title" aria-label={t('note_title')} placeholder={t('untitled_note')} maxLength={256} value={note.title} readOnly={!!note.deletedAt || !!transfer} onChange={(e) => setNoteFields({ title: e.target.value })} />
+              <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>{uiLanguage() === 'en' ? `Rev ${note.revision}` : `修订 ${note.revision}`}</span></div>
               {layout === 'preview' || note.deletedAt || transfer
                 ? <Preview content={note.content} onImage={setLightbox} onNote={(id) => void openNote(id)}
                     onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
@@ -1339,14 +1339,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                     onTogglePreview={toggleLayout} onShowShortcuts={showShortcutHelp} searchQuery={book.query} />}
             </div>
           </div>
-          {inspector && <aside className="knowledge-panel" aria-label="笔记导航">
-            <header><span>大纲与链接</span><IconButton label="关闭笔记导航" onClick={() => setInspector(false)}><X size={15} /></IconButton></header>
-            <section><h3>大纲</h3>{outline.length ? <nav>{outline.map((heading, index) =>
+          {inspector && <aside className="knowledge-panel" aria-label={t('笔记导航')}>
+            <header><span>{t('outline_and_links')}</span><IconButton label="关闭笔记导航" onClick={() => setInspector(false)}><X size={15} /></IconButton></header>
+            <section><h3>{t('outline')}</h3>{outline.length ? <nav>{outline.map((heading, index) =>
               <button key={`${heading.offset}-${index}`} style={{ paddingLeft: `${8 + Math.max(0, heading.level - 1) * 10}px` }} onClick={() => goToHeading(heading.offset)}>{heading.text}</button>)}</nav>
-              : <div className="panel-empty">没有标题</div>}</section>
-            <section><h3>反向链接</h3>{backlinks.length ? <nav>{backlinks.map((item) =>
-              <button key={item.id} onClick={() => void openNote(item.id)}><Link2 size={13} />{item.title || '未命名笔记'}</button>)}</nav>
-              : <div className="panel-empty">没有反向链接</div>}</section>
+              : <div className="panel-empty">{t('no_headings')}</div>}</section>
+            <section><h3>{t('backlinks')}</h3>{backlinks.length ? <nav>{backlinks.map((item) =>
+              <button key={item.id} onClick={() => void openNote(item.id)}><Link2 size={13} />{item.title || t('untitled_note')}</button>)}</nav>
+              : <div className="panel-empty">{t('no_backlinks')}</div>}</section>
           </aside>}
         </div>
         <footer className="document-footer">
@@ -1359,8 +1359,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                   <button
                     type="button"
                     className="note-tag-remove"
-                    title={`去除标签 #${tag}`}
-                    aria-label={`去除标签 ${tag}`}
+                    title={t('去除标签 #{0}', tag)}
+                    aria-label={t('去除标签 {0}', tag)}
                     disabled={!!note.deletedAt || !!transfer}
                     onClick={() => {
                       const tags = note.tags.filter((t) => t !== tag);
@@ -1375,14 +1375,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <details className="tag-picker" ref={tagPickerRef} onToggle={(e) => {
               if (e.currentTarget.open) e.currentTarget.querySelector('input')?.focus();
             }}>
-              <summary className="tag-picker-summary" aria-label="添加标签">
+              <summary className="tag-picker-summary" aria-label={t('添加标签')}>
                 <Plus size={13} />
-                <span>{note.tags.length ? '添加' : '添加标签'}</span>
+                <span>{note.tags.length ? t('add') : t('添加标签')}</span>
               </summary>
-              <div className="tag-picker-popover" role="group" aria-label="选择或创建标签">
+              <div className="tag-picker-popover" role="group" aria-label={t('选择或创建标签')}>
                 <div className="tag-picker-search">
                   <input
-                    placeholder="搜索或回车新建标签…"
+                    placeholder={t('搜索或回车新建标签…')}
                     value={noteTagQuery}
                     onChange={(e) => setNoteTagQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -1397,7 +1397,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                         const val = noteTagQuery.trim();
                         if (!val) return;
                         if (val.length > 40 || val.includes(',') || val.includes('，')) {
-                          book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+                          book.setError(t('标签必须为 1-40 个字符，且不能包含逗号。'));
                           return;
                         }
                         if (note.tags.includes(val)) {
@@ -1405,7 +1405,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                           return;
                         }
                         if (note.tags.length >= 20) {
-                          book.setError('最多 20 个标签。');
+                          book.setError(t('最多 20 个标签。'));
                           return;
                         }
                         book.addTag(val);
@@ -1421,11 +1421,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                       onClick={() => {
                         const val = noteTagQuery.trim();
                         if (val.length > 40 || val.includes(',') || val.includes('，')) {
-                          book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+                          book.setError(t('标签必须为 1-40 个字符，且不能包含逗号。'));
                           return;
                         }
                         if (note.tags.length >= 20) {
-                          book.setError('最多 20 个标签。');
+                          book.setError(t('最多 20 个标签。'));
                           return;
                         }
                         book.addTag(val);
@@ -1433,12 +1433,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                         setNoteTagQuery('');
                       }}
                     >
-                      新建并打标
+                      {t('新建并打标')}
                     </button>
                   )}
                   <IconButton
                     type="button"
-                    label="关闭"
+                    label="close"
                     className="icon-button tag-picker-close-btn"
                     onClick={() => {
                       if (tagPickerRef.current) tagPickerRef.current.open = false;
@@ -1468,30 +1468,30 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                       </label>
                     ))}
                   {![...new Set([...book.tags, ...note.tags])].filter((t) => !noteTagQuery.trim() || t.toLocaleLowerCase().includes(noteTagQuery.trim().toLocaleLowerCase())).length && (
-                    <span className="tag-picker-empty">{noteTagQuery.trim() ? '按回车创建新标签' : '暂无已有标签'}</span>
+                    <span className="tag-picker-empty">{noteTagQuery.trim() ? t('按回车创建新标签') : t('no_tags')}</span>
                   )}
                 </div>
               </div>
             </details>
           </div>
-          <span className="word-count">{note.content.length.toLocaleString()} 字符</span>
-          <IconButton label={pdfProgress || '导出当前笔记为 PDF'} className="icon-button mobile-pdf-action" disabled={printing}
+          <span className="word-count">{t('{0} 字符', note.content.length.toLocaleString())}</span>
+          <IconButton label={pdfProgress || t('导出当前笔记为 PDF')} className="icon-button mobile-pdf-action" disabled={printing}
             onClick={exportCurrentNote}>{printing ? <LoaderCircle className="spin" size={17} /> : <Printer size={17} />}</IconButton>
-          <IconButton label="只读分享" className="icon-button mobile-share-action"
+          <IconButton label={t('只读分享')} className="icon-button mobile-share-action"
             disabled={disabled || note.revision === 0 || !!note.deletedAt || book.pending.some((item) => item.id === note.id)}
             onClick={() => setSharing(true)}><Share2 size={17} /></IconButton>
-          <IconButton label="插入附件" disabled={uploading || !!note.deletedAt || !!transfer || !book.online} onClick={() => {
+          <IconButton label={t('插入附件')} disabled={uploading || !!note.deletedAt || !!transfer || !book.online} onClick={() => {
             pendingInsertion.current = editor.current?.markInsertion() ?? null;
             attachmentInput.current?.click();
           }}><Paperclip size={18} /></IconButton>
-          <IconButton label="插入图片" disabled={uploading || !!note.deletedAt || !!transfer || !book.online} onClick={() => {
+          <IconButton label={t('插入图片')} disabled={uploading || !!note.deletedAt || !!transfer || !book.online} onClick={() => {
             pendingInsertion.current = editor.current?.markInsertion() ?? null;
             imageInput.current?.click();
           }}><ImagePlus size={19} /></IconButton>
           <input hidden ref={attachmentInput} type="file" accept=".pdf,.md,.txt,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json" multiple onChange={(e) => void insertFiles(Array.from(e.target.files ?? []))} />
           <input hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => void insertFiles(Array.from(e.target.files ?? []))} />
         </footer>
-      </> : <div className="workspace-empty"><PenLine size={36} /><h2>你的笔记</h2><button className="primary" disabled={book.loading || !!transfer} onClick={() => void createNote()}><Plus size={16} />新建笔记</button></div>}
+      </> : <div className="workspace-empty"><PenLine size={36} /><h2>{t('你的笔记')}</h2><button className="primary" disabled={book.loading || !!transfer} onClick={() => void createNote()}><Plus size={16} />{t('新建笔记')}</button></div>}
     </main>
     {!dialogFeedbackTarget && noticeFeedback}
     {dialogFeedbackTarget && createPortal(<>{errorFeedback}{noticeFeedback}</>, dialogFeedbackTarget)}
@@ -1499,85 +1499,85 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       const files = Array.from(e.target.files ?? []);
       if (files.length) void transferAction(() =>
         importExternalFiles(files, session.config, setTransfer, book.findDuplicates), ({ imported, skipped }) =>
-        imported ? `已导入 ${imported} 篇${skipped ? `，跳过 ${skipped} 篇重复笔记` : '笔记'}` : `未导入：${skipped} 篇笔记已存在`);
+        imported ? (skipped ? t('已导入 {0} 篇，跳过 {1} 篇重复笔记', imported, skipped) : t('已导入 {0} 篇笔记', imported)) : t('未导入：{0} 篇笔记已存在', skipped));
       e.target.value = '';
     }} />
     <input hidden ref={importFolderInput} type="file" multiple {...{ webkitdirectory: '' }} onChange={(e) => {
       const files = Array.from(e.target.files ?? []);
       if (files.length) void transferAction(() =>
         importExternalFiles(files, session.config, setTransfer, book.findDuplicates), ({ imported, skipped }) =>
-        imported ? `已导入 ${imported} 篇${skipped ? `，跳过 ${skipped} 篇重复笔记` : '笔记'}` : `未导入：${skipped} 篇笔记已存在`);
+        imported ? (skipped ? t('已导入 {0} 篇，跳过 {1} 篇重复笔记', imported, skipped) : t('已导入 {0} 篇笔记', imported)) : t('未导入：{0} 篇笔记已存在', skipped));
       e.target.value = '';
     }} />
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
-      <nav className="mobile-navigation-list" aria-label="移动端笔记分类">
-        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />全部笔记</button>
-        <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />任务中心</button>
-        <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />归档笔记</button>
+      <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
+        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
+        <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
+        <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
-          onClick={() => { setMobileNavigation(false); setShareManagement(true); }}><Share2 size={18} />分享管理</button>
-        <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={18} />回收站</button>
+          onClick={() => { setMobileNavigation(false); setShareManagement(true); }}><Share2 size={18} />{t('sharing')}</button>
+        <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={18} />{t('trash')}</button>
       </nav>
       {book.tags.length > 0 && <>
-        <div className="mobile-navigation-label">标签</div>
-        <nav className="mobile-navigation-list" aria-label="移动端标签">{book.tags.map((tag) =>
+        <div className="mobile-navigation-label">{t('tags')}</div>
+        <nav className="mobile-navigation-list" aria-label={t('mobile_tags')}>{book.tags.map((tag) =>
           <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
         </nav>
       </>}
       <div className="mobile-navigation-actions">
-        <button onClick={() => { setMobileNavigation(false); setCommandQuery(''); setCommandPalette(true); }}><Command size={18} />快速跳转</button>
+        <button onClick={() => { setMobileNavigation(false); setCommandQuery(''); setCommandPalette(true); }}><Command size={18} />{t('quick_open')}</button>
         {book.view !== 'trash' && <button onClick={() => {
           setMobileNavigation(false);
           setSelectionMode(true);
           setSelected(new Set());
-        }}><CheckSquare size={18} />批量选择</button>}
-        <button disabled={book.busy || syncing} onClick={() => { setMobileNavigation(false); void syncNow(false); }}><RefreshCw size={18} />同步全部</button>
+        }}><CheckSquare size={18} />{t('select_multiple')}</button>}
+        <button disabled={book.busy || syncing} onClick={() => { setMobileNavigation(false); void syncNow(false); }}><RefreshCw size={18} />{t('sync_all')}</button>
         {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
-          <button className="danger" disabled={disabled || book.pending.length > 0} onClick={() => { setMobileNavigation(false); setConfirmAction('purge-all'); }}><Trash2 size={18} />全部永久删除</button>}
+          <button className="danger" disabled={disabled || book.pending.length > 0} onClick={() => { setMobileNavigation(false); setConfirmAction('purge-all'); }}><Trash2 size={18} />{t('全部永久删除')}</button>}
         <button onClick={() => { setMobileNavigation(false); setSettings(true); }}><Settings size={18} />{t('settings')}</button>
       </div>
     </Modal>}
     {mobileNoteActions && note && <Modal title="笔记操作" className="mobile-actions-dialog" close={() => setMobileNoteActions(false)}>
       <div className="mobile-action-list">
-        <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void syncNow(); }}><Save size={18} />同步并保存版本</button>
-        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); beginLinkInsertion(); }}><Link2 size={18} />插入内部链接</button>
-        <button onClick={() => { setMobileNoteActions(false); setInspector((value) => !value); }}><ListTree size={18} />大纲与反向链接</button>
-        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); setNoteFields({ pinned: !note.pinned }); }}><Pin size={18} fill={note.pinned ? 'currentColor' : 'none'} />{note.pinned ? '取消置顶' : '置顶'}</button>
-        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); setNoteFields({ archived: !note.archived }); }}>{note.archived ? <ArchiveRestore size={18} /> : <Archive size={18} />}{note.archived ? '取消归档' : '归档'}</button>
+        <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void syncNow(); }}><Save size={18} />{t('sync_and_save_version')}</button>
+        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); beginLinkInsertion(); }}><Link2 size={18} />{t('insert_internal_link')}</button>
+        <button onClick={() => { setMobileNoteActions(false); setInspector((value) => !value); }}><ListTree size={18} />{t('outline_and_links')}</button>
+        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); setNoteFields({ pinned: !note.pinned }); }}><Pin size={18} fill={note.pinned ? 'currentColor' : 'none'} />{note.pinned ? t('取消置顶') : t('置顶')}</button>
+        <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); setNoteFields({ archived: !note.archived }); }}>{note.archived ? <ArchiveRestore size={18} /> : <Archive size={18} />}{note.archived ? t('取消归档') : t('归档')}</button>
         <button className="mobile-share-action" disabled={disabled || note.revision === 0 || !!note.deletedAt || book.pending.some((item) => item.id === note.id)}
-          onClick={() => { setMobileNoteActions(false); setSharing(true); }}><Share2 size={18} />只读分享</button>
-        <button className="mobile-pdf-action" disabled={printing} onClick={() => { setMobileNoteActions(false); exportCurrentNote(); }}><Printer size={18} />导出为 PDF</button>
-        <button disabled={disabled || note.revision === 0} onClick={() => { setMobileNoteActions(false); openHistory(); }}><History size={18} />历史版本</button>
+          onClick={() => { setMobileNoteActions(false); setSharing(true); }}><Share2 size={18} />{t('readonly_share')}</button>
+        <button className="mobile-pdf-action" disabled={printing} onClick={() => { setMobileNoteActions(false); exportCurrentNote(); }}><Printer size={18} />{t('导出为 PDF')}</button>
+        <button disabled={disabled || note.revision === 0} onClick={() => { setMobileNoteActions(false); openHistory(); }}><History size={18} />{t('version_history')}</button>
         {!note.deletedAt
-          ? <button className="danger" disabled={disabled} onClick={() => { setMobileNoteActions(false); setConfirmAction('trash'); }}><Trash2 size={18} />移入回收站</button>
-          : <button onClick={() => { setMobileNoteActions(false); setNoteFields({ deletedAt: null }); }}><RotateCcw size={18} />恢复笔记</button>}
+          ? <button className="danger" disabled={disabled} onClick={() => { setMobileNoteActions(false); setConfirmAction('trash'); }}><Trash2 size={18} />{t('move_to_trash')}</button>
+          : <button onClick={() => { setMobileNoteActions(false); setNoteFields({ deletedAt: null }); }}><RotateCcw size={18} />{t('restore_note')}</button>}
       </div>
     </Modal>}
     {settings && <Modal title="设置" close={() => { if (!transfer) setSettings(false); }}>
       <div className="setting-row"><span>语言/Language</span><select aria-label={t('language')} value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
         <option value="zh">中文</option><option value="en">English</option>
       </select></div>
-      <div className="setting-row"><span>深色外观</span><button role="switch" aria-checked={dark} aria-label="深色外观" className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
-      <div className="setting-row"><span>离线笔记库{book.offlineLibrary ? (uiLanguage() === 'en' ? ` · ${book.offlineCount} notes` : ` · ${book.offlineCount} 篇`) : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label="离线笔记库" className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
-      {installApp && <div className="setting-row"><span>应用</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />安装 EasyNote</button></div>}
-      <div className="setting-row"><span>数据</span><div className="button-group">
-        <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), '备份已下载')}><Download size={16} />导出 ZIP</button>
-        <button disabled={!!transfer || !book.online} onClick={() => importInput.current?.click()}><Upload size={16} />导入文件</button>
-        <button disabled={!!transfer || !book.online} onClick={() => importFolderInput.current?.click()}><FolderOpen size={16} />导入目录</button>
+      <div className="setting-row"><span>{t('深色外观')}</span><button role="switch" aria-checked={dark} aria-label={t('深色外观')} className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
+      <div className="setting-row"><span>{t('离线笔记库')}{book.offlineLibrary ? (uiLanguage() === 'en' ? ` · ${book.offlineCount} notes` : ` · ${book.offlineCount} 篇`) : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label={t('离线笔记库')} className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
+      {installApp && <div className="setting-row"><span>{t('app')}</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />{t('安装 EasyNote')}</button></div>}
+      <div className="setting-row"><span>{t('数据')}</span><div className="button-group">
+        <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), t('备份已下载'))}><Download size={16} />{t('导出 ZIP')}</button>
+        <button disabled={!!transfer || !book.online} onClick={() => importInput.current?.click()}><Upload size={16} />{t('导入文件')}</button>
+        <button disabled={!!transfer || !book.online} onClick={() => importFolderInput.current?.click()}><FolderOpen size={16} />{t('导入目录')}</button>
         <button disabled={!!transfer || !book.pending.length} onClick={() => {
-          setTransfer('正在准备草稿…');
-          void exportLocalDrafts(session.user!.id, setTransfer).then((count) => showNotice(`已导出 ${count} 篇本机草稿`))
+          setTransfer(t('正在准备草稿…'));
+          void exportLocalDrafts(session.user!.id, setTransfer).then((count) => showNotice(t('drafts_exported', count)))
             .catch((error: unknown) => book.setError(String(error))).finally(() => setTransfer(''));
-        }}><Download size={16} />导出草稿</button>
+        }}><Download size={16} />{t('导出草稿')}</button>
       </div></div>
-      <div className="setting-row"><span>账户安全</span><button disabled={disabled || session.offline} onClick={() => { setSettings(false); setAccountSecurity(true); }}><ShieldCheck size={16} />管理</button></div>
-      {session.user!.role === 'admin' && <div className="setting-row"><span>用户与注册</span><button disabled={disabled || session.offline}
-        onClick={() => { setSettings(false); setUserManagement(true); }}><Users size={16} />管理用户</button></div>}
+      <div className="setting-row"><span>{t('账户安全')}</span><button disabled={disabled || session.offline} onClick={() => { setSettings(false); setAccountSecurity(true); }}><ShieldCheck size={16} />{t('管理')}</button></div>
+      {session.user!.role === 'admin' && <div className="setting-row"><span>{t('用户与注册')}</span><button disabled={disabled || session.offline}
+        onClick={() => { setSettings(false); setUserManagement(true); }}><Users size={16} />{t('管理用户')}</button></div>}
       <AiAccess disabled={disabled || !book.online || !!session.offline} reportError={book.setError} notify={showNotice} />
       <details className="import-guide">
-        <summary>查看导入格式示例</summary>
-        <p>请选择 EasyNote 导出的完整 ZIP，不要解压后逐个选择笔记文件。</p>
-        <p>也可导入 Obsidian 目录、通用 Markdown/TXT ZIP 或多个 Markdown/TXT 文件；本地 Wiki 链接、相对链接和受支持附件会自动转换。</p>
+        <summary>{t('查看导入格式示例')}</summary>
+        <p>{t('请选择 EasyNote 导出的完整 ZIP，不要解压后逐个选择笔记文件。')}</p>
+        <p>{t('也可导入 Obsidian 目录、通用 Markdown/TXT ZIP 或多个 Markdown/TXT 文件；本地 Wiki 链接、相对链接和受支持附件会自动转换。')}</p>
         <pre>{uiLanguage() === 'en' ? `easynote-YYYY-MM-DD.zip
   manifest.json
   notes/
@@ -1623,15 +1623,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   ],
   "files": []
 }`}</pre>
-        <p>笔记文件优先使用标题命名，重名时自动编号；ZIP 根据清单恢复原标题。单独导入 Markdown 或 TXT 时，正文首个非空行作为标题。正文完全一致或完全空白的重复笔记会自动跳过。</p>
+        <p>{t('笔记文件优先使用标题命名，重名时自动编号；ZIP 根据清单恢复原标题。单独导入 Markdown 或 TXT 时，正文首个非空行作为标题。正文完全一致或完全空白的重复笔记会自动跳过。')}</p>
       </details>
       {transfer && <div className="transfer-progress" role="status">{transfer}</div>}
       <div className="setting-row"><span>{session.user!.username}</span><button disabled={disabled} onClick={() => void run(async () => {
-        if (book.pending.length) throw new Error('本机还有未上传草稿，请先完成保存。');
+        if (book.pending.length) throw new Error(t('本机还有未上传草稿，请先完成保存。'));
         if (book.online && !session.offline) await api.logout();
         await logout();
-      })}><LogOut size={16} />退出登录</button></div>
-      <div className="setting-row"><span>版本</span><span className="setting-value">EasyNote {__EASYNOTE_VERSION__}</span></div>
+      })}><LogOut size={16} />{t('退出登录')}</button></div>
+      <div className="setting-row"><span>{t('版本')}</span><span className="setting-value">EasyNote {__EASYNOTE_VERSION__}</span></div>
     </Modal>}
     {accountSecurity && <Modal title="账户安全" close={() => setAccountSecurity(false)}>
       <AccountSecurity username={session.user!.username} disabled={disabled || !!book.pending.length || !book.online || !!session.offline}
@@ -1644,12 +1644,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {taskCenter && <Modal title="任务中心" close={() => setTaskCenter(false)}>
       <div className="task-center">
-        {tasksLoading ? <div className="panel-empty">正在汇总待办…</div> : !tasks.length
-          ? <div className="panel-empty">没有未完成的待办事项</div>
+        {tasksLoading ? <div className="panel-empty">{t('正在汇总待办…')}</div> : !tasks.length
+          ? <div className="panel-empty">{t('没有未完成的待办事项')}</div>
           : tasks.map((task) => <button key={`${task.noteId}:${task.offset}`} onClick={() => void openTask(task)}>
             <span className="task-center-copy">
               <span>{task.text}</span>
-              <small>{task.noteTitle || '未命名笔记'} · 第 {task.line} 行{task.archived ? ' · 已归档' : ''}</small>
+              <small>{task.noteTitle || t('untitled_note')} · {t('第 {0} 行', task.line)}{task.archived ? ` · ${t('已归档')}` : ''}</small>
             </span>
             <ChevronRight size={16} aria-hidden="true" />
           </button>)}
@@ -1664,7 +1664,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         notify={showNotice} reportError={book.setError} />
     </Modal>}
     {commandPalette && <Modal title="快速跳转" close={() => setCommandPalette(false)}>
-      <label className="command-search"><Search size={16} /><input autoFocus aria-label="快速跳转搜索" value={commandQuery}
+      <label className="command-search"><Search size={16} /><input autoFocus aria-label={t('快速跳转搜索')} value={commandQuery}
         onChange={(event) => setCommandQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1680,20 +1680,20 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         {commandActions.map((command) => <button key={command.id} disabled={command.disabled} onClick={command.action}>
           {command.icon}<span>{command.label}</span>{command.shortcut && <kbd>{command.shortcut}</kbd>}
         </button>)}
-        {commandNotes.map((item) => <button key={item.id} onClick={() => void openNote(item.id)}><FileText size={16} /><span>{item.title || '未命名笔记'}</span></button>)}
+        {commandNotes.map((item) => <button key={item.id} onClick={() => void openNote(item.id)}><FileText size={16} /><span>{item.title || t('untitled_note')}</span></button>)}
       </div>
     </Modal>}
     {shortcutHelp && <Modal title="快捷键" close={() => setShortcutHelp(false)}>
       <div className="shortcut-list">
-        <div><span>打开快速跳转</span><kbd>Cmd/Ctrl+K</kbd></div>
-        <div><span>同步并更新历史版本</span><kbd>Cmd/Ctrl+S</kbd></div>
-        <div><span>编辑 / 预览</span><kbd>Ctrl+E / Cmd+Enter</kbd></div>
-        <div><span>导出当前笔记为 PDF</span><kbd>Cmd/Ctrl+P</kbd></div>
-        <div><span>粗体</span><kbd>Cmd/Ctrl+B</kbd></div>
-        <div><span>斜体</span><kbd>Cmd/Ctrl+I</kbd></div>
-        <div><span>快捷键帮助</span><kbd>Cmd/Ctrl+/</kbd></div>
-        <div><span>关闭弹窗</span><kbd>Esc</kbd></div>
-        <div><span>命令或笔记列表导航</span><kbd>↑ / ↓</kbd></div>
+        <div><span>{t('打开快速跳转')}</span><kbd>Cmd/Ctrl+K</kbd></div>
+        <div><span>{t('sync_and_save_version')}</span><kbd>Cmd/Ctrl+S</kbd></div>
+        <div><span>{t('编辑 / 预览')}</span><kbd>Ctrl+E / Cmd+Enter</kbd></div>
+        <div><span>{t('导出当前笔记为 PDF')}</span><kbd>Cmd/Ctrl+P</kbd></div>
+        <div><span>{t('粗体')}</span><kbd>Cmd/Ctrl+B</kbd></div>
+        <div><span>{t('斜体')}</span><kbd>Cmd/Ctrl+I</kbd></div>
+        <div><span>{t('快捷键帮助')}</span><kbd>Cmd/Ctrl+/</kbd></div>
+        <div><span>{t('关闭弹窗')}</span><kbd>Esc</kbd></div>
+        <div><span>{t('命令或笔记列表导航')}</span><kbd>↑ / ↓</kbd></div>
       </div>
     </Modal>}
     {linkPicker && <Modal title="插入内部链接" close={() => {
@@ -1701,9 +1701,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       pendingInsertion.current = null;
       setLinkPicker(false);
     }}>
-      <label className="command-search"><Search size={16} /><input autoFocus aria-label="搜索链接目标" value={linkQuery} onChange={(event) => setLinkQuery(event.target.value)} /></label>
+      <label className="command-search"><Search size={16} /><input autoFocus aria-label={t('搜索链接目标')} value={linkQuery} onChange={(event) => setLinkQuery(event.target.value)} /></label>
       <div className="command-list">{linkNotes.map((item) =>
-        <button key={item.id} onClick={() => insertNoteLink(item)}><Link2 size={16} /><span>{item.title || '未命名笔记'}</span></button>)}</div>
+        <button key={item.id} onClick={() => insertNoteLink(item)}><Link2 size={16} /><span>{item.title || t('untitled_note')}</span></button>)}</div>
     </Modal>}
     {tagManager && <Modal title="管理标签" className="tag-manager-dialog" close={() => {
       setTagManager(false);
@@ -1717,31 +1717,31 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           const val = newTagInput.trim();
           if (!val) return;
           if (val.length > 40 || val.includes(',') || val.includes('，')) {
-            book.setError('标签必须为 1-40 个字符，且不能包含逗号。');
+            book.setError(t('标签必须为 1-40 个字符，且不能包含逗号。'));
             return;
           }
           if (book.tags.includes(val)) {
-            book.setError('该标签已存在。');
+            book.setError(t('该标签已存在。'));
             return;
           }
           book.addTag(val);
           setNewTagInput('');
-          showNotice(`已新增标签 #${val}`);
+          showNotice(t('已新增标签 #{0}', val));
         }}>
           <input
-            placeholder="输入新标签名称…"
+            placeholder={t('输入新标签名称…')}
             maxLength={40}
             value={newTagInput}
             onChange={(e) => setNewTagInput(e.target.value)}
           />
           <button type="submit" className="primary" disabled={disabled || !newTagInput.trim()}>
-            <Plus size={15} />新增
+            <Plus size={15} />{t('add')}
           </button>
         </form>
 
         <div className="tag-manager-list" role="list">
           {book.tags.length === 0 ? (
-            <div className="tag-manager-empty">暂无标签，在上方输入名称创建新标签</div>
+            <div className="tag-manager-empty">{t('暂无标签，在上方输入名称创建新标签')}</div>
           ) : (
             book.tags.map((tag) => {
               if (editingTag === tag) {
@@ -1758,8 +1758,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                       }}
                     />
                     <div className="tag-manager-row-actions">
-                      <button className="primary" disabled={disabled || !editingTagValue.trim()} onClick={() => void handleSaveEditTag()}>保存</button>
-                      <button onClick={() => setEditingTag(null)}>取消</button>
+                      <button className="primary" disabled={disabled || !editingTagValue.trim()} onClick={() => void handleSaveEditTag()}>{t('save')}</button>
+                      <button onClick={() => setEditingTag(null)}>{t('cancel')}</button>
                     </div>
                   </div>
                 );
@@ -1768,13 +1768,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                 const targetOptions = book.tags.filter((t) => t !== tag);
                 return (
                   <div key={tag} className="tag-manager-row merging" role="listitem">
-                    <span className="tag-manager-label">将 <strong>#{tag}</strong> 合并到：</span>
+                    <span className="tag-manager-label">{t('将 #{0} 合并到：', tag)}</span>
                     <select value={mergingTarget} onChange={(e) => setMergingTarget(e.target.value)}>
                       {targetOptions.map((t) => <option key={t} value={t}>#{t}</option>)}
                     </select>
                     <div className="tag-manager-row-actions">
-                      <button className="primary" disabled={disabled || !mergingTarget} onClick={() => void handleConfirmMergeTag()}>确认合并</button>
-                      <button onClick={() => setMergingTag(null)}>取消</button>
+                      <button className="primary" disabled={disabled || !mergingTarget} onClick={() => void handleConfirmMergeTag()}>{t('确认合并')}</button>
+                      <button onClick={() => setMergingTag(null)}>{t('cancel')}</button>
                     </div>
                   </div>
                 );
@@ -1782,10 +1782,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               if (deletingTag === tag) {
                 return (
                   <div key={tag} className="tag-manager-row deleting" role="listitem">
-                    <span className="tag-manager-label danger-text">从所有笔记中删除 <strong>#{tag}</strong>？</span>
+                    <span className="tag-manager-label danger-text">{t('从所有笔记中删除 #{0}？', tag)}</span>
                     <div className="tag-manager-row-actions">
-                      <button className="danger" disabled={disabled} onClick={() => void handleConfirmDeleteTag()}>确认删除</button>
-                      <button onClick={() => setDeletingTag(null)}>取消</button>
+                      <button className="danger" disabled={disabled} onClick={() => void handleConfirmDeleteTag()}>{t('确认删除')}</button>
+                      <button onClick={() => setDeletingTag(null)}>{t('cancel')}</button>
                     </div>
                   </div>
                 );
@@ -1804,7 +1804,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                         setDeletingTag(null);
                       }}
                     >
-                      <Pencil size={13} />编辑
+                      <Pencil size={13} />{t('edit')}
                     </button>
                     <button
                       type="button"
@@ -1817,7 +1817,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                         setDeletingTag(null);
                       }}
                     >
-                      <GitMerge size={13} />合并
+                      <GitMerge size={13} />{t('merge')}
                     </button>
                     <button
                       type="button"
@@ -1829,7 +1829,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                         setMergingTag(null);
                       }}
                     >
-                      <Trash2 size={13} />删除
+                      <Trash2 size={13} />{t('delete')}
                     </button>
                   </div>
                 </div>
@@ -1844,80 +1844,80 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           setEditingTag(null);
           setMergingTag(null);
           setDeletingTag(null);
-        }}>完成</button>
+        }}>{t('done')}</button>
       </div>
     </Modal>}
     {bulkTagOpen && <Modal title="批量添加标签" close={() => setBulkTagOpen(false)}>
-      <label className="single-field">标签<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
-      <div className="dialog-actions"><button onClick={() => setBulkTagOpen(false)}>取消</button><button className="primary" disabled={!bulkTag.trim() || disabled} onClick={applyBulkTag}>添加</button></div>
+      <label className="single-field">{t('tags')}<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
+      <div className="dialog-actions"><button onClick={() => setBulkTagOpen(false)}>{t('cancel')}</button><button className="primary" disabled={!bulkTag.trim() || disabled} onClick={applyBulkTag}>{t('add')}</button></div>
     </Modal>}
     {book.conflict && <Modal title="检测到版本冲突" className="conflict-dialog" close={() => book.setConflict(null)}>
       <div className="conflict-summary">
-        <strong>{book.conflict.local.title || '未命名笔记'}</strong>
+        <strong>{book.conflict.local.title || t('untitled_note')}</strong>
         <span>{book.conflict.remote
-          ? `本机基于修订 ${book.conflict.base?.revision ?? book.conflict.local.revision}，云端已到修订 ${book.conflict.remote.revision}`
-          : '云端笔记已永久删除，本机草稿仍然安全保留。'}</span>
+          ? t('本机基于修订 {0}，云端已到修订 {1}', book.conflict.base?.revision ?? book.conflict.local.revision, book.conflict.remote.revision)
+          : t('云端笔记已永久删除，本机草稿仍然安全保留。')}</span>
       </div>
       {book.conflict.remote && <div className="conflict-fields">
         {book.conflict.fields.map((field) => <section key={field}>
-          <h3>{conflictFieldName[field]}</h3>
+          <h3>{t(conflictFieldName[field])}</h3>
           <div className="conflict-versions">
-            <div><span>本机修改</span><pre>{conflictFieldValue(book.conflict!.local, field)}</pre></div>
-            <div><span>云端修改</span><pre>{conflictFieldValue(book.conflict!.remote!, field)}</pre></div>
+            <div><span>{t('本机修改')}</span><pre>{conflictFieldValue(book.conflict!.local, field)}</pre></div>
+            <div><span>{t('云端修改')}</span><pre>{conflictFieldValue(book.conflict!.remote!, field)}</pre></div>
           </div>
         </section>)}
       </div>}
       <div className="dialog-actions conflict-actions">
-        <button onClick={() => book.setConflict(null)}>稍后处理</button>
+        <button onClick={() => book.setConflict(null)}>{t('稍后处理')}</button>
         {book.conflict.remote
           ? <>
-            <button onClick={() => void run(book.conflictCopy)}>另存副本</button>
-            <button onClick={() => void run(() => book.resolveConflict('remote'))}>采用云端</button>
-            <button className="primary" onClick={() => void run(() => book.resolveConflict('local'))}>采用本机</button>
+            <button onClick={() => void run(book.conflictCopy)}>{t('另存副本')}</button>
+            <button onClick={() => void run(() => book.resolveConflict('remote'))}>{t('采用云端')}</button>
+            <button className="primary" onClick={() => void run(() => book.resolveConflict('local'))}>{t('采用本机')}</button>
           </>
           : <>
-            <button onClick={() => void run(book.discardConflict)}>放弃草稿</button>
-            <button className="primary" onClick={() => void run(book.conflictCopy)}>另存为新笔记</button>
+            <button onClick={() => void run(book.discardConflict)}>{t('放弃草稿')}</button>
+            <button className="primary" onClick={() => void run(book.conflictCopy)}>{t('另存为新笔记')}</button>
           </>}
       </div>
     </Modal>}
     {versionList && versionNoteId === note?.id && <Modal title="历史版本" close={() => { setVersionList(null); setChosenVersion(null); }}>
-      <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>修订 {version.revision} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
+      <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>{t('修订 {0}', version.revision)} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
       {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={dark} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
-        <RotateCcw size={15} />恢复此版本
+        <RotateCcw size={15} />{t('恢复此版本')}
       </button></div></>}
     </Modal>}
-    {confirmAction && <Modal title={confirmAction === 'purge-all' ? '永久删除全部笔记？' : confirmAction === 'purge' ? '永久删除这篇笔记？' :
-      confirmAction === 'bulk-trash' ? `将 ${selected.size} 篇笔记移入回收站？` : '移入回收站？'} close={() => setConfirmAction(null)}>
-      <div className="confirm-title">{confirmAction === 'purge-all' ? '将永久删除回收站中的全部笔记，此操作无法撤销。' :
-        confirmAction === 'bulk-trash' ? `选中的 ${selected.size} 篇笔记将移入回收站，可稍后恢复。` : note?.title || '未命名笔记'}</div>
-      <div className="dialog-actions"><button onClick={() => setConfirmAction(null)}>取消</button><button className={confirmAction === 'trash' ? 'primary' : 'danger'} onClick={() => void run(async () => {
+    {confirmAction && <Modal title={confirmAction === 'purge-all' ? t('永久删除全部笔记？') : confirmAction === 'purge' ? t('永久删除这篇笔记？') :
+      confirmAction === 'bulk-trash' ? t('将 {0} 篇笔记移入回收站？', selected.size) : t('移入回收站？')} close={() => setConfirmAction(null)}>
+      <div className="confirm-title">{confirmAction === 'purge-all' ? t('将永久删除回收站中的全部笔记，此操作无法撤销。') :
+        confirmAction === 'bulk-trash' ? t('选中的 {0} 篇笔记将移入回收站，可稍后恢复。', selected.size) : note?.title || t('untitled_note')}</div>
+      <div className="dialog-actions"><button onClick={() => setConfirmAction(null)}>{t('cancel')}</button><button className={confirmAction === 'trash' ? 'primary' : 'danger'} onClick={() => void run(async () => {
         if (confirmAction === 'purge-all') {
           const deleted = await book.purgeTrash();
-          showNotice(`已永久删除 ${deleted} 篇笔记`);
+          showNotice(t('已永久删除 {0} 篇笔记', deleted));
         } else if (confirmAction === 'purge') await book.purge();
         else if (confirmAction === 'bulk-trash') await applyBulkTrash();
         else await moveCurrentToTrash();
         setConfirmAction(null);
-      })}>{confirmAction === 'purge-all' ? '全部永久删除' : confirmAction === 'purge' ? '永久删除' :
-        confirmAction === 'bulk-trash' ? '删除' : '移入回收站'}</button></div>
+      })}>{confirmAction === 'purge-all' ? t('全部永久删除') : confirmAction === 'purge' ? t('永久删除') :
+        confirmAction === 'bulk-trash' ? t('delete') : t('move_to_trash')}</button></div>
     </Modal>}
     {pdfExport && <Modal title="导出为 PDF" className="pdf-export-dialog" close={closePdfExport}>
       <div className="pdf-export-layout">
         <PdfPagePreview pages={pdfPreviewPages} progress={pdfProgress} error={pdfPreviewError} />
         <div className="pdf-export-sidebar">
           <div className="pdf-export-form">
-            <label className="single-field"><span>文件名</span><span className="pdf-name-input">
-              <input aria-label="PDF 文件名" maxLength={120} value={pdfName}
+            <label className="single-field"><span>{t('文件名')}</span><span className="pdf-name-input">
+              <input aria-label={t('PDF 文件名')} maxLength={120} value={pdfName}
                 onChange={(event) => setPdfName(event.target.value)} /><span>.pdf</span>
             </span></label>
             <div className="pdf-export-options">
-              <label><span>纸张</span><select aria-label="PDF 纸张" value={pdfOptions.pageSize} disabled={printing}
+              <label><span>{t('纸张')}</span><select aria-label={t('PDF 纸张')} value={pdfOptions.pageSize} disabled={printing}
                 onChange={(event) => setPdfOptions((value) => ({ ...value, pageSize: event.target.value as PdfExportOptions['pageSize'] }))}>
                 <option value="A4">A4</option>
                 <option value="LETTER">Letter</option>
               </select></label>
-              <label><span>缩放</span><select aria-label="PDF 缩放" value={pdfOptions.scale} disabled={printing}
+              <label><span>{t('缩放')}</span><select aria-label={t('PDF 缩放')} value={pdfOptions.scale} disabled={printing}
                 onChange={(event) => setPdfOptions((value) => ({ ...value, scale: Number(event.target.value) }))}>
                 <option value="85">85%</option>
                 <option value="100">100%</option>
@@ -1925,27 +1925,27 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               </select></label>
             </div>
             <fieldset className="pdf-orientation" disabled={printing}>
-              <legend>方向</legend>
-              <div className="segmented" aria-label="PDF 方向">
+              <legend>{t('方向')}</legend>
+              <div className="segmented" aria-label={t('PDF 方向')}>
                 <button type="button" aria-pressed={pdfOptions.orientation === 'portrait'}
-                  onClick={() => setPdfOptions((value) => ({ ...value, orientation: 'portrait' }))}>纵向</button>
+                  onClick={() => setPdfOptions((value) => ({ ...value, orientation: 'portrait' }))}>{t('纵向')}</button>
                 <button type="button" aria-pressed={pdfOptions.orientation === 'landscape'}
-                  onClick={() => setPdfOptions((value) => ({ ...value, orientation: 'landscape' }))}>横向</button>
+                  onClick={() => setPdfOptions((value) => ({ ...value, orientation: 'landscape' }))}>{t('横向')}</button>
               </div>
             </fieldset>
           </div>
           <div className="dialog-actions">
-            <button disabled={printing} onClick={closePdfExport}>取消</button>
+            <button disabled={printing} onClick={closePdfExport}>{t('cancel')}</button>
             <button className="primary" disabled={printing || !pdfPreviewFile || !pdfName.trim()}
               onClick={() => void confirmPdfExport()}>
               {printing ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}
-              导出 PDF
+              {t('导出 PDF')}
             </button>
           </div>
         </div>
       </div>
     </Modal>}
-    {lightbox && <Modal title="图片" close={() => setLightbox('')}><img className="lightbox-image" src={lightbox} alt="笔记图片" /></Modal>}
+    {lightbox && <Modal title="图片" close={() => setLightbox('')}><img className="lightbox-image" src={lightbox} alt={t('笔记图片')} /></Modal>}
     {printNote && <section className={`print-document ${pdfExport ? 'pdf-rendering' : ''}`} data-printing={pdfExport ? 'true' : 'false'} aria-hidden="true">
       <Preview content={printNote.content} onImage={() => undefined}
         resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={false} eagerImages />

@@ -28,6 +28,7 @@ const projects = {
     directory: 'easymac',
     readmePath: 'easymac/README.md',
     versionPath: 'easymac/VERSION',
+    notesPath: 'easymac/RELEASE_NOTES.md',
   },
 };
 
@@ -56,6 +57,23 @@ export function bumpVersion(version, kind) {
   if (kind === 'major') return `${major + 1}.0.0`;
   if (kind === 'minor') return `${major}.${minor + 1}.0`;
   return `${major}.${minor}.${patch + 1}`;
+}
+
+export function extractReleaseNotes(content, version, options = {}) {
+  const { includeHeading = false } = options;
+  const escapedVersion = version.replace(/\./g, '\\.');
+  const headingPattern = new RegExp(`^##\\s+(?:.*\\b)?v?${escapedVersion}(?:\\b|\\s|$).*$`, 'm');
+  const match = headingPattern.exec(content);
+  if (!match) {
+    throw new Error(`Release notes for version ${version} not found.`);
+  }
+  const afterHeading = content.slice(match.index + match[0].length);
+  const nextHeadingMatch = afterHeading.search(/^##?\s+/m);
+  const body = nextHeadingMatch === -1 ? afterHeading : afterHeading.slice(0, nextHeadingMatch);
+  if (includeHeading) {
+    return `${match[0]}\n\n${body.trim()}`.trim();
+  }
+  return body.trim();
 }
 
 async function readJson(path) {
@@ -227,6 +245,14 @@ async function checkVersions(versions) {
       const runtime = await readFile(resolve(root, project.runtimePath), 'utf8');
       if (!runtime.includes(`EASYNOTE_VERSION = '${versions[name]}'`)) errors.push(`${project.runtimePath} is stale`);
     }
+    if (project.notesPath) {
+      try {
+        const notesContent = await readFile(resolve(root, project.notesPath), 'utf8');
+        extractReleaseNotes(notesContent, versions[name]);
+      } catch (error) {
+        errors.push(`${project.notesPath} is missing release notes for ${versions[name]}`);
+      }
+    }
   }
   const rootReadme = await readFile(resolve(root, 'README.md'), 'utf8');
   if (!rootReadme.includes(rootReadmeBlock(versions))) errors.push('README.md version table is stale');
@@ -253,15 +279,18 @@ function usage() {
   node scripts/version.mjs show
   node scripts/version.mjs check
   node scripts/version.mjs sync
+  node scripts/version.mjs notes [project] [version] [--with-title]
   node scripts/version.mjs set <project> <version>
   node scripts/version.mjs bump <project> <major|minor|patch>
 
 From a project directory, the project name may be omitted:
-  cd easymac && node ../scripts/version.mjs bump patch`;
+  cd easymac && node ../scripts/version.mjs bump patch
+  cd easymac && node ../scripts/version.mjs notes`;
 }
 
 async function main() {
-  const [command = 'show', first, second] = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  const [command = 'show', first, second] = rawArgs;
   const versions = await readVersions();
   if (command === 'show') {
     console.log(JSON.stringify(versions, null, 2));
@@ -275,6 +304,38 @@ async function main() {
   if (command === 'sync') {
     await syncAll(versions);
     console.log('Synchronized package metadata, runtime versions and README files.');
+    return;
+  }
+  if (command === 'notes') {
+    const withTitle = rawArgs.includes('--with-title');
+    const positional = rawArgs.slice(1).filter((arg) => !arg.startsWith('--'));
+    const inferred = projectFromCwd();
+    let projectName = '';
+    let targetVersion = '';
+
+    if (projects[positional[0]]) {
+      projectName = positional[0];
+      targetVersion = positional[1] || '';
+    } else if (inferred && projects[inferred]) {
+      projectName = inferred;
+      targetVersion = positional[0] || '';
+    } else if (positional[0]) {
+      validateProject(positional[0]);
+    } else {
+      fail('Project name required when not running from a project directory.');
+    }
+
+    const project = projects[projectName];
+    if (!project.notesPath) {
+      fail(`Project "${projectName}" does not have a notesPath configured.`);
+    }
+
+    const version = targetVersion || versions[projectName];
+    validateVersion(version);
+
+    const notesContent = await readFile(resolve(root, project.notesPath), 'utf8');
+    const notes = extractReleaseNotes(notesContent, version, { includeHeading: withTitle });
+    console.log(notes);
     return;
   }
   if (command === 'set' || command === 'bump') {
