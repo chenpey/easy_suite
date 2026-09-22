@@ -1059,31 +1059,110 @@ dialog::backdrop {
   margin-top: 24px;
 }
 
-.apple-card {
+.apple-group {
   background: var(--input-bg);
   border: 1px solid var(--hairline);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.group-row {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--input-bg);
+}
+
+.group-row:last-child {
+  border-bottom: none;
+}
+
+.group-row > label {
+  width: 96px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--label-secondary);
+  font-weight: 400;
+  margin: 0;
+}
+
+.group-field {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.group-field input, .group-field select {
+  width: 100%;
+  border: none !important;
+  background: transparent !important;
+  padding: 6px 4px !important;
+  font-size: 13px !important;
+  color: var(--text) !important;
+  outline: none !important;
+  box-shadow: none !important;
+  min-height: 34px !important;
+}
+
+.group-field input[type="password"] {
+  padding-right: 30px !important;
+}
+
+.group-field input::placeholder {
+  color: var(--label-tertiary);
+  font-size: 12px;
+}
+
+.group-field .password-toggle {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--label-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.group-field .password-toggle:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.group-field .password-toggle .lucide {
+  width: 15px;
+  height: 15px;
 }
 
 .profile-header-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 10px 14px;
   background: var(--input-bg);
   border: 1px solid var(--hairline);
-  border-radius: 12px;
-  margin-bottom: 20px;
+  border-radius: 10px;
+  margin-bottom: 14px;
 }
 
 .profile-avatar {
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: var(--blue);
   color: #fff;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -1094,12 +1173,12 @@ dialog::backdrop {
 .profile-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .profile-name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -1108,10 +1187,10 @@ dialog::backdrop {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.3;
 }
 
@@ -1140,87 +1219,70 @@ dialog::backdrop {
   color: var(--badge-muted-text);
 }
 
-.form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-row label {
-  color: var(--text-label);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.form-row-inline {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.form-row-inline label {
-  color: var(--text-label);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
 .section-subheading {
-  margin: 20px 0 8px;
+  margin: 16px 0 6px;
 }
 
-.section-subheading h3 {
-  margin: 0;
-  font-size: 13px;
+.section-subheading h3, .account-section h3 {
+  margin: 0 0 6px 2px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: .02em;
   color: var(--label-secondary);
 }
 
+.section-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+.section-title-row h3 {
+  margin: 0;
+}
+
+.recovery-status-text {
+  font-size: 12px;
+}
+
 .registration-card {
-  margin: 0 0 16px;
-  padding: 14px 16px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
 }
 
 .registration-setting {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   cursor: pointer;
 }
 
-.registration-setting span { display: grid; gap: 3px; }
-.registration-setting small { color: var(--label-secondary); font-weight: 400; font-size: 12px; }
-.registration-setting input { width: 20px; height: 20px; accent-color: var(--blue); cursor: pointer; }
+.registration-setting span { display: grid; gap: 1px; }
+.registration-setting strong { font-size: 13px; font-weight: 500; }
+.registration-setting small { color: var(--label-secondary); font-weight: 400; font-size: 11px; }
+.registration-setting input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
 
 #user-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.user-options {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding-top: 4px;
+  gap: 8px;
 }
 
 .toggle {
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   white-space: nowrap;
   font-size: 13px;
-  color: var(--text-label);
+  color: var(--text);
   cursor: pointer;
 }
 
-.toggle input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--blue); cursor: pointer; }
 #user-form .dialog-actions { margin-top: 6px; }
 
 .user-list {
@@ -1233,9 +1295,10 @@ dialog::backdrop {
 .user-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--hairline);
+  min-height: 42px;
   transition: background-color .15s ease;
 }
 
@@ -1243,12 +1306,12 @@ dialog::backdrop {
 .user-row:hover { background: var(--fill-hover); }
 
 .user-avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--tab-bg);
   color: var(--blue);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -1257,40 +1320,72 @@ dialog::backdrop {
 }
 
 .user-meta { flex: 1; min-width: 0; }
-.user-name { overflow-wrap: anywhere; font-weight: 600; font-size: 14px; }
-.user-detail { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
-.user-sep { color: var(--label-tertiary); font-size: 11px; }
-.user-row .item-actions { justify-content: flex-end; }
+.user-name { overflow-wrap: anywhere; font-weight: 600; font-size: 13px; line-height: 1.2; }
+.user-detail { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.user-sep { color: var(--label-tertiary); font-size: 10px; }
+.user-row .item-actions { justify-content: flex-end; gap: 2px; }
+.user-row .icon-button { width: 26px; height: 26px; min-height: 26px; padding: 0; }
+.user-row .icon-button .lucide { width: 14px; height: 14px; }
 .user-disabled { opacity: .58; }
 
 #account-dialog {
-  max-width: 580px;
-  border-radius: 18px;
-  padding: 24px 28px;
+  max-width: 440px;
+  border-radius: 16px;
+  padding: 18px 20px;
+  max-height: min(640px, calc(100dvh - 32px));
+  overflow-y: auto;
 }
 
 .account-section {
-  padding: 20px 0;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--hairline);
 }
 
-.account-section h3 {
-  margin: 0 0 14px;
-  font-size: 15px;
-  font-weight: 600;
+.account-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 
 .account-section form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
-.account-section .dialog-actions { margin-top: 8px; }
-.account-danger { display: flex; justify-content: flex-end; padding-top: 22px; }
-#delete-account-dialog p { color: var(--red); line-height: 1.5; }
-#delete-account-form { display: flex; flex-direction: column; gap: 14px; }
-#delete-account-form .dialog-actions { margin-top: 8px; }
+.account-section .dialog-actions { margin-top: 6px; }
+.account-danger { display: flex; justify-content: center; padding-top: 8px; }
+
+.destructive-link {
+  border: none;
+  background: transparent;
+  color: var(--red);
+  font-size: 12px;
+  min-height: 28px;
+  padding: 4px 8px;
+}
+
+.destructive-link:hover {
+  background: rgba(255, 59, 48, .08);
+  color: var(--red);
+}
+
+.delete-warning {
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0 0 12px;
+}
+
+#delete-account-dialog {
+  max-width: 400px;
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+
+#delete-account-form { display: flex; flex-direction: column; gap: 8px; }
+#delete-account-form .dialog-actions { margin-top: 10px; }
 
 .sr-only {
   position: absolute;
@@ -1331,12 +1426,10 @@ dialog::backdrop {
   .history .tools { gap: 4px; }
   .login-layout { padding: 28px 22px; }
   .login-layout .brand { margin-bottom: 30px; }
-  #account-dialog {
+  #account-dialog, #delete-account-dialog {
     width: calc(100% - 24px);
-    padding: 20px 16px;
+    padding: 16px 14px;
   }
-  .user-options { flex-direction: column; align-items: stretch; gap: 10px; }
-  .user-options .form-row-inline { justify-content: space-between; }
   .temporary-share-duration { grid-template-columns: minmax(0, 1fr); }
   .temporary-share-duration button { width: 100%; }
   #image-preview-dialog {
