@@ -1560,15 +1560,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="setting-row"><span>{t('深色外观')}</span><button role="switch" aria-checked={dark} aria-label={t('深色外观')} className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
       <div className="setting-row"><span>{t('离线笔记库')}{book.offlineLibrary ? (uiLanguage() === 'en' ? ` · ${book.offlineCount} notes` : ` · ${book.offlineCount} 篇`) : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label={t('离线笔记库')} className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
       {installApp && <div className="setting-row"><span>{t('app')}</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />{t('安装 EasyNote')}</button></div>}
-      <div className="setting-row"><span>{t('数据')}</span><div className="button-group">
+      <div className="setting-row"><span>{t('导出')}</span><div className="button-group">
         <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), t('备份已下载'))}><Download size={16} />{t('导出 ZIP')}</button>
-        <button disabled={!!transfer || !book.online} onClick={() => importInput.current?.click()}><Upload size={16} />{t('导入文件')}</button>
-        <button disabled={!!transfer || !book.online} onClick={() => importFolderInput.current?.click()}><FolderOpen size={16} />{t('导入目录')}</button>
         <button disabled={!!transfer || !book.pending.length} onClick={() => {
           setTransfer(t('正在准备草稿…'));
           void exportLocalDrafts(session.user!.id, setTransfer).then((count) => showNotice(t('drafts_exported', count)))
             .catch((error: unknown) => book.setError(String(error))).finally(() => setTransfer(''));
         }}><Download size={16} />{t('导出草稿')}</button>
+      </div></div>
+      <div className="setting-row"><span>{t('导入')}</span><div className="button-group">
+        <button disabled={!!transfer || !book.online} onClick={() => importInput.current?.click()}><Upload size={16} />{t('导入文件')}</button>
+        <button disabled={!!transfer || !book.online} onClick={() => importFolderInput.current?.click()}><FolderOpen size={16} />{t('导入目录')}</button>
       </div></div>
       <div className="setting-row"><span>{t('账户安全')}</span><button disabled={disabled || session.offline} onClick={() => { setSettings(false); setAccountSecurity(true); }}><ShieldCheck size={16} />{t('管理')}</button></div>
       {session.user!.role === 'admin' && <div className="setting-row"><span>{t('用户与注册')}</span><button disabled={disabled || session.offline}

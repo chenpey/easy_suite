@@ -999,6 +999,7 @@ dialog.pdf-export-dialog[open] { display: flex; flex-direction: column; }
 .setting-row:last-child { border: 0; }
 .setting-value { color: var(--muted); font-size: 12px; }
 .button-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.setting-row .button-group { flex-wrap: nowrap; }
 .ai-access { border-bottom: 1px solid var(--line); }
 .ai-access-heading { padding-bottom: 12px; border: 0; }
 .ai-access-heading svg { color: var(--muted); }
@@ -1533,6 +1534,8 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   .mobile-action-list .mobile-pdf-action,
   .mobile-action-list .mobile-share-action { display: inline-flex; }
   .setting-row { flex-wrap: wrap; }
+  .setting-row .button-group { width: 100%; }
+  .setting-row .button-group button { flex: 1; min-width: 0; }
   .token-form { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .user-create-form, .user-edit-grid { grid-template-columns: 1fr; }
