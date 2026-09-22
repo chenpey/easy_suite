@@ -48,7 +48,10 @@ test('selects an existing tag for the current note', async ({ page }) => {
   })).status()).toBe(201);
   await page.goto('/');
   await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
-  await page.getByRole('combobox', { name: '选择已有标签' }).selectOption(tag);
+  const existingTags = page.getByRole('combobox', { name: '选择已有标签' });
+  await expect(existingTags).toHaveText(/已有标签/);
+  expect(await existingTags.evaluate((select) => select.nextElementSibling?.getAttribute('aria-label'))).toBe('笔记标签');
+  await existingTags.selectOption(tag);
   await expect(page.getByRole('textbox', { name: '笔记标签' })).toHaveValue(tag);
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
 });
