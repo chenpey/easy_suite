@@ -3,7 +3,7 @@
   const key = "easymac-language";
   const language = localStorage.getItem(key) === "en" ? "en" : "zh";
   const exact = {
-    "设置": "Settings", "语言": "Language", "关闭": "Close", "中文": "Chinese", "英文": "English",
+    "设置": "Settings", "语言": "Language", "关闭": "Close",
     "正在读取本地扫描结果": "Loading local scan results", "扫描清单仅保存在本机": "Scan list stays on this Mac",
     "正在扫描这台 Mac": "Scanning this Mac", "应用列表准备完成后会自动显示": "The app list appears when scanning finishes", "正在扫描": "Scanning",
     "应用分类": "App Categories", "分类": "Categories", "个扫描项目": "scanned items", "搜索名称、标识或路径": "Search name, identifier, or path",

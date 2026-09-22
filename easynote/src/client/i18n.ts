@@ -8,7 +8,7 @@ export const setUiLanguage = (language: UiLanguage) => {
 };
 
 const exact: Record<string, string> = {
-  '设置': 'Settings', '语言': 'Language', '中文': 'Chinese', '英文': 'English',
+  '设置': 'Settings', '语言': 'Language',
   '全部笔记': 'All Notes', '回收站': 'Trash', '新建笔记': 'New Note', '搜索笔记': 'Search notes',
   '任务': 'Tasks', '分享': 'Sharing', '标签': 'Tags', '标签管理': 'Manage Tags', '暂无已有标签': 'No existing tags',
   '打开导航菜单': 'Open navigation menu', '打开设置': 'Open Settings',
