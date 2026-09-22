@@ -51,6 +51,25 @@ const noteExcerpt = (content: string, query: string) => {
   return `${start ? '…' : ''}${content.slice(start, start + length)}`;
 };
 
+const customTagsKey = (userId: string) => `easynote-custom-tags-${userId}`;
+const loadCustomTags = (userId: string): string[] => {
+  try {
+    const raw = localStorage.getItem(customTagsKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((t) => typeof t === 'string' && t.trim()) : [];
+  } catch {
+    return [];
+  }
+};
+const saveCustomTags = (userId: string, tags: string[]) => {
+  try {
+    localStorage.setItem(customTagsKey(userId), JSON.stringify([...new Set(tags)]));
+  } catch {
+    // ignore
+  }
+};
+
 async function prepareOfflineResources(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   let timeout = 0;
@@ -147,10 +166,11 @@ export function useNotebook(session: Session) {
         item.deletedAt === null && item.archived === (view === 'archive');
       if (inView) item.tags.forEach((value) => viewTags.add(value));
     }
-    setTags([...viewTags].sort((left, right) => left.localeCompare(right, 'zh-CN')));
+    const custom = loadCustomTags(userId);
+    setTags([...new Set([...viewTags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     setNextOffset(null);
     setOfflineCount(mirror.current.size);
-  }, [query, tag, view]);
+  }, [query, tag, userId, view]);
 
   const cacheReferencedFiles = useCallback(() => {
     if (fileCacheAbort.current || !alive.current || !offlineLibraryRef.current) return;
@@ -261,8 +281,9 @@ export function useNotebook(session: Session) {
     notesRef.current = values;
     setNotes(values);
     setNextOffset((value) => value === null ? null : values.length);
-    setTags(data.tags);
-  }, [query, show, tag, view]);
+    const custom = loadCustomTags(userId);
+    setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
+  }, [query, show, tag, userId, view]);
   const syncOnlineRef = useRef(syncOnlineChanges);
   syncOnlineRef.current = syncOnlineChanges;
 
@@ -292,8 +313,11 @@ export function useNotebook(session: Session) {
     setNotes((prev) => append ? [...prev, ...result.notes.filter((n) => !prev.some((old) => old.id === n.id))] : result.notes);
     setNextOffset(result.nextOffset);
     const data = await api.tags(view, signal);
-    if (alive.current && generation === listGeneration.current) setTags(data.tags);
-  }, [nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, view]);
+    const custom = loadCustomTags(userId);
+    if (alive.current && generation === listGeneration.current) {
+      setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
+    }
+  }, [nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -713,9 +737,31 @@ export function useNotebook(session: Session) {
 
   const manageTag = async (source: string, target: string | null): Promise<number> => {
     const affected = (await allAvailableNotes()).filter((item) => item.tags.includes(source));
-    return bulkUpdate(affected.map((item) => item.id), (item) => ({
+    const count = await bulkUpdate(affected.map((item) => item.id), (item) => ({
       tags: [...new Set(item.tags.flatMap((value) => value === source ? target ? [target] : [] : [value]))],
     }));
+    const currentCustom = loadCustomTags(userId);
+    if (target === null) {
+      saveCustomTags(userId, currentCustom.filter((t) => t !== source));
+      setTags((prev) => prev.filter((t) => t !== source));
+    } else {
+      const updated = currentCustom.map((t) => t === source ? target : t);
+      saveCustomTags(userId, updated);
+      setTags((prev) => [...new Set(prev.map((t) => t === source ? target : t))].sort((a, b) => a.localeCompare(b, 'zh-CN')));
+    }
+    return count;
+  };
+
+  const addTag = (name: string): void => {
+    const value = name.trim();
+    if (!value || value.length > 40 || value.includes(',') || value.includes('，')) {
+      throw new Error('标签必须为 1-40 个字符，且不能包含逗号。');
+    }
+    const currentCustom = loadCustomTags(userId);
+    if (!currentCustom.includes(value)) {
+      saveCustomTags(userId, [...currentCustom, value]);
+    }
+    setTags((prev) => [...new Set([...prev, value])].sort((a, b) => a.localeCompare(b, 'zh-CN')));
   };
 
   const searchAll = async (value: string): Promise<NoteSummary[]> => {
@@ -980,6 +1026,6 @@ export function useNotebook(session: Session) {
     busy: running.current.size > 0, select, clearSelection, create, edit, append, save: () => note ? save(note.id) : Promise.resolve(true),
     retry, conflictCopy, resolveConflict, discardConflict, purge, purgeTrash,
     refresh: () => refreshRef.current(), loadMore: () => refresh(true),
-    configureOffline, cachedFile, backlinks, tasks, searchAll, manageTag, bulkUpdate, findDuplicates,
+    configureOffline, cachedFile, backlinks, tasks, searchAll, addTag, manageTag, bulkUpdate, findDuplicates,
   };
 }
