@@ -43,6 +43,18 @@ const translations = {
   "已分享": "Shared", "已将剪贴板内容填入文本框": "Pasted clipboard text into input",
   "批量选择": "Select Multiple",
   "EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具": "EasyDrop - Lightweight, Secure & Fast Local File & Text Transfer",
+  "选择或拖拽文件到此处": "Select or drag files here",
+  "本页": "This page",
+  "第1/1页": "Page 1/1",
+  "访问地址": "Access Address",
+  "复制地址": "Copy Address",
+  "图片预览": "Image Preview",
+  "下载原图": "Download Original",
+  "有效时长（小时）": "Duration (hours)",
+  "创建链接": "Create Link",
+  "中文": "Chinese",
+  "英文": "English",
+  "账号和个人空间中的全部内容将被删除。": "All contents of this account and personal space will be deleted.",
 };
 const translationPhrases = [
   ["当前链接有效至 ", "Current link expires "], ["有效至 ", "Expires "],
@@ -51,7 +63,7 @@ const translationPhrases = [
   ["删除所选 ", "Delete selected "], ["已删除 ", "Deleted "],
   [" 条记录？", " items?"], [" 条记录", " items"],
   ["已选 ", "Selected "], [" 条", " items"],
-  ["第", "Page "], ["页", ""], ["正在", ""],
+  ["正在", ""],
   ["已上传（无缩略图）", "Uploaded (no thumbnail)"], ["已上传", "Uploaded"],
   ["上传完成", "Upload complete"], ["上传已暂停", "Upload paused"], ["网络错误", "Network error"],
   ["删除用户 ", "Delete user "],
@@ -833,7 +845,7 @@ function pruneHistoryRowCache() {
 }
 
 function updateHistoryPagination() {
-  $("history-page").textContent = `第${historyPage + 1}/${historyTotalPages}页`;
+  $("history-page").textContent = uiLanguage === "en" ? `Page ${historyPage + 1}/${historyTotalPages}` : `第${historyPage + 1}/${historyTotalPages}页`;
   $("history-prev").disabled = loading || historyPage === 0;
   $("history-next").disabled = loading || !nextCursor;
 }
