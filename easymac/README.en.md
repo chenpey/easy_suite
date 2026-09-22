@@ -10,26 +10,6 @@ EasyMac scans installed applications on an old Mac, allows users to search, filt
 
 Built as a lightweight local launcher and local web interface, it requires no app installation, Xcode, developer accounts, or extra runtime environments.
 
-## 0.4.3 Updates
-
-- **i18n Architecture Refactoring**: Consolidated all copy into an independent dictionary (`web/i18n.js`) supporting `t(key, ...args)` parameter interpolation.
-- **Static & Dynamic Decoupling**: HTML static copy uses `data-i18n*` attributes rendered once on load, while JS dynamic copy uses explicit `t(...)` calls, removing `MutationObserver`.
-- **Automated Key Alignment Script**: Added `scripts/check-i18n.mjs` to verify dictionary symmetry and reference alignment across HTML and JS.
-
-## 0.4.2 Updates
-
-- Unified settings dialog language label to "语言/Language", preserving native "中文" and "English" option texts.
-
-## 0.4.1 Updates
-
-- Enhanced dynamic attribute observation (`aria-label`, `title`, `placeholder`, `alt`) for full English mode coverage.
-- Added page description metadata translation and refined script preview notices.
-
-## 0.4.0 Updates
-
-- The local UI defaults to Chinese and adds a Settings panel with a persistent English option.
-- Narrow layouts now accommodate longer English buttons and descriptions without overflow.
-
 ## Usage
 
 1. Keep the `EasyMac` folder intact.
