@@ -1035,6 +1035,9 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   await page.goto('/');
   const title = `手机笔记-${randomUUID().slice(0, 6)}`;
   await newNote(page, title, '手机上的简短记录');
+  await page.getByRole('button', { name: '返回笔记列表' }).click();
+  await expect(page.locator('.note-row-meta time').first()).toBeVisible();
+  await page.getByRole('button').filter({ hasText: title }).click();
   let actions = await openMobileNoteActions(page);
   const syncVersion = actions.getByRole('button', { name: '同步并保存版本', exact: true });
   await expect(syncVersion).toBeVisible();
@@ -1497,8 +1500,14 @@ test('incremental polling preserves pagination while refreshing a selected note'
     expect(response.status()).toBe(201);
   }
   await page.goto('/');
+  await expect(page.locator('.note-row')).toHaveCount(50);
+  await expect(page.locator('.note-row').first()).toHaveAttribute('aria-label', /.+，.+/);
+  await expect(page.locator('.note-row').first().locator('.note-excerpt')).toHaveAttribute('aria-hidden', 'true');
+  let loadMore = page.getByRole('button', { name: '加载更多' });
+  await loadMore.click();
+  await expect(page.locator('.note-row')).toHaveCount(55);
   await disableOfflineLibrary(page);
-  const loadMore = page.getByRole('button', { name: '加载更多' });
+  loadMore = page.getByRole('button', { name: '加载更多' });
   await loadMore.click();
   await expect(loadMore).toBeHidden();
   const loadedRows = await page.locator('.note-row').count();
