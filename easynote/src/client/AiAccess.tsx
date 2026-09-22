@@ -22,6 +22,7 @@ export function AiAccess({ disabled, reportError, notify }: Props) {
   const [expiresInDays, setExpiresInDays] = useState('90');
   const [secret, setSecret] = useState('');
   const [confirmRevoke, setConfirmRevoke] = useState('');
+  const codexConfig = secret ? `[mcp_servers.easynote]\nurl = "${location.origin}/mcp"\nhttp_headers = { Authorization = "Bearer ${secret}" }` : '';
 
   useEffect(() => {
     let active = true;
@@ -72,6 +73,10 @@ export function AiAccess({ disabled, reportError, notify }: Props) {
       <code>{secret}</code>
       <button onClick={() => void navigator.clipboard.writeText(secret).then(() => notify('令牌已复制')).catch((error) => reportError(String(error)))}>
         <Copy size={15} />复制令牌
+      </button>
+      <code>{codexConfig}</code>
+      <button onClick={() => void navigator.clipboard.writeText(codexConfig).then(() => notify('Codex 配置已复制')).catch((error) => reportError(String(error)))}>
+        <Copy size={15} />复制 Codex 配置
       </button>
     </div>}
     <form className="token-form" onSubmit={(event) => {
