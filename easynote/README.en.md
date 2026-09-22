@@ -197,7 +197,7 @@ EasyNote supports Model Context Protocol (MCP) natively:
 
 1. Generate a token under "Settings → AI Integration" in the web app.
 2. Connect your AI client (e.g. Codex) to `https://your-domain/mcp` using Bearer authentication.
-3. AI agents gain permission-scoped access to search, read, create, or modify notes through standard MCP tools and resources. See [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md) for full details.
+3. AI agents gain permission-scoped access to search, read, create, or modify notes through standard MCP tools and resources. See [`docs/AI_INTEGRATION.en.md`](docs/AI_INTEGRATION.en.md) for full details.
 
 ## Configuration
 

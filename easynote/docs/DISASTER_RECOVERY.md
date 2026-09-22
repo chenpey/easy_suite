@@ -1,5 +1,7 @@
 # EasyNote 灾难恢复
 
+[简体中文](DISASTER_RECOVERY.md) | [English](DISASTER_RECOVERY.en.md)
+
 ## 三种导出
 
 | 类型 | 内容 | 用途 |
