@@ -39,7 +39,7 @@ async function openMobileNoteActions(page: Page) {
   return dialog;
 }
 
-test('selects an existing tag for the current note', async ({ page }) => {
+test('adds and removes existing tags for the current note', async ({ page }) => {
   const tag = `已有标签-${randomUUID().slice(0, 8)}`;
   const id = randomUUID();
   expect((await page.request.post(`/api/notes/${id}`, {
@@ -48,12 +48,25 @@ test('selects an existing tag for the current note', async ({ page }) => {
   })).status()).toBe(201);
   await page.goto('/');
   await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
-  const existingTags = page.getByRole('combobox', { name: '选择已有标签' });
-  await expect(existingTags).toHaveText(/已有标签/);
-  expect(await existingTags.evaluate((select) => select.nextElementSibling?.getAttribute('aria-label'))).toBe('笔记标签');
-  await existingTags.selectOption(tag);
+  await page.getByText('标签管理', { exact: true }).click();
+  const existingTag = page.getByRole('checkbox', { name: tag });
+  await existingTag.check();
   await expect(page.getByRole('textbox', { name: '笔记标签' })).toHaveValue(tag);
+  await existingTag.uncheck();
+  await expect(page.getByRole('textbox', { name: '笔记标签' })).toHaveValue('');
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+});
+
+test('switches to English without mobile horizontal overflow', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('.account').click();
+  await page.getByRole('combobox', { name: '语言' }).selectOption('en');
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect(page.getByRole('button', { name: 'Open navigation menu' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open navigation menu' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test('does not render the login form while the initial session is loading', async ({ page }) => {

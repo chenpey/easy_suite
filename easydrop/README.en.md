@@ -2,11 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.1.7`
+Current Version: `1.2.0`
 
 EasyDrop is a text and file sharing tool built on Cloudflare Workers, using username and password authentication, a D1 database, and private R2 object storage. Once deployed, computers, phones, and tablets can exchange content across networks via a single HTTPS address.
 
 Ideal for personal cross-device text and file transfers, it also supports multiple users on the same instance with isolated personal workspaces. Administrators manage registration and accounts, while content access remains strictly segregated per user.
+
+## 1.2.0 Updates
+
+- The UI defaults to Chinese and can switch to English from the login page or account settings, with mobile layouts adapted for longer English labels.
 
 ## 1.1.7 Updates
 
