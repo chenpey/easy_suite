@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, Link2, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
 import type { NoteShare } from '../shared/types';
 import { api } from './api';
-import { dateLocale } from './i18n';
+import { dateLocale, t } from './i18n';
 
 interface Props {
   noteId: string;
@@ -50,7 +50,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
       setCopied(false);
       setShare(result.share);
       setUrl(result.url);
-      notify('只读分享链接已创建');
+      notify(t('share_created'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -65,7 +65,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
       setCopied(false);
       setShare(null);
       setUrl('');
-      notify('分享链接已撤销');
+      notify(t('share_revoked'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -76,30 +76,30 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
   return <div className="note-sharing">
     {share && <div className="share-status">
       <Link2 size={17} />
-      <div><strong>分享有效</strong><span>{share.expiresAt === null
-        ? '永久有效'
-        : `截止 ${new Date(share.expiresAt).toLocaleString(dateLocale())}`}</span></div>
+      <div><strong>{t('share_active')}</strong><span>{share.expiresAt === null
+        ? t('never_expires')
+        : t('share_until', new Date(share.expiresAt).toLocaleString(dateLocale()))}</span></div>
     </div>}
     {url && <div className="share-url" role="status">
-      <input readOnly aria-label="只读分享链接" value={url} onFocus={(event) => event.currentTarget.select()} />
+      <input readOnly aria-label={t('share_readonly_link')} value={url} onFocus={(event) => event.currentTarget.select()} />
       <button className={copied ? 'copy-confirmed' : ''} aria-live="polite" onClick={() => void copy()}>
-        {copied ? <Check size={15} /> : <Copy size={15} />}{copied ? '已复制' : '复制'}
+        {copied ? <Check size={15} /> : <Copy size={15} />}{copied ? t('copied') : t('copy')}
       </button>
     </div>}
-    <label className="single-field">有效期<select value={expiresInHours} onChange={(event) => setExpiresInHours(event.target.value)}>
-      <option value="1">1 小时</option>
-      <option value="24">1 天</option>
-      <option value="168">7 天</option>
-      <option value="720">30 天</option>
-      <option value="permanent">永久</option>
+    <label className="single-field">{t('expiration')}<select value={expiresInHours} onChange={(event) => setExpiresInHours(event.target.value)}>
+      <option value="1">{t('hours_1')}</option>
+      <option value="24">{t('days_1')}</option>
+      <option value="168">{t('days_7')}</option>
+      <option value="720">{t('days_30')}</option>
+      <option value="permanent">{t('permanent')}</option>
     </select></label>
     <div className="dialog-actions">
       {share && <button className="danger" disabled={disabled || working} onClick={() => void revoke()}>
-        <Trash2 size={15} />撤销
+        <Trash2 size={15} />{t('revoke')}
       </button>}
       <button className="primary" disabled={disabled || working} onClick={() => void create()}>
         {working ? <LoaderCircle className="spin" size={15} /> : share ? <RefreshCw size={15} /> : <Link2 size={15} />}
-        {share ? '替换链接' : '创建链接'}
+        {share ? t('replace_link') : t('create_link')}
       </button>
     </div>
   </div>;

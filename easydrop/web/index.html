@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0071e3">
   <meta name="application-name" content="EasyDrop">
-  <meta name="description" content="EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具">
+  <meta name="description" content="EasyDrop - 轻量、安全、极速的跨设备局域网文件与文本互传工具" data-i18n-content="meta_description">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="EasyDrop">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>EasyDrop</title>
+  <title data-i18n="app_title">EasyDrop</title>
   <link rel="icon" href="/favicon.ico" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -17,129 +17,129 @@
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body data-page="app">
-  <div id="drag-overlay" class="drag-overlay" hidden><i data-lucide="file-up"></i><span>拖放文件至此处上传</span></div>
+  <div id="drag-overlay" class="drag-overlay" hidden><i data-lucide="file-up"></i><span data-i18n="drag_overlay">拖放文件至此处上传</span></div>
   <header>
     <div class="header-inner">
       <div class="brand"><img class="brand-icon" src="/favicon.svg" alt=""><h1>EasyDrop</h1></div>
       <div class="tools">
-        <button id="account-open" class="icon-button" title="账户与设置" aria-label="账户与设置"><i data-lucide="user-round"></i></button>
+        <button id="account-open" class="icon-button" title="账户与设置" aria-label="账户与设置" data-i18n-title="account_settings" data-i18n-aria-label="account_settings"><i data-lucide="user-round"></i></button>
         <div class="site-link-preview">
-          <button id="qr-open" class="icon-button" title="访问二维码" aria-label="访问二维码"><i data-lucide="qr-code"></i></button>
+          <button id="qr-open" class="icon-button" title="访问二维码" aria-label="访问二维码" data-i18n-title="access_qr" data-i18n-aria-label="access_qr"><i data-lucide="qr-code"></i></button>
           <div id="site-link-popover" class="qr-popover site-link-popover" role="tooltip">
-            <canvas id="site-qr-preview" width="168" height="168" aria-label="站点访问二维码预览"></canvas>
+            <canvas id="site-qr-preview" width="168" height="168" aria-label="站点访问二维码预览" data-i18n-aria-label="site_qr_preview_aria"></canvas>
             <span id="site-url-preview"></span>
           </div>
         </div>
-        <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录"><i data-lucide="log-out"></i></button>
+        <button id="logout" class="icon-button" title="退出登录" aria-label="退出登录" data-i18n-title="logout" data-i18n-aria-label="logout"><i data-lucide="log-out"></i></button>
       </div>
     </div>
   </header>
   <main class="workspace">
-    <div id="notice" role="status" aria-live="polite">正在加载...</div>
+    <div id="notice" role="status" aria-live="polite" data-i18n="loading">正在加载...</div>
     <span id="copy-notice" class="sr-only" role="status" aria-live="polite"></span>
-    <details id="error-details" hidden><summary>错误详情</summary><pre id="error-body"></pre></details>
+    <details id="error-details" hidden><summary data-i18n="error_details">错误详情</summary><pre id="error-body"></pre></details>
     <div class="compose">
       <section aria-labelledby="text-title">
-        <h2 id="text-title"><i data-lucide="text"></i>文本</h2>
+        <h2 id="text-title"><i data-lucide="text"></i><span data-i18n="text">文本</span></h2>
         <form id="text-form">
-          <label class="sr-only" for="text-input">分享文本</label>
-          <textarea id="text-input" placeholder="输入要分享的文本 (支持 Cmd/Ctrl+Enter 发送)" rows="6" required></textarea>
-          <div class="section-footer"><span id="text-count" class="muted"></span><button class="primary" type="submit" disabled><i data-lucide="send"></i>分享文本</button></div>
+          <label class="sr-only" for="text-input" data-i18n="share_text">分享文本</label>
+          <textarea id="text-input" placeholder="输入要分享的文本 (支持 Cmd/Ctrl+Enter 发送)" data-i18n-placeholder="share_text_placeholder" rows="6" required></textarea>
+          <div class="section-footer"><span id="text-count" class="muted"></span><button class="primary" type="submit" disabled><i data-lucide="send"></i><span data-i18n="share_text">分享文本</span></button></div>
         </form>
       </section>
       <section aria-labelledby="file-title">
-        <h2 id="file-title"><i data-lucide="files"></i>文件</h2>
+        <h2 id="file-title"><i data-lucide="files"></i><span data-i18n="files">文件</span></h2>
         <label class="file-picker" for="file-input">
-          <i data-lucide="file-up"></i><span>选择或拖拽文件到此处</span><span id="upload-limit" class="muted"></span>
+          <i data-lucide="file-up"></i><span data-i18n="drag_or_choose_files">选择或拖拽文件到此处</span><span id="upload-limit" class="muted"></span>
           <input id="file-input" type="file" multiple disabled>
         </label>
         <ul id="upload-list" class="upload-list"></ul>
-        <div class="section-footer"><span id="file-count" class="muted"></span><button id="upload" class="primary" hidden><i data-lucide="play"></i>继续上传</button></div>
+        <div class="section-footer"><span id="file-count" class="muted"></span><button id="upload" class="primary" hidden><i data-lucide="play"></i><span data-i18n="resume_upload">继续上传</span></button></div>
       </section>
     </div>
     <section class="history" aria-labelledby="history-title">
       <div class="section-heading">
-        <h2 id="history-title">分享历史 <span id="history-count" class="muted"></span><span id="selection-count" role="status"></span></h2>
+        <h2 id="history-title"><span data-i18n="share_history">分享历史</span> <span id="history-count" class="muted"></span><span id="selection-count" role="status"></span></h2>
         <div class="tools">
-          <button id="refresh" class="icon-button" title="刷新历史" aria-label="刷新历史" disabled><i data-lucide="refresh-cw"></i></button>
-          <label class="history-selection" title="选择或取消选择本页记录"><input id="select-all" type="checkbox" aria-label="批量选择" disabled></label>
-          <button id="clear" class="icon-button danger" title="清空历史" aria-label="清空历史" disabled><i data-lucide="trash-2"></i></button>
+          <button id="refresh" class="icon-button" title="刷新历史" aria-label="刷新历史" data-i18n-title="refresh_history" data-i18n-aria-label="refresh_history" disabled><i data-lucide="refresh-cw"></i></button>
+          <label class="history-selection" title="选择或取消选择本页记录" data-i18n-title="select_all_title"><input id="select-all" type="checkbox" aria-label="批量选择" data-i18n-aria-label="select_multiple_aria" disabled></label>
+          <button id="clear" class="icon-button danger" title="清空历史" aria-label="清空历史" data-i18n-title="clear_history" data-i18n-aria-label="clear_history" disabled><i data-lucide="trash-2"></i></button>
         </div>
       </div>
-      <div class="history-filters" role="group" aria-label="当前页历史记录类型筛选">
-        <span class="muted">本页</span>
-        <button class="history-filter-btn active" type="button" data-filter="all" aria-pressed="true">全部</button>
-        <button class="history-filter-btn" type="button" data-filter="text" aria-pressed="false">文本</button>
-        <button class="history-filter-btn" type="button" data-filter="file" aria-pressed="false">文件</button>
-        <button class="history-filter-btn" type="button" data-filter="image" aria-pressed="false">图片</button>
+      <div class="history-filters" role="group" aria-label="当前页历史记录类型筛选" data-i18n-aria-label="history_filters_aria">
+        <span class="muted" data-i18n="this_page">本页</span>
+        <button class="history-filter-btn active" type="button" data-filter="all" aria-pressed="true" data-i18n="all">全部</button>
+        <button class="history-filter-btn" type="button" data-filter="text" aria-pressed="false" data-i18n="text">文本</button>
+        <button class="history-filter-btn" type="button" data-filter="file" aria-pressed="false" data-i18n="files">文件</button>
+        <button class="history-filter-btn" type="button" data-filter="image" aria-pressed="false" data-i18n="image">图片</button>
       </div>
       <div id="history-list" aria-live="polite"></div>
-      <nav class="history-pagination" aria-label="分享历史分页">
-        <button id="history-prev" class="secondary" disabled>上一页</button>
-        <span id="history-page" class="muted" aria-live="polite">第1/1页</span>
-        <button id="history-next" class="secondary" disabled>下一页</button>
+      <nav class="history-pagination" aria-label="分享历史分页" data-i18n-aria-label="history_pagination_aria">
+        <button id="history-prev" class="secondary" disabled data-i18n="prev_page">上一页</button>
+        <span id="history-page" class="muted" aria-live="polite" data-i18n="page_initial">第1/1页</span>
+        <button id="history-next" class="secondary" disabled data-i18n="next_page">下一页</button>
       </nav>
     </section>
     <footer class="app-footer">EasyDrop <span id="app-version"></span></footer>
   </main>
   <dialog id="qr-dialog">
-    <div class="section-heading"><h2>访问地址</h2><button id="qr-close" class="icon-button" title="关闭" aria-label="关闭"><i data-lucide="x"></i></button></div>
-    <canvas id="qr-canvas" width="200" height="200" aria-label="站点访问二维码"></canvas>
+    <div class="section-heading"><h2 data-i18n="access_address">访问地址</h2><button id="qr-close" class="icon-button" title="关闭" aria-label="关闭" data-i18n-title="close" data-i18n-aria-label="close"><i data-lucide="x"></i></button></div>
+    <canvas id="qr-canvas" width="200" height="200" aria-label="站点访问二维码" data-i18n-aria-label="site_access_qr_aria"></canvas>
     <p id="site-url"></p>
-    <button id="copy-url" class="secondary"><i data-lucide="copy"></i>复制地址</button>
+    <button id="copy-url" class="secondary"><i data-lucide="copy"></i><span data-i18n="copy_address">复制地址</span></button>
     <p id="site-copy-notice" class="copy-notice" role="status" aria-live="polite"></p>
   </dialog>
   <dialog id="image-preview-dialog" aria-labelledby="image-preview-title">
     <div class="section-heading">
-      <h2 id="image-preview-title">图片预览</h2>
-      <button id="image-preview-close" class="icon-button" title="关闭" aria-label="关闭图片预览"><i data-lucide="x"></i></button>
+      <h2 id="image-preview-title" data-i18n="image_preview">图片预览</h2>
+      <button id="image-preview-close" class="icon-button" title="关闭" aria-label="关闭图片预览" data-i18n-title="close" data-i18n-aria-label="close_image_preview"><i data-lucide="x"></i></button>
     </div>
     <div class="image-preview-stage">
       <img id="image-preview-content" alt="" hidden>
-      <p id="image-preview-status" class="muted" role="status">正在加载图片...</p>
+      <p id="image-preview-status" class="muted" role="status" data-i18n="loading_image">正在加载图片...</p>
     </div>
     <div class="image-preview-footer">
       <p id="image-preview-name"></p>
-      <a id="image-preview-download" class="secondary button-link"><i data-lucide="download"></i>下载原图</a>
+      <a id="image-preview-download" class="secondary button-link"><i data-lucide="download"></i><span data-i18n="download_original">下载原图</span></a>
     </div>
   </dialog>
   <dialog id="temporary-share-dialog">
     <div class="section-heading">
-      <h2>临时访问</h2>
-      <button id="temporary-share-close" class="icon-button" title="关闭" aria-label="关闭"><i data-lucide="x"></i></button>
+      <h2 data-i18n="temporary_access">临时访问</h2>
+      <button id="temporary-share-close" class="icon-button" title="关闭" aria-label="关闭" data-i18n-title="close" data-i18n-aria-label="close"><i data-lucide="x"></i></button>
     </div>
     <p id="temporary-share-file"></p>
     <p id="temporary-share-status" class="muted"></p>
     <form id="temporary-share-form">
-      <label for="temporary-share-hours">有效时长（小时）</label>
+      <label for="temporary-share-hours" data-i18n="duration_hours">有效时长（小时）</label>
       <div class="temporary-share-duration">
         <input id="temporary-share-hours" type="number" min="1" max="168" step="1" value="24" required>
-        <button class="primary" type="submit"><i data-lucide="share-2"></i>创建链接</button>
+        <button class="primary" type="submit"><i data-lucide="share-2"></i><span data-i18n="create_link">创建链接</span></button>
       </div>
     </form>
     <div id="temporary-share-result" hidden>
-      <canvas id="temporary-share-qr" width="200" height="200" aria-label="临时文件链接二维码"></canvas>
+      <canvas id="temporary-share-qr" width="200" height="200" aria-label="临时文件链接二维码" data-i18n-aria-label="temporary_file_qr_aria"></canvas>
       <a id="temporary-share-url"></a>
       <p id="temporary-share-expiry" class="muted"></p>
       <p id="temporary-share-notice" class="copy-notice" role="status" aria-live="polite"></p>
     </div>
     <div id="temporary-share-actions" class="dialog-actions">
-      <button id="temporary-share-revoke" class="destructive" type="button" hidden><i data-lucide="unlink"></i>撤销链接</button>
-      <button id="temporary-share-copy" class="secondary" type="button" hidden><i data-lucide="copy"></i>复制链接</button>
+      <button id="temporary-share-revoke" class="destructive" type="button" hidden><i data-lucide="unlink"></i><span data-i18n="revoke_link">撤销链接</span></button>
+      <button id="temporary-share-copy" class="secondary" type="button" hidden><i data-lucide="copy"></i><span data-i18n="copy_link">复制链接</span></button>
     </div>
   </dialog>
   <dialog id="confirm-dialog">
-    <h2 id="confirm-title"></h2><p>此操作不可恢复。</p>
+    <h2 id="confirm-title"></h2><p data-i18n="cannot_undo">此操作不可恢复。</p>
     <form method="dialog" class="dialog-actions">
-      <button value="cancel" class="secondary">取消</button>
-      <button value="confirm" class="destructive">确认删除</button>
+      <button value="cancel" class="secondary" data-i18n="cancel">取消</button>
+      <button value="confirm" class="destructive" data-i18n="confirm_delete">确认删除</button>
     </form>
   </dialog>
   <dialog id="account-dialog">
-    <div class="section-heading"><h2 id="account-title">账户与设置</h2><button id="account-close" class="icon-button" title="关闭" aria-label="关闭账户设置"><i data-lucide="x"></i></button></div>
+    <div class="section-heading"><h2 id="account-title" data-i18n="account_settings">账户与设置</h2><button id="account-close" class="icon-button" title="关闭" aria-label="关闭账户设置" data-i18n-title="close" data-i18n-aria-label="close_account_settings"><i data-lucide="x"></i></button></div>
     <nav id="account-tabs" class="modal-tabs" hidden>
-      <button id="tab-profile" class="modal-tab active" type="button" aria-pressed="true">个人设置</button>
-      <button id="tab-users" class="modal-tab" type="button" aria-pressed="false">用户管理</button>
+      <button id="tab-profile" class="modal-tab active" type="button" aria-pressed="true" data-i18n="profile">个人设置</button>
+      <button id="tab-users" class="modal-tab" type="button" aria-pressed="false" data-i18n="user_management">用户管理</button>
     </nav>
     <div id="account-profile-panel">
       <div class="apple-group language-setting">
@@ -153,67 +153,67 @@
         </div>
       </div>
       <section class="account-section" aria-labelledby="password-title">
-        <h3 id="password-title">修改密码</h3>
+        <h3 id="password-title" data-i18n="change_password">修改密码</h3>
         <form id="password-form">
           <div class="apple-group">
             <div class="group-row">
-              <label for="current-password">当前密码</label>
+              <label for="current-password" data-i18n="current_password">当前密码</label>
               <div class="group-field">
-                <input id="current-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码">
-                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+                <input id="current-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码" data-i18n-placeholder="input_current_password">
+                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
               </div>
             </div>
             <div class="group-row">
-              <label for="new-password">新密码</label>
+              <label for="new-password" data-i18n="new_password">新密码</label>
               <div class="group-field">
                 <input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
-                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="12~32位，含大小写和数字">
-                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="12~32位，含大小写和数字" data-i18n-placeholder="password_rule_length_placeholder">
+                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
               </div>
             </div>
             <div class="group-row">
-              <label for="new-password-confirm">确认新密码</label>
+              <label for="new-password-confirm" data-i18n="confirm_new_password">确认新密码</label>
               <div class="group-field">
                 <input id="new-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="32"
-                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="再次输入新密码">
-                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+                  pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="再次输入新密码" data-i18n-placeholder="input_new_password_again">
+                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
               </div>
             </div>
           </div>
-          <div class="dialog-actions"><button class="primary" type="submit"><i data-lucide="key-round"></i>修改密码</button></div>
+          <div class="dialog-actions"><button class="primary" type="submit"><i data-lucide="key-round"></i><span data-i18n="change_password">修改密码</span></button></div>
         </form>
       </section>
       <section class="account-section" aria-labelledby="recovery-title">
         <div class="section-title-row">
-          <h3 id="recovery-title">恢复码</h3>
+          <h3 id="recovery-title" data-i18n="recovery_code">恢复码</h3>
           <span id="recovery-status" class="recovery-status-text muted"></span>
         </div>
         <form id="recovery-form">
           <div class="apple-group">
             <div class="group-row">
-              <label for="recovery-current-password">当前密码</label>
+              <label for="recovery-current-password" data-i18n="current_password">当前密码</label>
               <div class="group-field">
-                <input id="recovery-current-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码验证">
-                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+                <input id="recovery-current-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码验证" data-i18n-placeholder="input_current_password_verify">
+                <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
               </div>
             </div>
           </div>
-          <div class="dialog-actions"><button class="secondary" type="submit"><i data-lucide="refresh-cw"></i><span id="recovery-submit-label">生成恢复码</span></button></div>
+          <div class="dialog-actions"><button class="secondary" type="submit"><i data-lucide="refresh-cw"></i><span id="recovery-submit-label" data-i18n="generate_recovery_code">生成恢复码</span></button></div>
         </form>
         <div id="account-recovery-result" class="recovery-result" hidden>
           <code id="account-recovery-code"></code>
-          <button id="copy-account-recovery" class="secondary" type="button"><i data-lucide="copy"></i>复制恢复码</button>
+          <button id="copy-account-recovery" class="secondary" type="button"><i data-lucide="copy"></i><span data-i18n="copy_recovery_code">复制恢复码</span></button>
           <p id="account-recovery-notice" class="copy-notice" role="status" aria-live="polite"></p>
         </div>
       </section>
       <div id="account-danger" class="account-danger">
-        <button id="delete-account-open" class="destructive-link" type="button"><i data-lucide="trash-2"></i>注销账号</button>
+        <button id="delete-account-open" class="destructive-link" type="button"><i data-lucide="trash-2"></i><span data-i18n="delete_account">注销账号</span></button>
       </div>
     </div>
     <div id="account-users-panel" hidden>
       <div class="apple-group registration-card">
         <label class="registration-setting" for="registration-enabled">
-          <span><strong>自助注册</strong><small>允许新用户注册账号，需管理员启用后方可登录</small></span>
+          <span><strong data-i18n="self_registration">自助注册</strong><small data-i18n="self_registration_desc">允许新用户注册账号，需管理员启用后方可登录</small></span>
           <input id="registration-enabled" type="checkbox">
         </label>
       </div>
@@ -221,65 +221,65 @@
         <input id="user-id" type="hidden">
         <div class="apple-group">
           <div class="group-row">
-            <label for="user-name">用户名</label>
+            <label for="user-name" data-i18n="username">用户名</label>
             <div class="group-field">
-              <input id="user-name" type="text" autocomplete="off" minlength="3" maxlength="32" required placeholder="输入用户名">
+              <input id="user-name" type="text" autocomplete="off" minlength="3" maxlength="32" required placeholder="输入用户名" data-i18n-placeholder="input_username">
             </div>
           </div>
           <div class="group-row">
-            <label id="user-password-label" for="user-password">密码</label>
+            <label id="user-password-label" for="user-password" data-i18n="password">密码</label>
             <div class="group-field">
               <input id="user-password" type="password" autocomplete="new-password" minlength="12" maxlength="32"
-                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="至少12位，包含大小写和数字">
-              <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{12,32}" placeholder="至少12位，包含大小写和数字" data-i18n-placeholder="password_min_12_placeholder">
+              <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
             </div>
           </div>
           <div class="group-row">
-            <label for="user-role">角色</label>
+            <label for="user-role" data-i18n="role">角色</label>
             <div class="group-field">
-              <select id="user-role"><option value="user">普通用户</option><option value="admin">管理员</option></select>
+              <select id="user-role"><option value="user" data-i18n="regular_user">普通用户</option><option value="admin" data-i18n="admin_user">管理员</option></select>
             </div>
           </div>
           <div class="group-row">
-            <label for="user-enabled">状态</label>
+            <label for="user-enabled" data-i18n="status">状态</label>
             <div class="group-field">
-              <label class="toggle"><input id="user-enabled" type="checkbox" checked><span>启用账号</span></label>
+              <label class="toggle"><input id="user-enabled" type="checkbox" checked><span data-i18n="enable_account">启用账号</span></label>
             </div>
           </div>
         </div>
         <div class="dialog-actions">
-          <button id="user-cancel" class="secondary" type="button" hidden>取消编辑</button>
-          <button class="primary" type="submit"><i data-lucide="user-plus"></i><span id="user-submit-label">添加用户</span></button>
+          <button id="user-cancel" class="secondary" type="button" hidden data-i18n="cancel_edit">取消编辑</button>
+          <button class="primary" type="submit"><i data-lucide="user-plus"></i><span id="user-submit-label" data-i18n="add_user">添加用户</span></button>
         </div>
       </form>
       <div class="section-subheading">
-        <h3>用户列表</h3>
+        <h3 data-i18n="user_list">用户列表</h3>
       </div>
       <div id="user-list" class="user-list apple-group"></div>
     </div>
   </dialog>
   <dialog id="delete-account-dialog">
-    <div class="section-heading"><h2>注销账号</h2><button id="delete-account-close" class="icon-button" title="关闭" aria-label="关闭注销账号"><i data-lucide="x"></i></button></div>
-    <p class="delete-warning">账号和个人空间中的全部内容将被删除。</p>
+    <div class="section-heading"><h2 data-i18n="delete_account">注销账号</h2><button id="delete-account-close" class="icon-button" title="关闭" aria-label="关闭注销账号" data-i18n-title="close" data-i18n-aria-label="close_delete_account"><i data-lucide="x"></i></button></div>
+    <p class="delete-warning" data-i18n="delete_account_warning">账号和个人空间中的全部内容将被删除。</p>
     <form id="delete-account-form">
       <div class="apple-group">
         <div class="group-row">
-          <label for="delete-account-username">输入用户名确认</label>
+          <label for="delete-account-username" data-i18n="input_username_confirm">输入用户名确认</label>
           <div class="group-field">
-            <input id="delete-account-username" type="text" autocomplete="off" required placeholder="输入用户名确认">
+            <input id="delete-account-username" type="text" autocomplete="off" required placeholder="输入用户名确认" data-i18n-placeholder="input_username_confirm">
           </div>
         </div>
         <div class="group-row">
-          <label for="delete-account-password">当前密码</label>
+          <label for="delete-account-password" data-i18n="current_password">当前密码</label>
           <div class="group-field">
-            <input id="delete-account-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码">
-            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码"><i data-lucide="eye"></i></button>
+            <input id="delete-account-password" type="password" autocomplete="current-password" required maxlength="32" placeholder="输入当前密码" data-i18n-placeholder="input_current_password">
+            <button type="button" class="password-toggle" title="显示密码" aria-label="显示密码" data-i18n-title="show_password" data-i18n-aria-label="show_password"><i data-lucide="eye"></i></button>
           </div>
         </div>
       </div>
       <div class="dialog-actions">
-        <button id="delete-account-cancel" class="secondary" type="button">取消</button>
-        <button class="destructive" type="submit"><i data-lucide="trash-2"></i>确认注销</button>
+        <button id="delete-account-cancel" class="secondary" type="button" data-i18n="cancel">取消</button>
+        <button class="destructive" type="submit"><i data-lucide="trash-2"></i><span data-i18n="confirm_delete">确认注销</span></button>
       </div>
     </form>
   </dialog>

@@ -23,7 +23,7 @@ import {
 import { useNotebook } from './useNotebook';
 import { exportArchive, exportLocalDrafts, importExternalFiles } from './transfer';
 import type { NoteConflictField } from './merge';
-import { dateLocale, setUiLanguage, translate, uiLanguage } from './i18n';
+import { dateLocale, setUiLanguage, t, translate, uiLanguage } from './i18n';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -31,7 +31,7 @@ interface InstallPromptEvent extends Event {
 }
 
 function IconButton({ label, children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  const tooltip = translate(label);
+  const tooltip = t(label);
   const resolvedClass = className ? (className.includes('icon-button') ? className : `icon-button ${className}`) : 'icon-button';
   return <button className={resolvedClass} data-tooltip={tooltip} aria-label={tooltip} {...props}>{children}</button>;
 }
@@ -55,7 +55,7 @@ function Modal({ title, children, close, className }: { title: string; children:
   }, [registerFeedback]);
   return <dialog className={className} ref={ref}
     onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === ref.current) close(); }}>
-    <header className="dialog-header"><h2>{translate(title)}</h2><IconButton label="关闭" onClick={close}><X size={18} /></IconButton></header>
+    <header className="dialog-header"><h2>{t(title)}</h2><IconButton label={t('close')} onClick={close}><X size={18} /></IconButton></header>
     <div className="dialog-feedback-anchor" ref={feedbackRef} />
     {children}
   </dialog>;
@@ -455,8 +455,8 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
   if (ownsLock) return <Notebook session={session} installApp={installApp} logout={logout} />;
   return <main className="login"><div className="login-form">
     <div className="brand login-brand"><BrandIcon size={32} /><h1>EasyNote</h1></div>
-    <div className="login-heading">{ownsLock === null ? translate('正在打开笔记') : navigator.locks ? translate('另一个标签页正在编辑') : translate('浏览器不支持安全编辑锁')}</div>
-    {ownsLock === false && navigator.locks && <button className="primary" onClick={handleReopen}>{translate('重新打开')}</button>}
+    <div className="login-heading">{ownsLock === null ? t('正在打开笔记') : navigator.locks ? t('另一个标签页正在编辑') : t('浏览器不支持安全编辑锁')}</div>
+    {ownsLock === false && navigator.locks && <button className="primary" onClick={handleReopen}>{t('重新打开')}</button>}
   </div></main>;
 }
 
@@ -1534,7 +1534,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <button disabled={book.busy || syncing} onClick={() => { setMobileNavigation(false); void syncNow(false); }}><RefreshCw size={18} />同步全部</button>
         {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
           <button className="danger" disabled={disabled || book.pending.length > 0} onClick={() => { setMobileNavigation(false); setConfirmAction('purge-all'); }}><Trash2 size={18} />全部永久删除</button>}
-        <button onClick={() => { setMobileNavigation(false); setSettings(true); }}><Settings size={18} />设置</button>
+        <button onClick={() => { setMobileNavigation(false); setSettings(true); }}><Settings size={18} />{t('settings')}</button>
       </div>
     </Modal>}
     {mobileNoteActions && note && <Modal title="笔记操作" className="mobile-actions-dialog" close={() => setMobileNoteActions(false)}>
@@ -1554,7 +1554,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     </Modal>}
     {settings && <Modal title="设置" close={() => { if (!transfer) setSettings(false); }}>
-      <div className="setting-row"><span>语言/Language</span><select aria-label="语言" value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
+      <div className="setting-row"><span>语言/Language</span><select aria-label={t('language')} value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
         <option value="zh">中文</option><option value="en">English</option>
       </select></div>
       <div className="setting-row"><span>深色外观</span><button role="switch" aria-checked={dark} aria-label="深色外观" className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarPlus, FileText, Infinity as InfinityIcon, LoaderCircle, Trash2 } from 'lucide-react';
 import type { ManagedNoteShare } from '../shared/types';
 import { api } from './api';
-import { dateLocale } from './i18n';
+import { dateLocale, t } from './i18n';
 
 interface Props {
   disabled: boolean;
@@ -44,7 +44,7 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
       );
       setShares((current) => current.map((share) =>
         share.noteId === item.noteId ? { ...share, ...result.share } : share));
-      notify(selected === 'permanent' ? '分享已设为永久有效' : '分享有效期已延长');
+      notify(selected === 'permanent' ? t('share_permanent_set') : t('share_extended'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -57,7 +57,7 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
     try {
       await api.revokeNoteShare(item.noteId);
       setShares((current) => current.filter((share) => share.noteId !== item.noteId));
-      notify('分享已取消');
+      notify(t('share_cancelled'));
     } catch (error) {
       reportError(String(error));
     } finally {
@@ -66,8 +66,8 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
   };
 
   return <div className="share-management">
-    {loading ? <div className="panel-empty"><LoaderCircle className="spin" size={16} />正在读取分享…</div>
-      : !shares.length ? <div className="panel-empty">暂无正在分享的笔记</div>
+    {loading ? <div className="panel-empty"><LoaderCircle className="spin" size={16} />{t('share_reading')}</div>
+      : !shares.length ? <div className="panel-empty">{t('no_shared_notes')}</div>
         : <div className="share-management-list">
           {shares.map((item) => {
             const working = workingId === item.noteId;
@@ -78,35 +78,35 @@ export function ShareManagement({ disabled, notify, openNote, reportError }: Pro
                   <strong>{item.title || '未命名笔记'}</strong>
                 </button>
                 <span>
-                  {item.archived ? '已归档 · ' : ''}分享于 {dateTime(item.createdAt)} · {item.expiresAt === null
-                    ? '永久有效'
-                    : `有效至 ${dateTime(item.expiresAt)}`}
+                  {item.archived ? `${t('archive')} · ` : ''}{t('share_shared_at', dateTime(item.createdAt))} · {item.expiresAt === null
+                    ? t('never_expires')
+                    : t('share_until', dateTime(item.expiresAt))}
                 </span>
               </div>
               <div className="share-management-actions">
                 {item.expiresAt === null
-                  ? <span className="share-permanent"><InfinityIcon size={14} />永久</span>
+                  ? <span className="share-permanent"><InfinityIcon size={14} />{t('permanent')}</span>
                   : <>
-                    <select aria-label={`${item.title || '未命名笔记'} 延期时长`}
+                    <select aria-label={t('share_extend_duration_aria', item.title || '未命名笔记')}
                       value={extensions[item.noteId] ?? '168'}
                       disabled={disabled || working}
                       onChange={(event) => setExtensions((current) => ({
                         ...current,
                         [item.noteId]: event.target.value,
                       }))}>
-                      <option value="24">延长 1 天</option>
-                      <option value="168">延长 7 天</option>
-                      <option value="720">延长 30 天</option>
-                      <option value="permanent">设为永久</option>
+                      <option value="24">{t('延长 1 天')}</option>
+                      <option value="168">{t('延长 7 天')}</option>
+                      <option value="720">{t('延长 30 天')}</option>
+                      <option value="permanent">{t('设为永久')}</option>
                     </select>
-                    <button aria-label={`延期 ${item.title || '未命名笔记'}`} disabled={disabled || working}
+                    <button aria-label={t('share_extend_aria', item.title || '未命名笔记')} disabled={disabled || working}
                       onClick={() => void extend(item)}>
-                      {working ? <LoaderCircle className="spin" size={15} /> : <CalendarPlus size={15} />}延期
+                      {working ? <LoaderCircle className="spin" size={15} /> : <CalendarPlus size={15} />}{t('extend')}
                     </button>
                   </>}
-                <button className="danger" aria-label={`取消分享 ${item.title || '未命名笔记'}`}
+                <button className="danger" aria-label={t('share_cancel_aria', item.title || '未命名笔记')}
                   disabled={disabled || working} onClick={() => void revoke(item)}>
-                  {working ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}取消分享
+                  {working ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}{t('stop_sharing')}
                 </button>
               </div>
             </section>;

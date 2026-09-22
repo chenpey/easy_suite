@@ -2,13 +2,19 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.4.2`
+Current Version: `0.4.3`
 
 [Download EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
 EasyMac scans installed applications on an old Mac, allows users to search, filter, and select items for migration, and exports an automated installation script ready to run on a new Mac.
 
 Built as a lightweight local launcher and local web interface, it requires no app installation, Xcode, developer accounts, or extra runtime environments.
+
+## 0.4.3 Updates
+
+- **i18n Architecture Refactoring**: Consolidated all copy into an independent dictionary (`web/i18n.js`) supporting `t(key, ...args)` parameter interpolation.
+- **Static & Dynamic Decoupling**: HTML static copy uses `data-i18n*` attributes rendered once on load, while JS dynamic copy uses explicit `t(...)` calls, removing `MutationObserver`.
+- **Automated Key Alignment Script**: Added `scripts/check-i18n.mjs` to verify dictionary symmetry and reference alignment across HTML and JS.
 
 ## 0.4.2 Updates
 

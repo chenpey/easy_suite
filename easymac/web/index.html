@@ -6,6 +6,7 @@
     <meta
       name="description"
       content="在旧 Mac 本地扫描应用并生成迁移安装脚本"
+      data-i18n-content="meta_description"
     />
     <title>EasyMac</title>
     <link rel="icon" type="image/svg+xml" href="easymac-icon.svg" />
@@ -93,29 +94,29 @@
           </span>
           <div>
             <h1>EasyMac</h1>
-            <p id="scanSource">正在读取本地扫描结果</p>
+            <p id="scanSource" data-i18n="scan_source_reading">正在读取本地扫描结果</p>
           </div>
         </div>
         <div class="topbar-actions"><div class="privacy-note">
           <span class="privacy-dot" aria-hidden="true"></span>
-          扫描清单仅保存在本机
-        </div><button class="settings-button" id="settingsButton" type="button">设置</button></div>
+          <span data-i18n="privacy_note">扫描清单仅保存在本机</span>
+        </div><button class="settings-button" id="settingsButton" type="button" data-i18n="settings">设置</button></div>
       </header>
 
       <section class="scan-status" id="scanStatus" aria-live="polite">
         <img src="easymac-icon.svg" alt="" />
-        <h2>正在扫描这台 Mac</h2>
-        <p>应用列表准备完成后会自动显示</p>
-        <div class="scan-progress" aria-label="正在扫描"></div>
+        <h2 data-i18n="scan_status_title">正在扫描这台 Mac</h2>
+        <p data-i18n="scan_status_desc">应用列表准备完成后会自动显示</p>
+        <div class="scan-progress" data-i18n-aria-label="scan_progress_aria" aria-label="正在扫描"></div>
       </section>
 
       <main class="workspace" id="workspace" hidden>
-        <aside class="sidebar" aria-label="应用分类">
-          <div class="sidebar-label">分类</div>
+        <aside class="sidebar" data-i18n-aria-label="app_categories" aria-label="应用分类">
+          <div class="sidebar-label" data-i18n="categories">分类</div>
           <nav id="filterNav"></nav>
           <div class="sidebar-footer">
             <span id="scanCount">0</span>
-            <span>个扫描项目</span>
+            <span data-i18n="scanned_items_suffix">个扫描项目</span>
           </div>
         </aside>
 
@@ -127,22 +128,26 @@
                 id="searchInput"
                 type="search"
                 placeholder="搜索名称、标识或路径"
+                data-i18n-placeholder="search_placeholder"
                 autocomplete="off"
                 spellcheck="false"
                 aria-label="搜索应用"
+                data-i18n-aria-label="search_aria"
               />
             </div>
             <div class="toolbar-actions">
               <button class="quiet-button" id="selectVisibleButton" type="button">
                 <svg aria-hidden="true"><use href="#icon-check-all"></use></svg>
-                选择当前结果
+                <span data-i18n="select_current_results">选择当前结果</span>
               </button>
               <button
                 class="icon-button"
                 id="clearSelectionButton"
                 type="button"
                 title="清空选择"
+                data-i18n-title="clear_selection"
                 aria-label="清空选择"
+                data-i18n-aria-label="clear_selection"
               >
                 <svg aria-hidden="true"><use href="#icon-x"></use></svg>
               </button>
@@ -151,10 +156,10 @@
 
           <div class="list-heading">
             <div>
-              <h2 id="libraryTitle">全部项目</h2>
+              <h2 id="libraryTitle" data-i18n="all_items">全部项目</h2>
               <p id="resultSummary">0 个结果</p>
             </div>
-            <button class="text-button" id="selectAutomaticButton" type="button">
+            <button class="text-button" id="selectAutomaticButton" type="button" data-i18n="select_all_automatic">
               选择全部可自动安装
             </button>
           </div>
@@ -162,31 +167,31 @@
           <div class="app-list" id="appList" role="list"></div>
           <div class="empty-state" id="emptyState" hidden>
             <svg aria-hidden="true"><use href="#icon-search"></use></svg>
-            <strong>没有匹配项目</strong>
-            <span>调整搜索词或分类后重试</span>
+            <strong data-i18n="no_matching_items">没有匹配项目</strong>
+            <span data-i18n="no_matching_items_hint">调整搜索词或分类后重试</span>
           </div>
         </section>
 
         <aside class="plan" aria-labelledby="planTitle">
           <div class="plan-header">
             <div>
-              <h2 id="planTitle">迁移计划</h2>
-              <p id="selectedSummary">尚未选择项目</p>
+              <h2 id="planTitle" data-i18n="migration_plan">迁移计划</h2>
+              <p id="selectedSummary" data-i18n="no_items_selected">尚未选择项目</p>
             </div>
             <span class="selection-count" id="selectionCount">0</span>
           </div>
 
-          <div class="metric-grid" aria-label="选择统计">
+          <div class="metric-grid" data-i18n-aria-label="selection_summary_aria" aria-label="选择统计">
             <div>
-              <span>自动安装</span>
+              <span data-i18n="metric_automatic">自动安装</span>
               <strong id="automaticCount">0</strong>
             </div>
             <div>
-              <span>网页应用</span>
+              <span data-i18n="metric_pwa">网页应用</span>
               <strong id="pwaCount">0</strong>
             </div>
             <div>
-              <span>手动安装</span>
+              <span data-i18n="metric_manual">手动安装</span>
               <strong id="manualCount">0</strong>
             </div>
           </div>
@@ -194,43 +199,43 @@
           <div class="dependency-status" id="dependencyStatus">
             <svg aria-hidden="true"><use href="#icon-package"></use></svg>
             <div>
-              <strong>无需 Homebrew</strong>
-              <span>选择可自动安装项目后会自动加入</span>
+              <strong data-i18n="homebrew_not_needed">无需 Homebrew</strong>
+              <span data-i18n="homebrew_not_needed_desc">选择可自动安装项目后会自动加入</span>
             </div>
           </div>
 
           <div class="preview-heading">
             <div>
               <svg aria-hidden="true"><use href="#icon-code"></use></svg>
-              <h3>脚本预览</h3>
+              <h3 data-i18n="script_preview">脚本预览</h3>
             </div>
-            <span>只读</span>
+            <span data-i18n="read_only">只读</span>
           </div>
           <pre class="script-preview"><code id="scriptPreview"></code></pre>
 
           <button class="primary-button" id="downloadButton" type="button" disabled>
             <svg aria-hidden="true"><use href="#icon-download"></use></svg>
-            下载迁移脚本
+            <span data-i18n="download_migration_script">下载迁移脚本</span>
           </button>
           <p class="export-note">
-            自动项目由脚本安装；网页应用仅保留宿主浏览器和重建地址。<br />
-            下载为 ZIP 以保留执行权限，解压后可直接双击运行。
+            <span data-i18n="export_note_line1">自动项目由脚本安装；网页应用仅保留宿主浏览器和重建地址。</span><br />
+            <span data-i18n="export_note_line2">下载为 ZIP 以保留执行权限，解压后可直接双击运行。</span>
           </p>
         </aside>
       </main>
 
       <section class="load-error" id="loadError" hidden>
         <svg aria-hidden="true"><use href="#icon-alert"></use></svg>
-        <h2>请从 EasyMac.app 启动</h2>
-        <p>选择页面需要先读取这台 Mac 的本地扫描结果。</p>
+        <h2 data-i18n="error_title">请从 EasyMac.app 启动</h2>
+        <p data-i18n="error_desc">选择页面需要先读取这台 Mac 的本地扫描结果。</p>
       </section>
 
       <div class="toast" id="toast" role="status" aria-live="polite"></div>
     </div>
 
     <dialog class="settings-dialog" id="settingsDialog">
-      <div class="settings-heading"><h2>设置</h2><button id="settingsClose" type="button" aria-label="关闭">关闭</button></div>
-      <label>语言/Language<select id="languageSelect"><option value="zh">中文</option><option value="en">English</option></select></label>
+      <div class="settings-heading"><h2 data-i18n="settings">设置</h2><button id="settingsClose" type="button" data-i18n-aria-label="close" aria-label="关闭" data-i18n="close">关闭</button></div>
+      <label><span data-i18n="language_label">语言</span>/Language<select id="languageSelect"><option value="zh">中文</option><option value="en">English</option></select></label>
     </dialog>
 
     <script src="core.js"></script>
