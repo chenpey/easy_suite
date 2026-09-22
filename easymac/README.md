@@ -1,6 +1,6 @@
 # EasyMac
 
-当前版本：`0.3.2`
+当前版本：`0.3.3`
 
 [EasyMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
