@@ -2,9 +2,16 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.7.7`
+Current Version: `0.7.8`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.7.8 Updates
+
+- **Settings Data Management Layout Polish**: Split the data export and import actions into dedicated "Export" and "Import" rows with clean single-line alignment, completely eliminating the awkward 3+1 wrap and whitespace in English mode; mobile screens evenly divide widths at 50%.
+- **Sidebar Collapse Interaction & Icon Alignment**: Replaced the ambiguous three-dot icon with the semantic `<PanelLeftOpen />` icon, properly pairing with `<PanelLeftClose />`; added comfortable spacing from the list view title.
+- **Left-Edge Tooltip Clipping Fix**: Configured left-aligned tooltip positioning for the sidebar toggle and leftmost list buttons, preventing edge clipping for longer labels like `Expand Sidebar`.
+- **Search Bar Internationalization**: Fully localized the search input placeholder, aria-labels, and clear button into English and Chinese, removing lingering hardcoded Chinese strings.
 
 ## 0.7.7 Updates
 
