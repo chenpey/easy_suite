@@ -556,7 +556,14 @@ nav button.active svg { color: var(--accent); }
 .tags-input { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; color: var(--muted); }
 .tags-input:focus-within { color: var(--accent); }
 .tags-input input { width: 100%; padding: 4px 0; background: transparent; border: 0; box-shadow: none; font-size: 12px; }
-.tags-input select { flex: 0 0 auto; width: auto; padding: 4px 22px 4px 4px; border: 0; background-color: transparent; color: var(--muted); font-size: 12px; }
+.tag-picker { position: relative; flex: 0 0 auto; font-size: 12px; }
+.tag-picker summary { cursor: pointer; white-space: nowrap; }
+.tag-picker summary::marker { color: var(--subtle); }
+.tag-picker > div { position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 8; display: grid; min-width: 180px; max-height: 240px; overflow: auto; padding: 6px; color: var(--ink); background: var(--elevated); border: 1px solid var(--line-strong); border-radius: 9px; box-shadow: var(--panel-shadow); }
+.tag-picker label { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 7px; border-radius: 6px; white-space: nowrap; }
+.tag-picker label:hover { background: var(--hover); }
+.tag-picker input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.tag-picker span { padding: 8px; color: var(--muted); white-space: nowrap; }
 .word-count { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .markdown { min-height: 100px; overflow-wrap: anywhere; color: var(--ink); font-size: 16px; line-height: 1.7; }
 .markdown h1 { font-size: 30px; font-weight: 650; }
@@ -705,6 +712,8 @@ dialog.pdf-export-dialog {
 dialog.pdf-export-dialog[open] { display: flex; flex-direction: column; }
 .pdf-export-dialog .dialog-header { flex-shrink: 0; }
 .setting-row { padding: 18px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 14px; font-size: 14px; }
+.setting-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.setting-row > select { max-width: min(220px, 55%); }
 .setting-row:last-child { border: 0; }
 .setting-value { color: var(--muted); font-size: 12px; }
 .button-group { display: flex; gap: 8px; flex-wrap: wrap; }

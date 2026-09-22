@@ -55,7 +55,7 @@ cp "$PROJECT_DIR/scripts/app-launch.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/scripts/first-open.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/scripts/scan.zsh" "$APP_RESOURCES/"
 cp "$PROJECT_DIR/catalog/casks.tsv.gz" "$APP_RESOURCES/catalog/"
-cp "$PROJECT_DIR"/web/{app.js,core.js,easymac-icon.svg,index.html,style.css} \
+cp "$PROJECT_DIR"/web/{app.js,core.js,i18n.js,easymac-icon.svg,index.html,style.css} \
   "$APP_RESOURCES/web/"
 chmod 755 \
   "$APP_RESOURCES/app-launch.zsh" \

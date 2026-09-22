@@ -12,6 +12,15 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await preview?.mf.dispose(); });
 
+test("switches login UI to English without mobile overflow", async ({ page }) => {
+  await page.goto(`${preview.url}/login`);
+  await page.locator("#login-language-select").selectOption("en");
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect(page.getByRole("heading", { name: "Sign In" })).toBeVisible();
+  await expect(page.locator("#username")).toHaveAccessibleName("Username");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("PWA metadata, icons and public-only service worker cache work", async ({ page, context }) => {
   await page.goto(preview.url);
   await expect(page).toHaveURL(`${preview.url}/login`);

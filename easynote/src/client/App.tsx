@@ -23,6 +23,7 @@ import {
 import { useNotebook } from './useNotebook';
 import { exportArchive, exportLocalDrafts, importExternalFiles } from './transfer';
 import type { NoteConflictField } from './merge';
+import { setUiLanguage, uiLanguage } from './i18n';
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -1257,17 +1258,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           </aside>}
         </div>
         <footer className="document-footer">
-          <label className="tags-input"><Tag size={15} /><select aria-label="选择已有标签" value="" disabled={!!note.deletedAt || !!transfer || note.tags.length >= 20} onChange={(event) => {
-            if (!event.target.value) return;
-            const tags = [...new Set([...note.tags, event.target.value])];
-            setTagText(tags.join(', '));
-            setNoteFields({ tags });
-          }}><option value="">已有标签</option>{book.tags.filter((tag) => !note.tags.includes(tag)).map((tag) =>
-            <option key={tag} value={tag}>{tag}</option>)}</select><input aria-label="笔记标签" placeholder="标签" value={tagText} disabled={!!note.deletedAt || !!transfer} onChange={(e) => setTagText(e.target.value)} onBlur={() => {
+          <div className="tags-input"><Tag size={15} /><details className="tag-picker"><summary>标签管理</summary><div role="group" aria-label="选择已有标签">
+            {[...new Set([...book.tags, ...note.tags])].map((tag) => <label key={tag}><input type="checkbox" checked={note.tags.includes(tag)}
+              disabled={!!note.deletedAt || !!transfer || !note.tags.includes(tag) && note.tags.length >= 20} onChange={(event) => {
+                const tags = event.target.checked ? [...note.tags, tag] : note.tags.filter((value) => value !== tag);
+                setTagText(tags.join(', '));
+                setNoteFields({ tags });
+              }} />{tag}</label>)}
+            {!book.tags.length && !note.tags.length && <span>暂无已有标签</span>}
+          </div></details><input aria-label="笔记标签" placeholder="标签" value={tagText} disabled={!!note.deletedAt || !!transfer} onChange={(e) => setTagText(e.target.value)} onBlur={() => {
             const tags = [...new Set(tagText.split(/[,，]/).map((v) => v.trim()).filter(Boolean))];
             if (tags.length > 20 || tags.some((t) => t.length > 40)) { book.setError('最多 20 个标签，每个不超过 40 字符。'); setTagText(note.tags.join(', ')); return; }
             if (JSON.stringify(tags) !== JSON.stringify(note.tags)) setNoteFields({ tags });
-          }} /></label>
+          }} /></div>
           <span className="word-count">{note.content.length.toLocaleString()} 字符</span>
           <IconButton label={pdfProgress || '导出当前笔记为 PDF'} className="icon-button mobile-pdf-action" disabled={printing}
             onClick={exportCurrentNote}>{printing ? <LoaderCircle className="spin" size={17} /> : <Printer size={17} />}</IconButton>
@@ -1348,6 +1351,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     </Modal>}
     {settings && <Modal title="设置" close={() => { if (!transfer) setSettings(false); }}>
+      <div className="setting-row"><span>语言</span><select aria-label="语言" value={uiLanguage()} onChange={(event) => setUiLanguage(event.target.value as 'zh' | 'en')}>
+        <option value="zh">中文</option><option value="en">English</option>
+      </select></div>
       <div className="setting-row"><span>深色外观</span><button role="switch" aria-checked={dark} aria-label="深色外观" className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
       <div className="setting-row"><span>离线笔记库{book.offlineLibrary ? ` · ${book.offlineCount} 篇` : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label="离线笔记库" className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
       {installApp && <div className="setting-row"><span>应用</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />安装 EasyNote</button></div>}

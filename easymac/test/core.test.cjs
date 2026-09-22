@@ -9,6 +9,15 @@ const zlib = require("node:zlib");
 
 const core = require("../web/core.js");
 
+test("ships Chinese-default settings with an English option", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../web/index.html"), "utf8");
+  const i18n = fs.readFileSync(path.join(__dirname, "../web/i18n.js"), "utf8");
+  assert.match(html, /<html lang="zh-CN">/);
+  assert.match(html, /id="languageSelect"/);
+  assert.match(html, /<script src="i18n\.js"><\/script>/);
+  assert.match(i18n, /localStorage\.getItem\(key\) === "en"/);
+});
+
 function item(overrides) {
   return {
     id: "manual:example",

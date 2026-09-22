@@ -5,6 +5,99 @@ const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Paus
 const APP_VERSION = __EASYDROP_VERSION__;
 const renderIcons = () => createIcons({ icons });
 const $ = (id) => document.getElementById(id);
+const languageKey = "easydrop-language";
+const uiLanguage = localStorage.getItem(languageKey) === "en" ? "en" : "zh";
+const translations = {
+  "账户与设置": "Account & Settings", "个人设置": "Profile", "用户管理": "User Management", "语言": "Language",
+  "登录": "Sign In", "注册": "Register", "用户名": "Username", "密码": "Password", "忘记密码": "Forgot password",
+  "提交注册": "Submit Registration", "重置密码": "Reset Password", "返回登录": "Back to Sign In", "恢复码": "Recovery Code",
+  "新密码": "New Password", "确认密码": "Confirm Password", "确认新密码": "Confirm New Password", "当前密码": "Current Password",
+  "显示密码": "Show password", "隐藏密码": "Hide password", "至少 12 位": "At least 12 characters",
+  "包含大写字母": "Contains uppercase letter", "包含小写字母": "Contains lowercase letter", "包含数字": "Contains number",
+  "当前未开放注册": "Registration is closed", "注册已提交，等待管理员启用。": "Registration submitted. Waiting for administrator approval.",
+  "复制恢复码": "Copy Recovery Code", "错误详情": "Error Details", "轻量 · 极速 · 跨设备互传": "Light · Fast · Cross-device transfer",
+  "拖放文件至此处上传": "Drop files here to upload", "访问二维码": "Access QR Code", "退出登录": "Sign Out",
+  "正在加载...": "Loading...", "文本": "Text", "文件": "Files", "发送": "Send", "刷新": "Refresh",
+  "分享历史": "Share History", "清空历史": "Clear History", "上一页": "Previous", "下一页": "Next",
+  "上传文件": "Upload Files", "选择文件": "Choose Files", "暂停上传": "Pause Upload", "继续上传": "Resume Upload",
+  "修改密码": "Change Password", "生成恢复码": "Generate Recovery Code", "重新生成恢复码": "Regenerate Recovery Code",
+  "注销账号": "Delete Account", "自助注册": "Self-registration", "添加用户": "Add User", "用户列表": "User List",
+  "角色": "Role", "状态": "Status", "普通用户": "User", "管理员": "Administrator", "启用账号": "Enable Account",
+  "取消编辑": "Cancel Editing", "关闭": "Close", "取消": "Cancel", "确认删除": "Confirm Delete", "此操作不可恢复。": "This action cannot be undone.",
+  "复制文本": "Copy Text", "复制文件链接": "Copy File Link", "下载文件": "Download File", "预览图片": "Preview Image",
+  "创建临时链接": "Create Temporary Link", "管理临时链接": "Manage Temporary Link", "删除记录": "Delete Item",
+  "暂无分享记录": "No shared items", "本页当前分类暂无记录": "No items in this category", "已复制": "Copied",
+  "删除": "Delete", "确认": "Confirm", "保存修改": "Save Changes", "编辑用户": "Edit User",
+  "删除用户": "Delete User", "启用用户": "Enable User", "禁用用户": "Disable User", "待启用": "Pending", "已启用": "Enabled", "已禁用": "Disabled",
+  "账户和个人空间中的全部内容将被删除。": "Your account and all personal content will be deleted.", "输入用户名确认": "Enter username to confirm",
+};
+const translationPhrases = [
+  ["第", "Page "], ["页", ""], ["已选 ", "Selected "], [" 条", " items"], [" 个文件", " files"],
+  ["有效至 ", "Expires "], ["单文件上限 ", "Per-file limit "], ["正在", ""], ["已上传", "Uploaded"],
+  ["上传完成", "Upload complete"], ["上传已暂停", "Upload paused"], ["网络错误", "Network error"],
+];
+Object.assign(translations, {
+  "站点访问二维码预览": "Site QR Code Preview", "分享文本": "Share Text", "输入要分享的文本": "Enter text to share",
+  "文件上传": "File Upload", "分享记录": "Shared Items", "全部": "All", "图片": "Images", "其他文件": "Other Files",
+  "选择全部": "Select All", "删除所选": "Delete Selected", "扫码后登录下载": "Scan to sign in and download",
+  "临时访问": "Temporary Access", "临时链接": "Temporary Link", "复制链接": "Copy Link", "撤销链接": "Revoke Link",
+  "当前未启用临时访问": "Temporary access is not active", "图片加载失败": "Image failed to load", "正在加载图片...": "Loading image...",
+  "暂停": "Pause", "继续": "Resume", "可恢复": "Resumable", "待上传": "Waiting", "初始化": "Initializing", "检查恢复点": "Checking resume point",
+  "正在合并": "Merging", "已暂停": "Paused", "失败": "Failed", "已上传（无缩略图）": "Uploaded (no thumbnail)",
+  "上传进度": "Upload Progress", "账户": "Account", "普通用户": "User", "已设置恢复码": "Recovery code set",
+  "尚未设置恢复码": "Recovery code not set", "恢复码已更新": "Recovery code updated", "允许新用户注册账号，需管理员启用后方可登录": "Allow new registrations. An administrator must enable each account before sign-in.",
+  "输入当前密码": "Enter current password", "输入当前密码验证": "Enter current password to verify", "再次输入新密码": "Enter new password again",
+  "12~32位，含大小写和数字": "12–32 characters with upper/lowercase letters and a number", "输入用户名": "Enter username",
+  "至少12位，包含大小写和数字": "At least 12 characters with upper/lowercase letters and a number", "确认注销": "Confirm Account Deletion",
+  "关闭账户设置": "Close Account Settings", "关闭注销账号": "Close Account Deletion", "访问二维码": "Access QR Code",
+  "分享历史已自动更新": "Share history updated", "同步已恢复": "Sync restored", "已刷新": "Refreshed", "已删除": "Deleted", "已清空": "Cleared",
+  "登录成功，正在下载文件": "Signed in. Downloading file", "密码已重置，请返回登录": "Password reset. Return to sign in",
+  "密码已修改": "Password changed", "临时链接已创建": "Temporary link created", "临时链接已撤销": "Temporary link revoked",
+  "已开放自助注册": "Self-registration enabled", "已关闭自助注册": "Self-registration disabled", "用户已添加": "User added", "用户已更新并下线": "User updated and signed out",
+});
+function translateUi(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (translations[trimmed]) return value.replace(trimmed, translations[trimmed]);
+  let translated = value;
+  for (const [source, target] of translationPhrases) translated = translated.replaceAll(source, target);
+  return translated;
+}
+function translateElement(element) {
+  if (element.closest("pre, code, [data-i18n-ignore]")) return;
+  for (const attribute of ["aria-label", "title", "placeholder"]) {
+    const value = element.getAttribute(attribute);
+    const translated = value && translateUi(value);
+    if (value && translated !== value) element.setAttribute(attribute, translated);
+  }
+  for (const node of element.childNodes) if (node.nodeType === Node.TEXT_NODE && node.textContent) {
+    const translated = translateUi(node.textContent);
+    if (translated !== node.textContent) node.textContent = translated;
+  }
+}
+function installUiLanguage() {
+  document.documentElement.lang = uiLanguage === "en" ? "en" : "zh-CN";
+  if (uiLanguage !== "en") return;
+  const apply = (root) => {
+    if (root instanceof Element) translateElement(root);
+    root.querySelectorAll?.("*").forEach(translateElement);
+  };
+  apply(document.body);
+  new MutationObserver((records) => records.forEach((record) => {
+    if (record.type === "attributes") translateElement(record.target);
+    record.addedNodes.forEach((node) => node instanceof Element ? apply(node) : node.parentElement && translateElement(node.parentElement));
+  })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-label", "title", "placeholder"] });
+}
+installUiLanguage();
+for (const id of ["language-select", "login-language-select"]) {
+  const select = $(id);
+  if (!select) continue;
+  select.value = uiLanguage;
+  select.addEventListener("change", () => {
+    localStorage.setItem(languageKey, select.value);
+    location.reload();
+  });
+}
 const isLogin = document.body.dataset.page === "login";
 if ($("app-version")) $("app-version").textContent = `v${APP_VERSION}`;
 let session;
