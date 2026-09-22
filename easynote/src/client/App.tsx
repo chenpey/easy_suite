@@ -429,6 +429,27 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   });
   const noteListWidthRef = useRef(noteListWidth);
   const resizeStart = useRef<{ pointerId: number; x: number; width: number } | null>(null);
+  const tagPickerRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const el = tagPickerRef.current;
+      if (el && el.open && !el.contains(e.target as Node)) el.open = false;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = tagPickerRef.current;
+      if (el && el.open && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        el.open = false;
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
   const [settings, setSettings] = useState(false);
   const [accountSecurity, setAccountSecurity] = useState(false);
   const [userManagement, setUserManagement] = useState(false);
@@ -1302,7 +1323,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                 </span>
               ))}
             </div>
-            <details className="tag-picker">
+            <details className="tag-picker" ref={tagPickerRef} onToggle={(e) => {
+              if (e.currentTarget.open) e.currentTarget.querySelector('input')?.focus();
+            }}>
               <summary className="tag-picker-summary" aria-label="添加标签">
                 <Plus size={13} />
                 <span>{note.tags.length ? '添加' : '添加标签'}</span>
@@ -1314,6 +1337,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                     value={noteTagQuery}
                     onChange={(e) => setNoteTagQuery(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (tagPickerRef.current) tagPickerRef.current.open = false;
+                        return;
+                      }
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         const val = noteTagQuery.trim();
@@ -1358,6 +1387,16 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                       新建并打标
                     </button>
                   )}
+                  <IconButton
+                    type="button"
+                    label="关闭"
+                    className="icon-button tag-picker-close-btn"
+                    onClick={() => {
+                      if (tagPickerRef.current) tagPickerRef.current.open = false;
+                    }}
+                  >
+                    <X size={14} />
+                  </IconButton>
                 </div>
                 <div className="tag-picker-options">
                   {[...new Set([...book.tags, ...note.tags])]

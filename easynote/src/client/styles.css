@@ -671,6 +671,7 @@ nav button.active svg { color: var(--accent); }
 }
 .tag-picker-search {
   display: flex;
+  align-items: center;
   gap: 6px;
   padding: 4px 4px 6px;
   border-bottom: 1px solid var(--line);
@@ -699,6 +700,21 @@ nav button.active svg { color: var(--accent); }
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.tag-picker-close-btn {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.tag-picker-close-btn:hover {
+  color: var(--ink);
+  background: var(--hover);
 }
 .tag-picker-options {
   overflow-y: auto;
