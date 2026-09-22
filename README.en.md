@@ -10,7 +10,7 @@ Easy Suite centrally manages three independent utility projects. Each project ma
 | Project | Current Version |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.2.0` |
-| [EasyNote](easynote/) | `0.6.0` |
+| [EasyNote](easynote/) | `0.7.0` |
 | [EasyMac](easymac/) | `0.4.0` |
 <!-- versions:end -->
 
