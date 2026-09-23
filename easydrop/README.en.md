@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.2.6`
+Current Version: `1.3.0`
 
 EasyDrop is a text and file sharing tool built on Cloudflare Workers, using username and password authentication, a D1 database, and private R2 object storage. Once deployed, computers, phones, and tablets can exchange content across networks via a single HTTPS address.
 
@@ -57,7 +57,7 @@ Enter content in the text area and click "Share Text"; successfully saved record
 
 ### Multi-File Upload
 
-Click "Choose Files", drag and drop files, or paste files when no dialog is open to add multiple files and initiate uploads immediately. By default, 3 files are processed concurrently, each non-empty file utilizing R2 Multipart Upload with concurrent part uploads. File-level and part-level concurrency are both controlled by server configuration.
+Click the "Images & Files" upload area, drag and drop files, or paste images/files anywhere on the main page while no dialog is open to add multiple files and initiate uploads immediately. Clipboard images without filenames receive generated names with the correct extension; images/files take priority even when the text field has focus. By default, 3 files are processed concurrently, each non-empty file utilizing R2 Multipart Upload with concurrent part uploads. File-level and part-level concurrency are both controlled by server configuration.
 
 - Default per-file limit is 200 MiB, validated both client-side and server-side; UI uses KB/MB with a 1024 base.
 - Default upload chunk size is 5 MiB, processing 3 files concurrently with 3 concurrent parts per file; the final part may be smaller than 5 MiB. Each Worker request handles exactly one part without buffering the entire file on the server.

@@ -411,8 +411,8 @@ test("administrator can create, edit, disable, enable and delete a user", async 
   await page.getByRole("button", { name: "用户管理" }).click();
   await expect(page.locator("#account-dialog")).toBeVisible();
 
-  await page.getByLabel("用户名", { exact: true }).fill("ui-member");
-  await page.getByLabel("密码", { exact: true }).fill("UiMemberPass123!");
+  await page.locator("#user-name").fill("ui-member");
+  await page.locator("#user-password").fill("UiMemberPass123!");
   await page.getByRole("button", { name: "添加用户" }).click();
   let row = page.locator(".user-row").filter({ hasText: "ui-member" });
   await expect(row).toContainText("用户 · 已启用");
@@ -423,7 +423,7 @@ test("administrator can create, edit, disable, enable and delete a user", async 
   await page.screenshot({ path: "test-results/users-390.png" });
 
   await row.getByRole("button", { name: "编辑用户" }).click();
-  await page.getByLabel("用户名", { exact: true }).fill("ui-member-edited");
+  await page.locator("#user-name").fill("ui-member-edited");
   await page.getByLabel("新密码（留空则不修改）").fill("ChangedPass456!");
   await page.getByRole("button", { name: "保存修改" }).click();
   row = page.locator(".user-row").filter({ hasText: "ui-member-edited" });
@@ -447,8 +447,8 @@ test("sole administrator cannot see delete account button, but normal user or mu
   await expect(page.locator("#account-danger")).toBeHidden();
 
   await page.getByRole("button", { name: "用户管理" }).click();
-  await page.getByLabel("用户名", { exact: true }).fill("second-admin");
-  await page.getByLabel("密码", { exact: true }).fill("SecondAdminPass123!");
+  await page.locator("#user-name").fill("second-admin");
+  await page.locator("#user-password").fill("SecondAdminPass123!");
   await page.locator("#user-role").selectOption("admin");
   await page.getByRole("button", { name: "添加用户" }).click();
   await expect(page.locator(".user-row").filter({ hasText: "second-admin" })).toBeVisible();
@@ -552,9 +552,9 @@ test("registration, recovery, password change and self-deletion work end to end"
   await memberPage.getByRole("button", { name: "账户与设置" }).click();
   await memberPage.getByRole("button", { name: "注销账号" }).click();
   const deleteDialog = memberPage.locator("#delete-account-dialog");
-  await deleteDialog.getByLabel("输入用户名确认").fill("ui-self-service");
+  await deleteDialog.locator("#delete-account-username").fill("ui-self-service");
   await deleteDialog.getByLabel("当前密码").fill("UiChangedPass789!");
-  await deleteDialog.getByRole("button", { name: "确认注销" }).click();
+  await deleteDialog.getByRole("button", { name: "确认删除" }).click();
   await expect(memberPage).toHaveURL(`${preview.url}/login`);
   await memberContext.close();
 
@@ -919,6 +919,38 @@ test("history filters constrain selection and dialogs ignore pasted files", asyn
     }));
   });
   await expect(page.locator("#upload-list > li")).toHaveCount(0);
+});
+
+test("pastes clipboard images and files even when the text field has focus", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await expect(page.locator("#file-input")).toBeEnabled();
+  const pasteResult = await page.evaluate((pngBase64) => {
+    const bytes = Uint8Array.from(atob(pngBase64), (character) => character.charCodeAt(0));
+    const clipboard = new DataTransfer();
+    clipboard.items.add(new File([bytes], "", { type: "image/png" }));
+    clipboard.items.add(new File(["clipboard file"], "clipboard-note.txt", { type: "text/plain" }));
+    const input = document.querySelector("#text-input");
+    input.focus();
+    const event = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      clipboardData: clipboard,
+    });
+    return {
+      prevented: !input.dispatchEvent(event),
+      focused: document.activeElement === input,
+    };
+  }, "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+
+  expect(pasteResult).toEqual({ prevented: true, focused: true });
+  await expect(page.locator("#notice")).toHaveText("上传完成");
+  const image = page.locator('.history-item[data-category="image"]');
+  await expect(image).toHaveCount(1);
+  await expect(image.locator(".item-name")).toHaveText(/^pasted-image-\d{14}-1\.png \(\d+ B\)$/);
+  await expect(image.locator(".file-thumbnail")).toBeVisible();
+  await expect(page.locator(".history-item").filter({ hasText: "clipboard-note.txt" })).toHaveCount(1);
+  await expect(page.locator("#text-input")).toHaveValue("");
 });
 
 
