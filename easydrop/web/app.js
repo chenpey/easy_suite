@@ -52,6 +52,14 @@ const copyFeedbackTimers = new WeakMap();
 const historyRowCache = new Map();
 const previewSourceTypes = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/bmp"]);
 const previewSourceExtension = /\.(?:jpe?g|png|gif|webp|avif|bmp)$/i;
+const clipboardImageExtensions = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/gif", "gif"],
+  ["image/webp", "webp"],
+  ["image/avif", "avif"],
+  ["image/bmp", "bmp"],
+]);
 const previewMaxSide = 512;
 const previewMaxBytes = 512 * 1024;
 const legacyThumbnailFallbackWidth = 384;
@@ -949,6 +957,27 @@ function makeUploadRow(file, saved) {
   return entry;
 }
 
+function clipboardFiles(data) {
+  if (!data) return [];
+  const itemFiles = Array.from(data.items || [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  const files = itemFiles.length ? itemFiles : Array.from(data.files || []);
+  const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+  return files.map((file, index) => {
+    if (file.name?.trim()) return file;
+    const mediaType = file.type.toLowerCase();
+    const extension = clipboardImageExtensions.get(mediaType);
+    const prefix = extension ? "pasted-image" : "pasted-file";
+    const suffix = files.length > 1 ? `-${index + 1}` : "";
+    return new File([file], `${prefix}-${stamp}${suffix}${extension ? `.${extension}` : ""}`, {
+      type: file.type,
+      lastModified: file.lastModified || Date.now(),
+    });
+  });
+}
+
 async function partChecksum(blob) {
   const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -1337,13 +1366,15 @@ async function initializeApp() {
   window.addEventListener("paste", (e) => {
     const target = e.target;
     const isInput = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
-    const inCompose = target === document.body || target?.closest?.(".compose");
-    if (isInput || !inCompose || document.querySelector("dialog[open]")) return;
-    if (e.clipboardData?.files?.length) {
+    if (document.querySelector("dialog[open]")) return;
+    const files = clipboardFiles(e.clipboardData);
+    if (files.length && !uploading) {
       e.preventDefault();
-      if (enqueueFiles(e.clipboardData.files)) notice(t("added_files_from_clipboard", e.clipboardData.files.length));
+      if (enqueueFiles(files)) notice(t("added_files_from_clipboard", files.length));
       return;
     }
+    const inCompose = target === document.body || target?.closest?.(".compose");
+    if (isInput || !inCompose) return;
     if (e.clipboardData?.types?.includes("text/plain")) {
       const text = e.clipboardData.getData("text/plain");
       if (text && text.trim()) {
