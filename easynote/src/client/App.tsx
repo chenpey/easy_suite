@@ -142,6 +142,10 @@ function syncPopoutStyles(targetDoc: Document, title: string, dark: boolean) {
   metaCharset.setAttribute('charset', 'utf-8');
   targetDoc.head.appendChild(metaCharset);
 
+  const baseEl = targetDoc.createElement('base');
+  baseEl.href = typeof window !== 'undefined' ? window.location.origin : '/';
+  targetDoc.head.appendChild(baseEl);
+
   const metaVp = targetDoc.createElement('meta');
   metaVp.name = 'viewport';
   metaVp.content = 'width=device-width, initial-scale=1';
@@ -975,7 +979,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     : null;
 
   const togglePopoutPin = () => {
-    if (activePopoutNote && popoutWindow?.isPip) void openPopoutReader(activePopoutNote.id, false);
+    if (!activePopoutNote) return;
+    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip);
   };
 
   const togglePopoutMaximize = () => {
@@ -2252,30 +2257,26 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             if (!popoutWindow.isPip) togglePopoutMaximize();
           }}
         >
-          {!popoutWindow.isPip && <div className={`popout-window-controls ${isMacPlatform() ? 'mac' : 'win'}`}>
-              <IconButton
-                label={t(popoutMaximized ? '向下还原' : '最大化')}
-                className="icon-button popout-control-btn popout-control-maximize"
-                onClick={togglePopoutMaximize}
-              >
-                {popoutMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </IconButton>
-            </div>}
           <div className="popout-reader-title-area">
-            <BrandIcon size={18} />
+            <BookOpen size={16} className="popout-reader-icon" />
             <span className="popout-reader-title" title={activePopoutNote.title || t('untitled_note')}>
               {activePopoutNote.title || t('untitled_note')}
             </span>
             {activePopoutNote.pinned && <span className="popout-reader-pin-tag" title={t('置顶笔记')}><Pin size={12} fill="currentColor" /></span>}
           </div>
           <div className="popout-reader-actions">
-            {popoutWindow.isPip && <IconButton
-              label={t('取消窗口置顶')}
-              className="icon-button active"
+            <IconButton
+              label={
+                typeof window !== 'undefined' && 'documentPictureInPicture' in window && Boolean(window.documentPictureInPicture?.requestWindow)
+                  ? t(popoutWindow.isPip ? '取消窗口置顶' : '置顶窗口在最前')
+                  : t('当前浏览器不支持窗口置顶')
+              }
+              className={`icon-button ${popoutWindow.isPip ? 'active' : ''}`}
+              disabled={typeof window === 'undefined' || !('documentPictureInPicture' in window) || !window.documentPictureInPicture?.requestWindow}
               onClick={togglePopoutPin}
             >
-              <Pin size={15} fill="currentColor" />
-            </IconButton>}
+              <Pin size={15} fill={popoutWindow.isPip ? 'currentColor' : 'none'} />
+            </IconButton>
             <IconButton
               label={t('深色外观')}
               className="icon-button"
@@ -2283,6 +2284,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             >
               {dark ? <Moon size={15} /> : <Sun size={15} />}
             </IconButton>
+            {!popoutWindow.isPip && (
+              <IconButton
+                label={t(popoutMaximized ? '向下还原' : '最大化')}
+                className="icon-button popout-control-btn popout-control-maximize"
+                onClick={togglePopoutMaximize}
+              >
+                {popoutMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </IconButton>
+            )}
           </div>
         </header>
         <main className="popout-reader-content">

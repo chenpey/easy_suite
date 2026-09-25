@@ -1421,21 +1421,6 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   user-select: none;
   cursor: default;
 }
-.popout-window-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.popout-window-controls.mac {
-  margin-right: 8px;
-}
-.popout-window-controls.win {
-  order: 1;
-  margin-left: 8px;
-  border-left: 1px solid var(--line);
-  padding-left: 8px;
-}
 .popout-control-btn {
   width: 28px;
   height: 28px;
@@ -1459,6 +1444,10 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   font-weight: 600;
   color: var(--ink);
   flex: 1;
+}
+.popout-reader-icon {
+  flex-shrink: 0;
+  color: var(--muted);
 }
 .popout-reader-title {
   white-space: nowrap;
