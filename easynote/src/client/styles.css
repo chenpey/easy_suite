@@ -1390,6 +1390,105 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .login-form input { height: 42px; color: var(--ink); font-size: 15px; }
 .login-form > .primary { width: 100%; height: 42px; margin-top: 4px; }
 .error-box { margin-top: 20px; color: var(--danger); }
+
+/* Popout Reader Window */
+.popout-reader-window {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans SC", sans-serif;
+}
+.popout-reader-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--paper);
+  color: var(--ink);
+}
+.popout-reader-toolbar {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--elevated);
+  user-select: none;
+}
+.popout-reader-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.popout-reader-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.popout-reader-pin-tag {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+.popout-reader-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.popout-reader-actions .icon-button.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.popout-reader-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px 28px 48px;
+}
+.popout-reader-document {
+  max-width: 780px;
+  margin: 0 auto;
+}
+.popout-reader-document .popout-note-heading {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink);
+  word-break: break-word;
+}
+.popout-reader-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.popout-reader-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.popout-reader-document .markdown {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
 @media(max-width: 1100px) {
   .app-shell { grid-template-columns: 200px var(--note-list-width, 300px) 5px minmax(0, 1fr); }
   .sidebar-hidden { grid-template-columns: var(--note-list-width, 300px) 5px minmax(0, 1fr); }

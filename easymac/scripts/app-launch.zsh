@@ -6,8 +6,6 @@ set -euo pipefail
 RESOURCE_DIR="${0:A:h}"
 WEB_DIR="$RESOURCE_DIR/web"
 SCANNER="$RESOURCE_DIR/scan.zsh"
-runtime_root="${TMPDIR:-/tmp}/EasyMac-$UID"
-run_dir="$runtime_root/current"
 
 [[ -d "$WEB_DIR" ]] || {
   print -u2 -- "缺少网页资源。"
@@ -18,7 +16,8 @@ run_dir="$runtime_root/current"
   exit 1
 }
 
-rm -rf -- "$runtime_root"
+runtime_root="$(/usr/bin/mktemp -d -t EasyMac)"
+run_dir="$runtime_root/current"
 mkdir -p -- "$run_dir"
 cp -R "$WEB_DIR/." "$run_dir/"
 print 'window.EASYMAC_PENDING = true;' > "$run_dir/data.js"

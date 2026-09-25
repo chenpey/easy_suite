@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -9,7 +9,7 @@ import { Editor, Preview, toggleMarkdownTask, type EditorHandle } from './Editor
 import { NoteSharing } from './NoteSharing';
 import { ShareManagement } from './ShareManagement';
 import { UserManagement } from './UserManagement';
-import { clearAccountStorage, forgetCachedSession, loadOfflineSession, cacheSession } from './drafts';
+import { clearAccountStorage, forgetCachedSession, loadOfflineSession, cacheSession, loadMirroredNote } from './drafts';
 import { headings, noteLink } from './knowledge';
 import {
   createPdfFile,
@@ -21,7 +21,7 @@ import {
   type PdfExportOptions,
 } from './pdf';
 import { useNotebook } from './useNotebook';
-import { exportArchive, exportLocalDrafts, importExternalFiles } from './transfer';
+import { exportArchive, exportLocalDrafts, importExternalFiles, MissingCachedFilesError } from './transfer';
 import type { NoteConflictField } from './merge';
 import { dateLocale, setUiLanguage, t, translate, uiLanguage } from './i18n';
 
@@ -127,6 +127,34 @@ function noteExcerptText(markdown: string, query: string) {
         : label;
     })
     .replace(/[#*`]/g, '');
+}
+
+function syncPopoutStyles(targetDoc: Document, title: string, dark: boolean) {
+  targetDoc.head.innerHTML = '';
+
+  const metaCharset = targetDoc.createElement('meta');
+  metaCharset.setAttribute('charset', 'utf-8');
+  targetDoc.head.appendChild(metaCharset);
+
+  const metaVp = targetDoc.createElement('meta');
+  metaVp.name = 'viewport';
+  metaVp.content = 'width=device-width, initial-scale=1';
+  targetDoc.head.appendChild(metaVp);
+
+  const titleEl = targetDoc.createElement('title');
+  titleEl.textContent = `${title} - EasyNote`;
+  targetDoc.head.appendChild(titleEl);
+
+  const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (icon) targetDoc.head.appendChild(icon.cloneNode(true));
+
+  document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style').forEach((node) => {
+    targetDoc.head.appendChild(node.cloneNode(true));
+  });
+
+  targetDoc.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  targetDoc.documentElement.lang = document.documentElement.lang || 'zh-CN';
+  targetDoc.body.className = 'popout-reader-window';
 }
 
 const conflictFieldName: Record<NoteConflictField, string> = {
@@ -550,6 +578,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [dark, setDark] = useState(() => localStorage.getItem('easynote-theme') === 'dark');
   const [wideDocument, setWideDocument] = useState(() => localStorage.getItem('easynote-document-width') === 'wide');
+  const [popoutWindow, setPopoutWindow] = useState<{ win: Window; isPip: boolean } | null>(null);
+  const [popoutNoteId, setPopoutNoteId] = useState<string | null>(null);
+  const [popoutNoteFallback, setPopoutNoteFallback] = useState<Note | null>(null);
+  const popoutWindowRef = useRef<{ win: Window; isPip: boolean } | null>(null);
+  const popoutOpenGeneration = useRef(0);
+  const lastNoteSelection = useRef<{ id: string; promise: Promise<Note | null> } | null>(null);
+  const pipFailed = useRef(false);
+  popoutWindowRef.current = popoutWindow;
   const editor = useRef<EditorHandle>(null);
   const editorCursor = useRef(0);
   const pendingEditorOffset = useRef<{ noteId: string; offset: number } | null>(null);
@@ -607,7 +643,27 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     updateNoteListWidth(widths[event.key]);
     localStorage.setItem('easynote-note-list-width', String(Math.min(440, Math.max(220, widths[event.key]))));
   };
-  useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('easynote-theme', dark ? 'dark' : 'light'); }, [dark]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    localStorage.setItem('easynote-theme', dark ? 'dark' : 'light');
+    if (popoutWindow?.win && !popoutWindow.win.closed) {
+      popoutWindow.win.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    }
+  }, [dark, popoutWindow]);
+  useEffect(() => {
+    const onUnload = () => {
+      if (popoutWindowRef.current?.win && !popoutWindowRef.current.win.closed) {
+        try { popoutWindowRef.current.win.close(); } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onUnload);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (note?.id === popoutNoteId) setPopoutNoteFallback(note);
+  }, [note, popoutNoteId]);
   useEffect(() => {
     const pending = pendingEditorOffset.current;
     editorCursor.current = pending && pending.noteId === note?.id
@@ -759,13 +815,151 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
   const openNote = async (id: string) => {
-    await book.select(id);
+    const selection = book.select(id);
+    lastNoteSelection.current = { id, promise: selection };
+    const selected = await selection;
     setMobileNavigation(false);
     setMobileNoteActions(false);
     setMobileNote(true);
     setVersionList(null);
     setCommandPalette(false);
     setLinkPicker(false);
+    return selected;
+  };
+  const openPopoutReader = async (noteId: string, requestedPin?: boolean) => {
+    const generation = ++popoutOpenGeneration.current;
+    let targetNote: Note | null = (note?.id === noteId ? note : null);
+    const hasPipSupport = typeof window !== 'undefined' &&
+      'documentPictureInPicture' in window &&
+      Boolean(window.documentPictureInPicture?.requestWindow);
+
+    const existingWindow = popoutWindow?.win && !popoutWindow.win.closed ? popoutWindow : null;
+    const shouldPin = requestedPin !== undefined
+      ? requestedPin
+      : (existingWindow ? existingWindow.isPip : hasPipSupport && !pipFailed.current);
+
+    const reuseWindow = existingWindow &&
+      ((existingWindow.isPip && shouldPin) || (!existingWindow.isPip && !shouldPin) || (!hasPipSupport && shouldPin));
+    const previousWindow = reuseWindow ? null : existingWindow;
+
+    let newWin: Window | null = reuseWindow ? existingWindow.win : null;
+    let isPip = reuseWindow ? existingWindow.isPip : false;
+
+    const width = Math.min(680, window.screen?.availWidth ? window.screen.availWidth - 40 : 680);
+    const height = Math.min(760, window.screen?.availHeight ? window.screen.availHeight - 60 : 760);
+
+    if (!reuseWindow) {
+      if (shouldPin && hasPipSupport && window.documentPictureInPicture?.requestWindow) {
+        try {
+          newWin = await window.documentPictureInPicture.requestWindow({ width, height });
+          isPip = true;
+        } catch (error) {
+          console.warn('documentPictureInPicture failed', error);
+          pipFailed.current = true;
+          book.setError(t('置顶窗口打开失败。再次点击“独立窗口阅读”可打开普通窗口。'));
+          return;
+        }
+      }
+
+      if (!newWin) {
+        const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+        const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+        newWin = window.open(
+          '',
+          `easynote-popout-reader-${generation}`,
+          `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+        );
+        isPip = false;
+      }
+    }
+
+    if (!newWin) {
+      book.setError(t('无法打开独立窗口，请检查浏览器的弹窗拦截设置。'));
+      return;
+    }
+
+    if (!targetNote && lastNoteSelection.current?.id === noteId) {
+      targetNote = await lastNoteSelection.current.promise;
+    }
+    if (!targetNote) {
+      const draft = book.pending.find((item) => item.id === noteId);
+      if (draft) {
+        targetNote = draft;
+      } else if (book.offlineLibrary) {
+        targetNote = await loadMirroredNote(session.user!.id, noteId);
+      }
+      if (!targetNote && navigator.onLine && !session.offline) {
+        try {
+          const res = await api.note(noteId);
+          targetNote = res.note;
+        } catch {
+          // fallback
+        }
+      }
+    }
+
+    if (!targetNote) targetNote = await openNote(noteId);
+    if (!targetNote || generation !== popoutOpenGeneration.current) {
+      if (!reuseWindow) {
+        try { newWin.close(); } catch {}
+      }
+      return;
+    }
+
+    if (reuseWindow) {
+      if (popoutNoteId !== targetNote.id) {
+        newWin.document.querySelector<HTMLElement>('.popout-reader-content')?.scrollTo(0, 0);
+      }
+      setPopoutNoteId(targetNote.id);
+      setPopoutNoteFallback(targetNote);
+      newWin.document.title = `${targetNote.title || t('untitled_note')} - EasyNote`;
+      newWin.focus();
+      return;
+    }
+
+    syncPopoutStyles(newWin.document, targetNote.title || t('untitled_note'), dark);
+
+    const winInstance = newWin;
+    const handleClose = () => {
+      if (popoutWindowRef.current?.win !== winInstance) return;
+      popoutWindowRef.current = null;
+      setPopoutWindow(null);
+      setPopoutNoteId(null);
+    };
+    winInstance.addEventListener('pagehide', handleClose);
+    winInstance.addEventListener('beforeunload', handleClose);
+
+    setPopoutNoteId(targetNote.id);
+    setPopoutNoteFallback(targetNote);
+    popoutWindowRef.current = { win: winInstance, isPip };
+    setPopoutWindow(popoutWindowRef.current);
+    if (previousWindow) {
+      window.setTimeout(() => {
+        try { previousWindow.win.close(); } catch {}
+      }, 100);
+    }
+    winInstance.focus();
+  };
+
+  const activePopoutNote = popoutNoteId
+    ? (note?.id === popoutNoteId ? note : book.pending.find((item) => item.id === popoutNoteId) ?? popoutNoteFallback)
+    : null;
+
+  const togglePopoutPin = () => {
+    if (!activePopoutNote) return;
+    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip);
+  };
+
+  const handlePopoutTask = (index: number, checked: boolean) => {
+    if (!activePopoutNote || activePopoutNote.deletedAt || transfer) return;
+    const newContent = toggleMarkdownTask(activePopoutNote.content, index, checked);
+    if (note?.id === activePopoutNote.id) {
+      setNoteFields({ content: newContent });
+    } else {
+      const updated = { ...activePopoutNote, content: newContent };
+      setPopoutNoteFallback(updated);
+      book.edit({ content: newContent }, activePopoutNote);
+    }
   };
   const openTaskCenter = async () => {
     setTaskCenter(true);
@@ -1047,6 +1241,26 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     catch (e) { book.setError(String(e)); }
     finally { setTransfer(''); }
   };
+  const exportDrafts = async () => {
+    setTransfer(t('正在准备草稿…'));
+    try {
+      let count: number;
+      try {
+        count = await exportLocalDrafts(session.user!.id, setTransfer);
+      } catch (error) {
+        if (!(error instanceof MissingCachedFilesError)) throw error;
+        if (!window.confirm(t('有 {0} 个附件未缓存。仍要导出仅含可用内容的不完整备份吗？', error.ids.length))) return;
+        count = await exportLocalDrafts(session.user!.id, setTransfer, true);
+        showNotice(t('已导出 {0} 篇草稿的不完整备份，请保留原设备上的附件。', count));
+        return;
+      }
+      showNotice(t('drafts_exported', count));
+    } catch (error) {
+      book.setError(String(error));
+    } finally {
+      setTransfer('');
+    }
+  };
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
   const activeView = book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
@@ -1259,9 +1473,18 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
         {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
           <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
+            title={t('双击在独立窗口中打开并置顶阅读')}
             aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
-            onClick={() => selectionMode ? toggleSelected(item.id) : void openNote(item.id)}>
+            onClick={(event) => {
+              if (event.detail >= 2) return;
+              if (selectionMode) toggleSelected(item.id);
+              else void openNote(item.id);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              if (!selectionMode) void openPopoutReader(item.id);
+            }}>
             <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || t('untitled_note'), book.query)}</span>{item.pinned && <Pin size={12} />}</div>
             <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || t('empty_note'), book.query)}</div>
             <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title={t('local_draft')} />}</div>
@@ -1305,6 +1528,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <IconButton label="插入内部链接" className="icon-button toolbar-link-action" disabled={!!note.deletedAt || !!transfer} onClick={beginLinkInsertion}><Link2 size={17} /></IconButton>
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
             <IconButton label={wideDocument ? '使用阅读宽度' : '使用宽屏'} className="icon-button document-width-toggle" aria-pressed={wideDocument} onClick={toggleDocumentWidth}>{wideDocument ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</IconButton>
+            <IconButton label={t('独立窗口阅读')} className="icon-button popout-reader-action" onClick={() => note && void openPopoutReader(note.id)}><ExternalLink size={17} /></IconButton>
             <IconButton label={syncing ? '正在同步并更新历史版本' : '同步并更新历史版本'} disabled={disabled} onClick={() => void syncNow()}>{syncing ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}</IconButton>
             <IconButton label={note.pinned ? '取消置顶' : '置顶'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ pinned: !note.pinned })}><Pin size={17} fill={note.pinned ? 'currentColor' : 'none'} /></IconButton>
             <IconButton label={note.archived ? '取消归档' : '归档'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ archived: !note.archived })}>{note.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}</IconButton>
@@ -1547,6 +1771,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <button className="mobile-share-action" disabled={disabled || note.revision === 0 || !!note.deletedAt || book.pending.some((item) => item.id === note.id)}
           onClick={() => { setMobileNoteActions(false); setSharing(true); }}><Share2 size={18} />{t('readonly_share')}</button>
         <button className="mobile-pdf-action" disabled={printing} onClick={() => { setMobileNoteActions(false); exportCurrentNote(); }}><Printer size={18} />{t('导出为 PDF')}</button>
+        <button onClick={() => { setMobileNoteActions(false); void openPopoutReader(note.id); }}><ExternalLink size={18} />{t('独立窗口阅读')}</button>
         <button disabled={disabled || note.revision === 0} onClick={() => { setMobileNoteActions(false); openHistory(); }}><History size={18} />{t('version_history')}</button>
         {!note.deletedAt
           ? <button className="danger" disabled={disabled} onClick={() => { setMobileNoteActions(false); setConfirmAction('trash'); }}><Trash2 size={18} />{t('move_to_trash')}</button>
@@ -1562,11 +1787,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       {installApp && <div className="setting-row"><span>{t('app')}</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />{t('安装 EasyNote')}</button></div>}
       <div className="setting-row"><span>{t('导出')}</span><div className="button-group">
         <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), t('备份已下载'))}><Download size={16} />{t('导出 ZIP')}</button>
-        <button disabled={!!transfer || !book.pending.length} onClick={() => {
-          setTransfer(t('正在准备草稿…'));
-          void exportLocalDrafts(session.user!.id, setTransfer).then((count) => showNotice(t('drafts_exported', count)))
-            .catch((error: unknown) => book.setError(String(error))).finally(() => setTransfer(''));
-        }}><Download size={16} />{t('导出草稿')}</button>
+        <button disabled={!!transfer || !book.pending.length} onClick={() => void exportDrafts()}><Download size={16} />{t('导出草稿')}</button>
       </div></div>
       <div className="setting-row"><span>{t('导入')}</span><div className="button-group">
         <button disabled={!!transfer || !book.online} onClick={() => importInput.current?.click()}><Upload size={16} />{t('导入文件')}</button>
@@ -1952,6 +2173,78 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <Preview content={printNote.content} onImage={() => undefined}
         resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={false} eagerImages />
     </section>}
+    {popoutWindow?.win && !popoutWindow.win.closed && activePopoutNote && createPortal(
+      <div className="popout-reader-shell">
+        <header className="popout-reader-toolbar">
+          <div className="popout-reader-title-area">
+            <BrandIcon size={18} />
+            <span className="popout-reader-title" title={activePopoutNote.title || t('untitled_note')}>
+              {activePopoutNote.title || t('untitled_note')}
+            </span>
+            {activePopoutNote.pinned && <span className="popout-reader-pin-tag" title={t('置顶笔记')}><Pin size={12} fill="currentColor" /></span>}
+          </div>
+          <div className="popout-reader-actions">
+            <IconButton
+              label={
+                typeof window !== 'undefined' && 'documentPictureInPicture' in window && Boolean(window.documentPictureInPicture?.requestWindow)
+                  ? t(popoutWindow.isPip ? '取消窗口置顶' : '置顶窗口在最前')
+                  : t('当前浏览器不支持窗口置顶')
+              }
+              className={`icon-button ${popoutWindow.isPip ? 'active' : ''}`}
+              disabled={typeof window === 'undefined' || !('documentPictureInPicture' in window) || !window.documentPictureInPicture?.requestWindow}
+              onClick={togglePopoutPin}
+            >
+              <Pin size={15} fill={popoutWindow.isPip ? 'currentColor' : 'none'} />
+            </IconButton>
+            <IconButton
+              label={t('深色外观')}
+              className="icon-button"
+              onClick={() => setDark((v) => !v)}
+            >
+              {dark ? <Moon size={15} /> : <Sun size={15} />}
+            </IconButton>
+            <IconButton
+              label={t('close')}
+              className="icon-button"
+              onClick={() => {
+                try { popoutWindow.win.close(); } catch {}
+                setPopoutWindow(null);
+                setPopoutNoteId(null);
+              }}
+            >
+              <X size={15} />
+            </IconButton>
+          </div>
+        </header>
+        <main className="popout-reader-content">
+          <div className="popout-reader-document">
+            <h1 className="popout-note-heading">{activePopoutNote.title || t('untitled_note')}</h1>
+            <div className="popout-reader-meta">
+              <time>{new Date(activePopoutNote.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time>
+              <span>{uiLanguage() === 'en' ? `Rev ${activePopoutNote.revision}` : `修订 ${activePopoutNote.revision}`}</span>
+              {activePopoutNote.tags.length > 0 && (
+                <div className="popout-reader-tags">
+                  {activePopoutNote.tags.map((tag) => (
+                    <span key={tag} className="note-tag-chip">#{tag}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Preview
+              content={activePopoutNote.content}
+              dark={dark}
+              onImage={(src) => popoutWindow.win.open(src, '_blank', 'noopener,noreferrer')}
+              onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
+              onNote={(id) => void openPopoutReader(id)}
+              onTask={!activePopoutNote.deletedAt && !transfer ? handlePopoutTask : undefined}
+              resolveFile={book.offlineLibrary ? book.cachedFile : undefined}
+              searchQuery={book.query}
+            />
+          </div>
+        </main>
+      </div>,
+      popoutWindow.win.document.body
+    )}
     </div>
   </DialogFeedbackContext.Provider>;
 }

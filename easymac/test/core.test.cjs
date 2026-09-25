@@ -580,3 +580,65 @@ test("real scanner payload is decodable when integration fixture exists", () => 
     scan.items.filter((entry) => entry.name === "Homebrew").length <= 1,
   );
 });
+
+test("scan preview refuses to replace an existing output directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easymac-preview-test-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const output = path.join(root, "output");
+  const sentinel = path.join(output, "keep.txt");
+  fs.mkdirSync(output);
+  fs.writeFileSync(sentinel, "keep");
+
+  const result = childProcess.spawnSync(
+    "/bin/zsh",
+    [path.resolve(__dirname, "../scripts/scan-preview.zsh"), output],
+    { encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.readFileSync(sentinel, "utf8"), "keep");
+});
+
+test("app launches use a different temporary directory each time", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easymac-launch-test-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const resources = path.join(root, "resources");
+  const bin = path.join(root, "bin");
+  const temp = path.join(root, "tmp");
+  const log = path.join(root, "scan.log");
+  fs.mkdirSync(path.join(resources, "web"), { recursive: true });
+  fs.mkdirSync(bin);
+  fs.mkdirSync(temp);
+  fs.writeFileSync(path.join(resources, "web/index.html"), "<html></html>");
+  writeExecutable(
+    path.join(resources, "scan.zsh"),
+    '#!/bin/zsh\nprint -r -- "$1" >> "$EASYMAC_TEST_LOG"\n',
+  );
+  writeExecutable(path.join(bin, "open"), "#!/bin/zsh\nexit 0\n");
+  writeExecutable(path.join(bin, "nohup"), "#!/bin/zsh\nexit 0\n");
+  const launcher = path.join(resources, "app-launch.zsh");
+  const launcherSource = fs
+    .readFileSync(path.resolve(__dirname, "../scripts/app-launch.zsh"), "utf8")
+    .replace("/usr/bin/open", JSON.stringify(path.join(bin, "open")));
+  fs.writeFileSync(launcher, launcherSource);
+  fs.chmodSync(launcher, 0o755);
+
+  const env = {
+    ...process.env,
+    EASYMAC_TEST_LOG: log,
+    PATH: `${bin}:/usr/bin:/bin`,
+    TMPDIR: temp,
+  };
+  for (let run = 0; run < 2; run += 1) {
+    const result = childProcess.spawnSync("/bin/zsh", [launcher], {
+      encoding: "utf8",
+      env,
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+
+  const runs = fs.readFileSync(log, "utf8").trim().split("\n");
+  assert.equal(runs.length, 2);
+  assert.notEqual(runs[0], runs[1]);
+  assert.ok(runs.every((file) => fs.existsSync(file)));
+});

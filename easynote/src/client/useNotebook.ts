@@ -451,17 +451,17 @@ export function useNotebook(session: Session) {
     schedule(target.id);
   };
 
-  const select = async (id: string) => {
-    if (current.current?.id === id) return;
+  const select = async (id: string): Promise<Note | null> => {
+    if (current.current?.id === id) return current.current;
     const generation = ++selectionGeneration.current;
     selectionAbort.current?.abort();
     try {
       const local = drafts.current.get(id);
-      if (local) { show(local.note); return; }
+      if (local) { show(local.note); return local.note; }
       let cached: Note | null = null;
       if (offlineLibraryRef.current) {
         cached = mirror.current.get(id) ?? await loadMirroredNote(userId, id);
-        if (!alive.current || generation !== selectionGeneration.current) return;
+        if (!alive.current || generation !== selectionGeneration.current) return null;
         if (cached) {
           mirror.current.set(id, cached);
           show(cached);
@@ -469,11 +469,11 @@ export function useNotebook(session: Session) {
       }
       if (!navigator.onLine || session.offline) {
         if (!cached) throw new Error('这篇笔记尚未保存到本机。');
-        return;
+        return cached;
       }
       const controller = new AbortController();
       selectionAbort.current = controller;
-      const revalidate = async () => {
+      const revalidate = async (): Promise<Note | null> => {
         try {
           const result = await api.note(id, controller.signal);
           if (offlineLibraryRef.current) {
@@ -482,14 +482,15 @@ export function useNotebook(session: Session) {
               if (alive.current) setError(`离线笔记写入失败。\n${String(e)}`);
             });
           }
-          if (!alive.current || generation !== selectionGeneration.current || drafts.current.has(id)) return;
+          if (!alive.current || generation !== selectionGeneration.current || drafts.current.has(id)) return null;
           if (current.current?.id !== id || current.current.revision !== result.note.revision) show(result.note);
           if (offlineLibraryRef.current) setOnline(true);
+          return result.note;
         } catch (e) {
-          if (controller.signal.aborted || !alive.current || generation !== selectionGeneration.current) return;
+          if (controller.signal.aborted || !alive.current || generation !== selectionGeneration.current) return null;
           if (cached) {
             if (!(e instanceof ApiError)) setOnline(false);
-            return;
+            return null;
           }
           throw e;
         } finally {
@@ -498,11 +499,12 @@ export function useNotebook(session: Session) {
       };
       if (cached) {
         void revalidate().catch((e: unknown) => { if (alive.current) setError(String(e)); });
-        return;
+        return cached;
       }
-      await revalidate();
+      return await revalidate();
     } catch (e) {
       if (alive.current && generation === selectionGeneration.current) setError(String(e));
+      return null;
     }
   };
   const clearSelection = () => {

@@ -31,6 +31,26 @@ export type DuplicateLookup = (fingerprints: string[]) => Promise<Map<string, st
 const sha = async (bytes: Uint8Array) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
+async function externalNoteId(title: string, content: string): Promise<string> {
+  const fingerprint = await noteFingerprint(title, content);
+  return `${fingerprint.slice(0, 8)}-${fingerprint.slice(8, 12)}-5${fingerprint.slice(13, 16)}-8${fingerprint.slice(17, 20)}-${fingerprint.slice(20, 32)}`;
+}
+
+export function missingCachedFileIds(
+  drafts: Iterable<{ note: { content: string } }>,
+  cachedIds: ReadonlySet<string>,
+): string[] {
+  const referenced = new Set<string>();
+  for (const draft of drafts) storedFileIds(draft.note.content).forEach((id) => referenced.add(id));
+  return [...referenced].filter((id) => !cachedIds.has(id));
+}
+
+export class MissingCachedFilesError extends Error {
+  constructor(public ids: string[]) {
+    super(`本机草稿引用的附件未缓存，无法生成完整备份：\n${ids.map((id) => `- ${id}`).join('\n')}`);
+  }
+}
+
 function titleFromContent(content: string): string {
   const firstLine = content.replace(/^\uFEFF/, '').split(/\r?\n/).find((line) => line.trim())?.trim() ?? '';
   const title = firstLine.replace(/^#{1,6}(?:\s+|$)/, '').replace(/\s+#+$/, '').trim();
@@ -128,7 +148,7 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
   download(`easynote-${new Date().toISOString().slice(0, 10)}.zip`, bytes);
 }
 
-export async function exportLocalDrafts(userId: string, progress: (text: string) => void): Promise<number> {
+export async function exportLocalDrafts(userId: string, progress: (text: string) => void, allowPartial = false): Promise<number> {
   const drafts = await loadDrafts(userId);
   if (!drafts.size) throw new Error('当前没有待同步的本机草稿。');
   const files: Record<string, Uint8Array> = {};
@@ -147,6 +167,7 @@ export async function exportLocalDrafts(userId: string, progress: (text: string)
     exportedAt: new Date().toISOString(),
     drafts: [] as Array<{ id: string; path: string; title: string; revision: number; operationId: string }>,
     files: [] as Array<{ id: string; path: string; mime: string; filename: string; sha256: string }>,
+    missingFileIds: [] as string[],
   };
   const referenced = new Set<string>();
   for (const [id, draft] of drafts) {
@@ -155,9 +176,15 @@ export async function exportLocalDrafts(userId: string, progress: (text: string)
     manifest.drafts.push({ id, path, title: draft.note.title, revision: draft.note.revision, operationId: draft.operationId });
     storedFileIds(draft.note.content).forEach((file) => referenced.add(file));
   }
+  const cachedFiles = new Map<string, NonNullable<Awaited<ReturnType<typeof loadCachedFile>>>>();
   for (const id of referenced) {
     const cached = await loadCachedFile(userId, id);
-    if (!cached) continue;
+    if (cached) cachedFiles.set(id, cached);
+  }
+  const missing = missingCachedFileIds(drafts.values(), new Set(cachedFiles.keys()));
+  if (missing.length && !allowPartial) throw new MissingCachedFilesError(missing);
+  manifest.missingFileIds = missing;
+  for (const [id, cached] of cachedFiles) {
     const path = `files/${id}-${safeFilename(cached.filename)}`;
     const bytes = new Uint8Array(await cached.blob.arrayBuffer());
     add(path, bytes);
@@ -169,13 +196,17 @@ export async function exportLocalDrafts(userId: string, progress: (text: string)
       content = content.replaceAll(imagePath(stored.id), `../${stored.path}`)
         .replaceAll(filePath(stored.id), `../${stored.path}`);
     }
+    for (const id of missing) {
+      content = content.replaceAll(imagePath(id), `../missing/${id}`)
+        .replaceAll(filePath(id), `../missing/${id}`);
+    }
     files[draft.path] = strToU8(content);
   }
   add('manifest.json', strToU8(JSON.stringify(manifest, null, 2)));
   progress(`正在打包 ${drafts.size} 篇草稿`);
   const bytes = await new Promise<Uint8Array>((resolve, reject) =>
     zip(files, { level: 0 }, (error, data) => error ? reject(error) : resolve(data)));
-  download(`easynote-local-drafts-${new Date().toISOString().slice(0, 10)}.zip`, bytes);
+  download(`easynote-local-drafts-${missing.length ? 'partial-' : ''}${new Date().toISOString().slice(0, 10)}.zip`, bytes);
   return drafts.size;
 }
 
@@ -292,12 +323,23 @@ async function importExternalEntries(
   if (!noteEntries.length) throw new Error('没有找到 Markdown 或 TXT 笔记。');
 
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  const notes = noteEntries.map((entry) => {
+  const notes = await Promise.all(noteEntries.map(async (entry) => {
     if (entry.bytes.length > config.maxNoteBytes) throw new Error(`笔记超过大小限制：${entry.path}`);
     let content: string;
     try { content = decoder.decode(entry.bytes); } catch { throw new Error(`笔记不是 UTF-8：${entry.path}`); }
-    return { ...entry, id: crypto.randomUUID(), content, ...externalMetadata(entry.path, content) };
+    const metadata = externalMetadata(entry.path, content);
+    return { ...entry, id: await externalNoteId(metadata.title, content), content, ...metadata };
+  }));
+  const wantedIds = new Set(notes.map((note) => note.id));
+  const existingIds = new Set((await api.existingNotes([...wantedIds])).ids);
+  const seenSourceIds = new Set<string>();
+  const importSources = notes.filter((note) => {
+    if (existingIds.has(note.id) || seenSourceIds.has(note.id)) return false;
+    seenSourceIds.add(note.id);
+    return true;
   });
+  let skipped = notes.length - importSources.length;
+  for (let index = 0; index < skipped; index++) progress(`跳过重复笔记 ${index + 1}`);
   const noteByPath = new Map(notes.map((entry) => [entry.path.toLocaleLowerCase('en-US'), entry]));
   const noteByStem = new Map<string, typeof notes[number] | null>();
   for (const entry of notes) {
@@ -339,7 +381,7 @@ async function importExternalEntries(
   };
 
   const prepared: Array<{ source: typeof notes[number]; content: string }> = [];
-  for (const source of notes) {
+  for (const source of importSources) {
     let content = source.content;
     content = await replaceAsync(content, /!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g,
       async (original, target, label) => {
@@ -373,7 +415,6 @@ async function importExternalEntries(
   const remapped = new Map<string, string>();
   const fingerprints = new Map<string, string>();
   const unique: typeof prepared = [];
-  let skipped = 0;
   const fingerprinted = await Promise.all(prepared.map(async (candidate) => ({
     candidate,
     fingerprint: await noteFingerprint(candidate.source.title, candidate.content),
