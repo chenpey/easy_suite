@@ -1419,6 +1419,42 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   border-bottom: 1px solid var(--line);
   background: var(--elevated);
   user-select: none;
+  cursor: default;
+}
+.popout-window-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.popout-window-controls:empty {
+  display: none;
+}
+.popout-window-controls.mac {
+  margin-right: 8px;
+}
+.popout-window-controls.win {
+  margin-left: 8px;
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.popout-control-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--muted);
+  transition: color 0.15s, background-color 0.15s;
+}
+.popout-control-btn:hover {
+  color: var(--ink);
+  background: var(--item-hover);
+}
+.popout-control-close:hover {
+  color: var(--danger);
+  background: var(--danger-soft, rgba(239, 68, 68, 0.12));
 }
 .popout-reader-title-area {
   display: flex;
@@ -1428,6 +1464,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
+  flex: 1;
 }
 .popout-reader-title {
   white-space: nowrap;
@@ -1445,6 +1482,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 .popout-reader-actions .icon-button.active {
   color: var(--accent);
