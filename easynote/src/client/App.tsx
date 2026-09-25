@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, PictureInPicture2, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -154,62 +154,15 @@ function syncPopoutStyles(targetDoc: Document, title: string, dark: boolean) {
   const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   if (icon) targetDoc.head.appendChild(icon.cloneNode(true));
 
-  // Critical layout CSS injected synchronously before external stylesheets load prevents frame-0 layout shifts
-  const criticalLayout = targetDoc.createElement('style');
-  criticalLayout.id = 'popout-critical-layout';
-  criticalLayout.textContent = `
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100vh;
-      overflow: hidden;
-      background: ${dark ? '#1c1c1e' : '#f8f9fa'};
-      color: ${dark ? '#f2f2f7' : '#1c1c1e'};
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-    .popout-reader-shell {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      width: 100vw;
-    }
-    .popout-reader-toolbar {
-      flex-shrink: 0;
-      height: 44px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 12px;
-      box-sizing: border-box;
-      user-select: none;
-      cursor: default;
-    }
-    .popout-window-controls {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-    }
-    .popout-window-controls.mac { margin-right: 8px; }
-    .popout-window-controls.win { margin-left: 8px; border-left: 1px solid rgba(128,128,128,0.2); padding-left: 8px; }
-    .popout-reader-title-area {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      flex: 1;
-    }
-    .popout-reader-actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      flex-shrink: 0;
-      margin-left: auto;
-    }
-  `;
-  targetDoc.head.appendChild(criticalLayout);
-
   document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style').forEach((node) => {
+    if (node instanceof HTMLLinkElement && node.sheet) {
+      try {
+        const style = targetDoc.createElement('style');
+        style.textContent = Array.from(node.sheet.cssRules, (rule) => rule.cssText).join('\n');
+        targetDoc.head.appendChild(style);
+        return;
+      } catch { /* Fall back to the linked stylesheet. */ }
+    }
     targetDoc.head.appendChild(node.cloneNode(true));
   });
 
@@ -1022,8 +975,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     : null;
 
   const togglePopoutPin = () => {
-    if (!activePopoutNote) return;
-    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip);
+    if (activePopoutNote && popoutWindow?.isPip) void openPopoutReader(activePopoutNote.id, false);
   };
 
   const togglePopoutMaximize = () => {
@@ -1063,16 +1015,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     } catch (err) {
       console.warn('Failed to toggle popout maximize', err);
     }
-  };
-
-  const closePopout = () => {
-    if (popoutWindow?.win) {
-      try { popoutWindow.win.close(); } catch {}
-    }
-    setPopoutWindow(null);
-    setPopoutNoteId(null);
-    setPopoutMaximized(false);
-    popoutPrevBounds.current = null;
   };
 
   const handlePopoutTask = (index: number, checked: boolean) => {
@@ -1654,6 +1596,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
             <IconButton label={wideDocument ? '使用阅读宽度' : '使用宽屏'} className="icon-button document-width-toggle" aria-pressed={wideDocument} onClick={toggleDocumentWidth}>{wideDocument ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</IconButton>
             <IconButton label={t('独立窗口阅读')} className="icon-button popout-reader-action" onClick={() => note && void openPopoutReader(note.id)}><ExternalLink size={17} /></IconButton>
+            <IconButton label={window.documentPictureInPicture?.requestWindow ? t('置顶窗口在最前') : t('当前浏览器不支持窗口置顶')}
+              className="icon-button popout-pin-action" disabled={!window.documentPictureInPicture?.requestWindow}
+              onClick={() => void openPopoutReader(activePopoutNote?.id ?? note.id, true)}><PictureInPicture2 size={17} /></IconButton>
             <IconButton label={syncing ? '正在同步并更新历史版本' : '同步并更新历史版本'} disabled={disabled} onClick={() => void syncNow()}>{syncing ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}</IconButton>
             <IconButton label={note.pinned ? '取消置顶' : '置顶'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ pinned: !note.pinned })}><Pin size={17} fill={note.pinned ? 'currentColor' : 'none'} /></IconButton>
             <IconButton label={note.archived ? '取消归档' : '归档'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ archived: !note.archived })}>{note.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}</IconButton>
@@ -2307,24 +2252,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             if (!popoutWindow.isPip) togglePopoutMaximize();
           }}
         >
-          {isMacPlatform() && (
-            <div className="popout-window-controls mac">
+          {!popoutWindow.isPip && <div className={`popout-window-controls ${isMacPlatform() ? 'mac' : 'win'}`}>
               <IconButton
-                label={t('close')}
-                className="icon-button popout-control-btn popout-control-close"
-                onClick={closePopout}
-              >
-                <X size={14} />
-              </IconButton>
-              {!popoutWindow.isPip && <IconButton
                 label={t(popoutMaximized ? '向下还原' : '最大化')}
                 className="icon-button popout-control-btn popout-control-maximize"
                 onClick={togglePopoutMaximize}
               >
                 {popoutMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </IconButton>}
-            </div>
-          )}
+              </IconButton>
+            </div>}
           <div className="popout-reader-title-area">
             <BrandIcon size={18} />
             <span className="popout-reader-title" title={activePopoutNote.title || t('untitled_note')}>
@@ -2333,18 +2269,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             {activePopoutNote.pinned && <span className="popout-reader-pin-tag" title={t('置顶笔记')}><Pin size={12} fill="currentColor" /></span>}
           </div>
           <div className="popout-reader-actions">
-            <IconButton
-              label={
-                typeof window !== 'undefined' && 'documentPictureInPicture' in window && Boolean(window.documentPictureInPicture?.requestWindow)
-                  ? t(popoutWindow.isPip ? '取消窗口置顶' : '置顶窗口在最前')
-                  : t('当前浏览器不支持窗口置顶')
-              }
-              className={`icon-button ${popoutWindow.isPip ? 'active' : ''}`}
-              disabled={typeof window === 'undefined' || !('documentPictureInPicture' in window) || !window.documentPictureInPicture?.requestWindow}
+            {popoutWindow.isPip && <IconButton
+              label={t('取消窗口置顶')}
+              className="icon-button active"
               onClick={togglePopoutPin}
             >
-              <Pin size={15} fill={popoutWindow.isPip ? 'currentColor' : 'none'} />
-            </IconButton>
+              <Pin size={15} fill="currentColor" />
+            </IconButton>}
             <IconButton
               label={t('深色外观')}
               className="icon-button"
@@ -2353,24 +2284,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               {dark ? <Moon size={15} /> : <Sun size={15} />}
             </IconButton>
           </div>
-          {!isMacPlatform() && !popoutWindow.isPip && (
-            <div className="popout-window-controls win">
-              <IconButton
-                label={t(popoutMaximized ? '向下还原' : '最大化')}
-                className="icon-button popout-control-btn popout-control-maximize"
-                onClick={togglePopoutMaximize}
-              >
-                {popoutMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-              </IconButton>
-              <IconButton
-                label={t('close')}
-                className="icon-button popout-control-btn popout-control-close"
-                onClick={closePopout}
-              >
-                <X size={14} />
-              </IconButton>
-            </div>
-          )}
         </header>
         <main className="popout-reader-content">
           <div className="popout-reader-document">
