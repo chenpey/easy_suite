@@ -2103,8 +2103,12 @@ test('batch note actions and tag management preserve revisions', async ({ page }
 test('double-clicking a note opens an independent reader window and supports pin to top', async ({ page }) => {
   const title = `双击独立阅读-${randomUUID().slice(0, 8)}`;
   const content = '# 阅读测试\n\n这是一篇用于独立窗口阅读的笔记内容。\n\n- [ ] 待办任务 1';
+  const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
+    headers, data: { title, content, tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
   await page.goto('/');
-  await newNote(page, title, content);
 
   await page.evaluate(() => {
     const win = window as any;
@@ -2135,20 +2139,39 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(popup.locator('.popout-reader-title')).toHaveText(title);
   await expect(popup.locator('.popout-note-heading')).toHaveText(title);
   await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
-  await expect(popup.locator('.markdown')).toContainText('这是一篇用于独立窗口阅读的笔记内容。');
-
   const pinButton = popup.locator('.popout-reader-actions .icon-button').first();
-  await expect(pinButton).toBeVisible();
-  await expect(pinButton).toHaveAttribute('aria-label', '取消窗口置顶');
+  await expect(pinButton).toHaveAttribute('aria-label', '置顶窗口在最前');
+  const maxBtn = popup.locator('.popout-control-maximize');
+  await expect(maxBtn).toBeVisible();
+  await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
+  await maxBtn.click();
+  await expect(maxBtn).toHaveAttribute('aria-label', '向下还原');
+  await popup.locator('.popout-reader-title-area').dblclick();
+  await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
+
+  const pinnedPromise = page.waitForEvent('popup');
+  const pinClick = pinButton.click().catch(() => undefined);
+  const pinned = await pinnedPromise;
+  await pinClick;
+  await pinned.waitForLoadState('domcontentloaded');
+  await expect(pinned.locator('.popout-reader-actions .icon-button').first())
+    .toHaveAttribute('aria-label', '取消窗口置顶');
+  await expect(pinned.locator('.popout-control-maximize')).toHaveCount(0);
 
   const unpinnedPromise = page.waitForEvent('popup');
-  const unpinClick = pinButton.click().catch(() => undefined);
+  const unpinClick = pinned.locator('.popout-reader-actions .icon-button').first().click().catch(() => undefined);
   const unpinned = await unpinnedPromise;
   await unpinClick;
   await unpinned.waitForLoadState('domcontentloaded');
   await expect(unpinned.locator('.popout-reader-actions .icon-button').first())
     .toHaveAttribute('aria-label', '置顶窗口在最前');
-  await unpinned.close();
+
+  const closeBtn = unpinned.locator('.popout-control-close');
+  await expect(closeBtn).toBeVisible();
+  await expect(closeBtn).toHaveAttribute('aria-label', '关闭');
+  const closePromise = unpinned.waitForEvent('close');
+  await closeBtn.click();
+  await closePromise;
 });
 
 test('double-click opens before loading an unloaded note and uses the loaded note', async ({ page }) => {
@@ -2291,7 +2314,7 @@ test('popout keeps the latest draft when the main view switches notes', async ({
   await popup.close();
 });
 
-test('PiP failure requires another click before opening a regular window', async ({ page }) => {
+test('PiP failure leaves the regular reader window open', async ({ page }) => {
   const title = `置顶失败-${randomUUID().slice(0, 8)}`;
   const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
     headers, data: { title, content: '普通窗口仍可阅读', tags: [], pinned: false,
@@ -2311,16 +2334,14 @@ test('PiP failure requires another click before opening a regular window', async
       } },
     });
   });
-  let popups = 0;
-  page.on('popup', () => { popups++; });
   const open = page.getByRole('button', { name: '独立窗口阅读' });
-  await open.click();
-  await expect.poll(() => page.evaluate(() => (window as any).__pipCalls)).toBe(1);
-  await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
-  expect(popups).toBe(0);
   const popupPromise = page.waitForEvent('popup');
   await open.click();
   const popup = await popupPromise;
+  await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
+  await popup.locator('.popout-reader-actions .icon-button').first().click();
+  await expect.poll(() => page.evaluate(() => (window as any).__pipCalls)).toBe(1);
+  await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
   await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
   await popup.close();
 });

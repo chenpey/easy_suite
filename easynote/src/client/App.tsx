@@ -129,6 +129,12 @@ function noteExcerptText(markdown: string, query: string) {
     .replace(/[#*`]/g, '');
 }
 
+const isMacPlatform = () => typeof navigator !== 'undefined' && (
+  /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '') ||
+  /Macintosh|Mac OS X/i.test(navigator.userAgent || '') ||
+  ((navigator as any).userAgentData?.platform === 'macOS')
+);
+
 function syncPopoutStyles(targetDoc: Document, title: string, dark: boolean) {
   targetDoc.head.innerHTML = '';
 
@@ -147,6 +153,61 @@ function syncPopoutStyles(targetDoc: Document, title: string, dark: boolean) {
 
   const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
   if (icon) targetDoc.head.appendChild(icon.cloneNode(true));
+
+  // Critical layout CSS injected synchronously before external stylesheets load prevents frame-0 layout shifts
+  const criticalLayout = targetDoc.createElement('style');
+  criticalLayout.id = 'popout-critical-layout';
+  criticalLayout.textContent = `
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: ${dark ? '#1c1c1e' : '#f8f9fa'};
+      color: ${dark ? '#f2f2f7' : '#1c1c1e'};
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .popout-reader-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+    .popout-reader-toolbar {
+      flex-shrink: 0;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      box-sizing: border-box;
+      user-select: none;
+      cursor: default;
+    }
+    .popout-window-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .popout-window-controls.mac { margin-right: 8px; }
+    .popout-window-controls.win { margin-left: 8px; border-left: 1px solid rgba(128,128,128,0.2); padding-left: 8px; }
+    .popout-reader-title-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+    .popout-reader-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+  `;
+  targetDoc.head.appendChild(criticalLayout);
 
   document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>('link[rel="stylesheet"], style').forEach((node) => {
     targetDoc.head.appendChild(node.cloneNode(true));
@@ -581,10 +642,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [popoutWindow, setPopoutWindow] = useState<{ win: Window; isPip: boolean } | null>(null);
   const [popoutNoteId, setPopoutNoteId] = useState<string | null>(null);
   const [popoutNoteFallback, setPopoutNoteFallback] = useState<Note | null>(null);
+  const [popoutMaximized, setPopoutMaximized] = useState(false);
+  const popoutPrevBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const popoutWindowRef = useRef<{ win: Window; isPip: boolean } | null>(null);
   const popoutOpenGeneration = useRef(0);
   const lastNoteSelection = useRef<{ id: string; promise: Promise<Note | null> } | null>(null);
-  const pipFailed = useRef(false);
   popoutWindowRef.current = popoutWindow;
   const editor = useRef<EditorHandle>(null);
   const editorCursor = useRef(0);
@@ -834,9 +896,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       Boolean(window.documentPictureInPicture?.requestWindow);
 
     const existingWindow = popoutWindow?.win && !popoutWindow.win.closed ? popoutWindow : null;
-    const shouldPin = requestedPin !== undefined
-      ? requestedPin
-      : (existingWindow ? existingWindow.isPip : hasPipSupport && !pipFailed.current);
+    const shouldPin = requestedPin ?? existingWindow?.isPip ?? false;
 
     const reuseWindow = existingWindow &&
       ((existingWindow.isPip && shouldPin) || (!existingWindow.isPip && !shouldPin) || (!hasPipSupport && shouldPin));
@@ -855,8 +915,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           isPip = true;
         } catch (error) {
           console.warn('documentPictureInPicture failed', error);
-          pipFailed.current = true;
-          book.setError(t('置顶窗口打开失败。再次点击“独立窗口阅读”可打开普通窗口。'));
+          book.setError(t('置顶窗口打开失败，请重试。'));
           return;
         }
       }
@@ -920,15 +979,32 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     syncPopoutStyles(newWin.document, targetNote.title || t('untitled_note'), dark);
 
     const winInstance = newWin;
+    const handleResize = () => {
+      if (winInstance.closed) return;
+      const currentW = winInstance.outerWidth || winInstance.innerWidth;
+      const currentH = winInstance.outerHeight || winInstance.innerHeight;
+      const isNearlyFull =
+        Math.abs(currentW - winInstance.screen.availWidth) < 30 &&
+        Math.abs(currentH - winInstance.screen.availHeight) < 30;
+      setPopoutMaximized(isNearlyFull);
+    };
     const handleClose = () => {
+      winInstance.removeEventListener('resize', handleResize);
+      winInstance.removeEventListener('pagehide', handleClose);
+      winInstance.removeEventListener('beforeunload', handleClose);
       if (popoutWindowRef.current?.win !== winInstance) return;
       popoutWindowRef.current = null;
       setPopoutWindow(null);
       setPopoutNoteId(null);
+      setPopoutMaximized(false);
+      popoutPrevBounds.current = null;
     };
     winInstance.addEventListener('pagehide', handleClose);
     winInstance.addEventListener('beforeunload', handleClose);
+    if (!isPip) winInstance.addEventListener('resize', handleResize);
 
+    setPopoutMaximized(false);
+    popoutPrevBounds.current = null;
     setPopoutNoteId(targetNote.id);
     setPopoutNoteFallback(targetNote);
     popoutWindowRef.current = { win: winInstance, isPip };
@@ -948,6 +1024,55 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const togglePopoutPin = () => {
     if (!activePopoutNote) return;
     void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip);
+  };
+
+  const togglePopoutMaximize = () => {
+    const win = popoutWindow?.win;
+    if (!win || win.closed || popoutWindow.isPip) return;
+
+    try {
+      if (popoutMaximized) {
+        const prev = popoutPrevBounds.current;
+        if (prev) {
+          win.moveTo(prev.x, prev.y);
+          win.resizeTo(prev.width, prev.height);
+        } else {
+          const width = Math.min(680, win.screen.availWidth - 40);
+          const height = Math.min(760, win.screen.availHeight - 60);
+          const left = Math.max(0, Math.round((win.screen.availWidth - width) / 2));
+          const top = Math.max(0, Math.round((win.screen.availHeight - height) / 2));
+          win.moveTo(left, top);
+          win.resizeTo(width, height);
+        }
+        setPopoutMaximized(false);
+      } else {
+        popoutPrevBounds.current = {
+          x: typeof win.screenX === 'number' ? win.screenX : 0,
+          y: typeof win.screenY === 'number' ? win.screenY : 0,
+          width: win.outerWidth || win.innerWidth || 680,
+          height: win.outerHeight || win.innerHeight || 760,
+        };
+        const availLeft = (win.screen as any)?.availLeft ?? 0;
+        const availTop = (win.screen as any)?.availTop ?? 0;
+        const availWidth = win.screen.availWidth;
+        const availHeight = win.screen.availHeight;
+        win.moveTo(availLeft, availTop);
+        win.resizeTo(availWidth, availHeight);
+        setPopoutMaximized(true);
+      }
+    } catch (err) {
+      console.warn('Failed to toggle popout maximize', err);
+    }
+  };
+
+  const closePopout = () => {
+    if (popoutWindow?.win) {
+      try { popoutWindow.win.close(); } catch {}
+    }
+    setPopoutWindow(null);
+    setPopoutNoteId(null);
+    setPopoutMaximized(false);
+    popoutPrevBounds.current = null;
   };
 
   const handlePopoutTask = (index: number, checked: boolean) => {
@@ -1473,7 +1598,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
         {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
           <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
-            title={t('双击在独立窗口中打开并置顶阅读')}
+            title={t('双击在独立窗口中打开阅读')}
             aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
             onClick={(event) => {
@@ -2175,7 +2300,31 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </section>}
     {popoutWindow?.win && !popoutWindow.win.closed && activePopoutNote && createPortal(
       <div className="popout-reader-shell">
-        <header className="popout-reader-toolbar">
+        <header
+          className="popout-reader-toolbar"
+          onDoubleClick={(e) => {
+            if ((e.target as HTMLElement).closest('button, .icon-button, a, input')) return;
+            if (!popoutWindow.isPip) togglePopoutMaximize();
+          }}
+        >
+          {isMacPlatform() && (
+            <div className="popout-window-controls mac">
+              <IconButton
+                label={t('close')}
+                className="icon-button popout-control-btn popout-control-close"
+                onClick={closePopout}
+              >
+                <X size={14} />
+              </IconButton>
+              {!popoutWindow.isPip && <IconButton
+                label={t(popoutMaximized ? '向下还原' : '最大化')}
+                className="icon-button popout-control-btn popout-control-maximize"
+                onClick={togglePopoutMaximize}
+              >
+                {popoutMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </IconButton>}
+            </div>
+          )}
           <div className="popout-reader-title-area">
             <BrandIcon size={18} />
             <span className="popout-reader-title" title={activePopoutNote.title || t('untitled_note')}>
@@ -2203,18 +2352,25 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             >
               {dark ? <Moon size={15} /> : <Sun size={15} />}
             </IconButton>
-            <IconButton
-              label={t('close')}
-              className="icon-button"
-              onClick={() => {
-                try { popoutWindow.win.close(); } catch {}
-                setPopoutWindow(null);
-                setPopoutNoteId(null);
-              }}
-            >
-              <X size={15} />
-            </IconButton>
           </div>
+          {!isMacPlatform() && !popoutWindow.isPip && (
+            <div className="popout-window-controls win">
+              <IconButton
+                label={t(popoutMaximized ? '向下还原' : '最大化')}
+                className="icon-button popout-control-btn popout-control-maximize"
+                onClick={togglePopoutMaximize}
+              >
+                {popoutMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </IconButton>
+              <IconButton
+                label={t('close')}
+                className="icon-button popout-control-btn popout-control-close"
+                onClick={closePopout}
+              >
+                <X size={14} />
+              </IconButton>
+            </div>
+          )}
         </header>
         <main className="popout-reader-content">
           <div className="popout-reader-document">

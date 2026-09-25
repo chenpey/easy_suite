@@ -702,9 +702,11 @@ export const translations: { zh: Record<string, string>; en: Record<string, stri
     '置顶窗口在最前': '置顶窗口在最前',
     '取消窗口置顶': '取消窗口置顶',
     '当前浏览器不支持窗口置顶': '当前浏览器不支持窗口置顶',
-    '置顶窗口打开失败。再次点击“独立窗口阅读”可打开普通窗口。': '置顶窗口打开失败。再次点击“独立窗口阅读”可打开普通窗口。',
+    '置顶窗口打开失败，请重试。': '置顶窗口打开失败，请重试。',
     '无法打开独立窗口，请检查浏览器的弹窗拦截设置。': '无法打开独立窗口，请检查浏览器的弹窗拦截设置。',
-    '双击在独立窗口中打开并置顶阅读': '双击在独立窗口中打开并置顶阅读',
+    '双击在独立窗口中打开阅读': '双击在独立窗口中打开阅读',
+    '最大化': '最大化',
+    '向下还原': '向下还原',
   },
   en: {
     // Semantic keys
@@ -1392,9 +1394,11 @@ export const translations: { zh: Record<string, string>; en: Record<string, stri
     '置顶窗口在最前': 'Pin Window on Top',
     '取消窗口置顶': 'Unpin Window',
     '当前浏览器不支持窗口置顶': 'Window pinning is not supported in this browser',
-    '置顶窗口打开失败。再次点击“独立窗口阅读”可打开普通窗口。': 'Unable to pin the window. Click Open in Separate Window again to open a regular window.',
+    '置顶窗口打开失败，请重试。': 'Unable to pin the window. Please try again.',
     '无法打开独立窗口，请检查浏览器的弹窗拦截设置。': 'Unable to open separate window. Please check your browser popup blocker.',
-    '双击在独立窗口中打开并置顶阅读': 'Double-click to open in a separate pinned window',
+    '双击在独立窗口中打开阅读': 'Double-click to open in a separate window',
+    '最大化': 'Maximize',
+    '向下还原': 'Restore',
   },
 };
 
