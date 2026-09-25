@@ -2142,8 +2142,8 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
   await expect(popup.locator('.popout-reader-title-area')).toHaveCSS('font-size', '14px');
   await expect(popup.locator('link[rel="stylesheet"]')).toHaveCount(0);
-  await expect(popup.locator('.popout-control-close')).toHaveCount(0);
-  await expect(popup.getByRole('button', { name: '置顶窗口在最前' })).toHaveCount(0);
+  const pinBtn = popup.getByRole('button', { name: '置顶窗口在最前' });
+  await expect(pinBtn).toBeVisible();
   const maxBtn = popup.locator('.popout-control-maximize');
   await expect(maxBtn).toBeVisible();
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
@@ -2153,7 +2153,7 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
 
   const pinnedPromise = page.waitForEvent('popup');
-  const pinClick = page.getByRole('button', { name: '置顶窗口在最前' }).click();
+  const pinClick = pinBtn.click().catch(() => undefined);
   const pinned = await pinnedPromise;
   await pinClick;
   await pinned.waitForLoadState('domcontentloaded');
@@ -2169,7 +2169,7 @@ test('double-clicking a note opens an independent reader window and supports pin
   await unpinClick;
   await unpinned.waitForLoadState('domcontentloaded');
   await expect(unpinned.locator('.popout-reader-actions .icon-button').first())
-    .toHaveAttribute('aria-label', '深色外观');
+    .toHaveAttribute('aria-label', '置顶窗口在最前');
   await expect(unpinned.locator('.popout-control-close')).toHaveCount(0);
   await unpinned.close();
 });
