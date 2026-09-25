@@ -1427,13 +1427,11 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   gap: 4px;
   flex-shrink: 0;
 }
-.popout-window-controls:empty {
-  display: none;
-}
 .popout-window-controls.mac {
   margin-right: 8px;
 }
 .popout-window-controls.win {
+  order: 1;
   margin-left: 8px;
   border-left: 1px solid var(--line);
   padding-left: 8px;
@@ -1451,10 +1449,6 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .popout-control-btn:hover {
   color: var(--ink);
   background: var(--item-hover);
-}
-.popout-control-close:hover {
-  color: var(--danger);
-  background: var(--danger-soft, rgba(239, 68, 68, 0.12));
 }
 .popout-reader-title-area {
   display: flex;

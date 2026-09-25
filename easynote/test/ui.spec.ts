@@ -2116,6 +2116,7 @@ test('double-clicking a note opens an independent reader window and supports pin
       let pipWin: Window | null = null;
       win.documentPictureInPicture = {
         async requestWindow({ width, height }: { width: number; height: number }) {
+          if (!navigator.userActivation.isActive) throw new DOMException('User activation required', 'NotAllowedError');
           const fakeWin = window.open('', '_blank', `popup=yes,width=${width},height=${height}`);
           pipWin = fakeWin;
           return fakeWin;
@@ -2139,8 +2140,10 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(popup.locator('.popout-reader-title')).toHaveText(title);
   await expect(popup.locator('.popout-note-heading')).toHaveText(title);
   await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
-  const pinButton = popup.locator('.popout-reader-actions .icon-button').first();
-  await expect(pinButton).toHaveAttribute('aria-label', '置顶窗口在最前');
+  await expect(popup.locator('.popout-reader-title-area')).toHaveCSS('font-size', '14px');
+  await expect(popup.locator('link[rel="stylesheet"]')).toHaveCount(0);
+  await expect(popup.locator('.popout-control-close')).toHaveCount(0);
+  await expect(popup.getByRole('button', { name: '置顶窗口在最前' })).toHaveCount(0);
   const maxBtn = popup.locator('.popout-control-maximize');
   await expect(maxBtn).toBeVisible();
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
@@ -2150,13 +2153,15 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
 
   const pinnedPromise = page.waitForEvent('popup');
-  const pinClick = pinButton.click().catch(() => undefined);
+  const pinClick = page.getByRole('button', { name: '置顶窗口在最前' }).click();
   const pinned = await pinnedPromise;
   await pinClick;
   await pinned.waitForLoadState('domcontentloaded');
   await expect(pinned.locator('.popout-reader-actions .icon-button').first())
     .toHaveAttribute('aria-label', '取消窗口置顶');
   await expect(pinned.locator('.popout-control-maximize')).toHaveCount(0);
+  await expect(pinned.locator('.popout-control-close')).toHaveCount(0);
+  await expect(page.locator('.error-strip')).toHaveCount(0);
 
   const unpinnedPromise = page.waitForEvent('popup');
   const unpinClick = pinned.locator('.popout-reader-actions .icon-button').first().click().catch(() => undefined);
@@ -2164,14 +2169,9 @@ test('double-clicking a note opens an independent reader window and supports pin
   await unpinClick;
   await unpinned.waitForLoadState('domcontentloaded');
   await expect(unpinned.locator('.popout-reader-actions .icon-button').first())
-    .toHaveAttribute('aria-label', '置顶窗口在最前');
-
-  const closeBtn = unpinned.locator('.popout-control-close');
-  await expect(closeBtn).toBeVisible();
-  await expect(closeBtn).toHaveAttribute('aria-label', '关闭');
-  const closePromise = unpinned.waitForEvent('close');
-  await closeBtn.click();
-  await closePromise;
+    .toHaveAttribute('aria-label', '深色外观');
+  await expect(unpinned.locator('.popout-control-close')).toHaveCount(0);
+  await unpinned.close();
 });
 
 test('double-click opens before loading an unloaded note and uses the loaded note', async ({ page }) => {
@@ -2339,7 +2339,7 @@ test('PiP failure leaves the regular reader window open', async ({ page }) => {
   await open.click();
   const popup = await popupPromise;
   await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
-  await popup.locator('.popout-reader-actions .icon-button').first().click();
+  await page.getByRole('button', { name: '置顶窗口在最前' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__pipCalls)).toBe(1);
   await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
   await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
