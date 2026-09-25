@@ -344,6 +344,17 @@ test('batch duplicate lookup follows content fingerprints and tracks updates', a
   assert.deepEqual(await (await request('/api/notes/duplicates', 'POST', { fingerprints: [] })).json(), { matches: [] });
 });
 
+test('batch existing-note lookup checks IDs without listing the library', async () => {
+  const first = await create({ content: randomUUID() });
+  const second = await create({ content: randomUUID() });
+  const missing = randomUUID();
+  const response = await request('/api/notes/existing', 'POST', { ids: [first.id, missing, second.id, first.id] });
+  assert.equal(response.status, 200);
+  assert.deepEqual(new Set((await response.json() as { ids: string[] }).ids), new Set([first.id, second.id]));
+  assert.equal((await request('/api/notes/existing', 'POST', { ids: ['invalid'] })).status, 400);
+  assert.deepEqual(await (await request('/api/notes/existing', 'POST', { ids: [] })).json(), { ids: [] });
+});
+
 test('unchanged saves do not create revisions, including reordered tags', async () => {
   const note = await create({ tags: ['工作', '个人'] });
   const unchanged = await save(note.id, 1, { tags: ['个人', '工作'] });
@@ -506,6 +517,8 @@ test('another account cannot read, edit or reference private notes and images', 
     fingerprints: [await noteFingerprint(note.title, note.content)],
   }, headers);
   assert.deepEqual(await duplicateLookup.json(), { matches: [] });
+  const existingLookup = await request('/api/notes/existing', 'POST', { ids: [note.id] }, headers);
+  assert.deepEqual(await existingLookup.json(), { ids: [] });
   const imageId = randomUUID();
   await instance.db.prepare("INSERT INTO images VALUES(?,?,?,?,?,?,?,?,?,?,?)")
     .bind(imageId, testUserId, 'owned.png', 'image/png', 1, 1, 1, '0'.repeat(64), 'ready', Date.now(), Date.now()).run();

@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.4.3`
+Current Version: `0.4.4`
 
 [Download EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 

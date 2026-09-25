@@ -40,22 +40,28 @@ async function timedFetch(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<{ response: Response; raw: string }> {
-  const controller = init.signal ? null : new AbortController();
+  const controller = new AbortController();
   let timedOut = false;
-  const timer = controller ? setTimeout(() => {
+  const abortFromCaller = () => controller.abort(init.signal?.reason);
+  if (init.signal) {
+    if (init.signal.aborted) abortFromCaller();
+    else init.signal.addEventListener('abort', abortFromCaller, { once: true });
+  }
+  const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, timeoutMs) : null;
+  }, timeoutMs);
   const method = init.method ?? 'GET';
   try {
-    const response = await fetch(path, { ...init, signal: init.signal ?? controller!.signal });
+    const response = await fetch(path, { ...init, signal: controller.signal });
     return { response, raw: await response.text() };
   } catch (error) {
     if (timedOut) throw new Error(`${method} ${path}\nRequest timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
     if (init.signal?.aborted) throw error;
     throw new Error(`${method} ${path}\n${String(error)}`);
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+    init.signal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -114,6 +120,8 @@ export const api = {
   blank: () => request<{ note: Note | null }>('/api/notes/blank'),
   duplicates: (fingerprints: string[]) =>
     request<{ matches: Array<{ fingerprint: string; noteId: string }> }>('/api/notes/duplicates', 'POST', { fingerprints }),
+  existingNotes: (ids: string[]) =>
+    request<{ ids: string[] }>('/api/notes/existing', 'POST', { ids }),
   note: (id: string, signal?: AbortSignal) => request<{ note: Note }>(`/api/notes/${id}`, 'GET', undefined, signal),
   save: (id: string, input: NoteInput, revision: number, operationId: string, createVersion = false) =>
     request<{ note: Note; unchanged?: boolean }>(`/api/notes/${id}`, revision === 0 ? 'POST' : 'PUT', {

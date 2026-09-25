@@ -282,6 +282,22 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
       WHERE user_id=? AND ${scope} ORDER BY value LIMIT 200`).bind(user.id).all<{ name: string }>();
     return json({ tags: result.results.map((row) => row.name) });
   }
+  if (path === '/api/notes/existing' && request.method === 'POST') {
+    const data = await readJson(request, 48 * 1024);
+    if (Object.keys(data).some((key) => key !== 'ids') || !Array.isArray(data.ids) ||
+        data.ids.length > 1200 || data.ids.some((id) => typeof id !== 'string' || !idPattern.test(id))) {
+      throw new ApiError(400, 'Invalid note IDs.');
+    }
+    const ids = [...new Set(data.ids as string[])];
+    const statements: D1PreparedStatement[] = [];
+    for (let offset = 0; offset < ids.length; offset += 80) {
+      const chunk = ids.slice(offset, offset + 80);
+      statements.push(env.DB.prepare(`SELECT id FROM notes WHERE user_id=? AND id IN (${chunk.map(() => '?').join(',')})`)
+        .bind(user.id, ...chunk));
+    }
+    const results = statements.length ? await env.DB.batch<{ id: string }>(statements) : [];
+    return json({ ids: results.flatMap((result) => result.results.map((row) => row.id)) });
+  }
   if (path === '/api/notes/duplicates' && request.method === 'POST') {
     const data = await readJson(request, 96 * 1024);
     if (Object.keys(data).some((key) => key !== 'fingerprints') || !Array.isArray(data.fingerprints) ||

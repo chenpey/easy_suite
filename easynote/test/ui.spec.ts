@@ -2099,6 +2099,271 @@ test('batch note actions and tag management preserve revisions', async ({ page }
   }
 });
 
+
+test('double-clicking a note opens an independent reader window and supports pin to top', async ({ page }) => {
+  const title = `双击独立阅读-${randomUUID().slice(0, 8)}`;
+  const content = '# 阅读测试\n\n这是一篇用于独立窗口阅读的笔记内容。\n\n- [ ] 待办任务 1';
+  await page.goto('/');
+  await newNote(page, title, content);
+
+  await page.evaluate(() => {
+    const win = window as any;
+    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
+      let pipWin: Window | null = null;
+      win.documentPictureInPicture = {
+        async requestWindow({ width, height }: { width: number; height: number }) {
+          const fakeWin = window.open('', '_blank', `popup=yes,width=${width},height=${height}`);
+          pipWin = fakeWin;
+          return fakeWin;
+        },
+        get window() { return pipWin; },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+  });
+
+  const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
+  await expect(noteRow).toBeVisible();
+
+  const popupPromise = page.waitForEvent('popup');
+  await noteRow.dblclick();
+  const popup = await popupPromise;
+  await popup.waitForLoadState('domcontentloaded');
+
+  await expect(popup.locator('.popout-reader-shell')).toBeVisible();
+  await expect(popup.locator('.popout-reader-title')).toHaveText(title);
+  await expect(popup.locator('.popout-note-heading')).toHaveText(title);
+  await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
+  await expect(popup.locator('.markdown')).toContainText('这是一篇用于独立窗口阅读的笔记内容。');
+
+  const pinButton = popup.locator('.popout-reader-actions .icon-button').first();
+  await expect(pinButton).toBeVisible();
+  await expect(pinButton).toHaveAttribute('aria-label', '取消窗口置顶');
+
+  const unpinnedPromise = page.waitForEvent('popup');
+  const unpinClick = pinButton.click().catch(() => undefined);
+  const unpinned = await unpinnedPromise;
+  await unpinClick;
+  await unpinned.waitForLoadState('domcontentloaded');
+  await expect(unpinned.locator('.popout-reader-actions .icon-button').first())
+    .toHaveAttribute('aria-label', '置顶窗口在最前');
+  await unpinned.close();
+});
+
+test('double-click opens before loading an unloaded note and uses the loaded note', async ({ page }) => {
+  const id = randomUUID();
+  const title = `慢加载独立阅读-${id.slice(0, 8)}`;
+  const content = '# 慢加载测试\n\n弹窗应先打开。';
+  const created = await page.request.post(`${origin}/api/notes/${id}`, {
+    headers, data: { title, content, tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let noteRequests = 0;
+  await page.route(`**/api/notes/${id}`, async (route) => {
+    noteRequests++;
+    await gate;
+    await route.continue();
+  });
+
+  await page.goto('/');
+  await page.evaluate(() => {
+    const win = window as any;
+    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
+      win.documentPictureInPicture = {
+        requestWindow({ width, height }: { width: number; height: number }) {
+          return Promise.resolve(window.open('', '_blank', `popup=yes,width=${width},height=${height}`));
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+  });
+  const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
+  await expect(noteRow).toBeVisible();
+
+  const popupPromise = page.waitForEvent('popup');
+  await noteRow.dblclick();
+  const popup = await popupPromise;
+  await expect.poll(() => noteRequests).toBe(1);
+  release();
+  await popup.waitForLoadState('domcontentloaded');
+  await expect(popup.locator('.popout-note-heading')).toHaveText(title);
+  await expect(popup.locator('.markdown')).toContainText('弹窗应先打开。');
+  expect(noteRequests).toBe(1);
+  await popup.close();
+});
+
+test('popout fallback uses the note returned by selection after a direct read failure', async ({ page }) => {
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  const id = randomUUID();
+  const title = `回退独立阅读-${id.slice(0, 8)}`;
+  const created = await page.request.post(`${origin}/api/notes/${id}`, {
+    headers, data: { title, content: '回退读取内容', tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+  let requests = 0;
+  await page.route(`**/api/notes/${id}`, async (route) => {
+    requests++;
+    if (requests === 1) {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'temporary failure' }) });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.reload();
+  await page.evaluate(() => {
+    const win = window as any;
+    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
+      win.documentPictureInPicture = {
+        requestWindow({ width, height }: { width: number; height: number }) {
+          return Promise.resolve(window.open('', '_blank', `popup=yes,width=${width},height=${height}`));
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    }
+  });
+  const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
+  await expect(noteRow).toBeVisible();
+  const popupPromise = page.waitForEvent('popup');
+  await noteRow.dblclick();
+  const popup = await popupPromise;
+  await popup.waitForLoadState('domcontentloaded');
+  await expect(popup.locator('.popout-note-heading')).toHaveText(title);
+  expect(requests).toBeGreaterThanOrEqual(2);
+  await popup.close();
+});
+
+test('single-click starts loading a note without waiting for a double-click timer', async ({ page }) => {
+  const id = randomUUID();
+  const title = `即时单击-${id.slice(0, 8)}`;
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  const created = await page.request.post(`${origin}/api/notes/${id}`, {
+    headers, data: { title, content: '即时打开', tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+  await page.reload();
+  await page.clock.install();
+  const requested = page.waitForRequest((request) => request.url().endsWith(`/api/notes/${id}`));
+  await page.locator('.note-row').filter({ hasText: title }).click();
+  await requested;
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+});
+
+test('popout keeps the latest draft when the main view switches notes', async ({ page }) => {
+  const firstTitle = `窗口草稿-${randomUUID().slice(0, 8)}`;
+  const secondTitle = `另一篇-${randomUUID().slice(0, 8)}`;
+  for (const [title, content] of [[firstTitle, '- [ ] 待办\n\n旧正文'], [secondTitle, '另一篇正文']]) {
+    const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
+      headers, data: { title, content, tags: [], pinned: false, archived: false,
+        deletedAt: null, revision: 0, operationId: randomUUID() },
+    });
+    expect(created.status()).toBe(201);
+  }
+  await page.goto('/');
+  await page.locator('.note-row').filter({ hasText: firstTitle }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(firstTitle);
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: '独立窗口阅读' }).click();
+  const popup = await popupPromise;
+  await expect(popup.locator('.markdown')).toContainText('旧正文');
+
+  await page.getByRole('textbox', { name: '笔记正文' }).fill('- [ ] 待办\n\n新正文');
+  await expect(popup.locator('.markdown')).toContainText('新正文');
+  await page.locator('.note-row').filter({ hasText: secondTitle }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(secondTitle);
+  await expect(popup.locator('.markdown')).toContainText('新正文');
+  await popup.getByRole('checkbox', { name: '待办事项：待办' }).click();
+  await expect(popup.locator('.markdown')).toContainText('新正文');
+  await page.locator('.note-row').filter({ hasText: firstTitle }).click();
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('新正文');
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('- [x] 待办');
+  await popup.close();
+});
+
+test('PiP failure requires another click before opening a regular window', async ({ page }) => {
+  const title = `置顶失败-${randomUUID().slice(0, 8)}`;
+  const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
+    headers, data: { title, content: '普通窗口仍可阅读', tags: [], pinned: false,
+      archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+  await page.goto('/');
+  await page.locator('.note-row').filter({ hasText: title }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+  await page.evaluate(() => {
+    (window as any).__pipCalls = 0;
+    Object.defineProperty(window, 'documentPictureInPicture', {
+      configurable: true,
+      value: { requestWindow: () => {
+        (window as any).__pipCalls++;
+        return Promise.reject(new Error('PiP denied'));
+      } },
+    });
+  });
+  let popups = 0;
+  page.on('popup', () => { popups++; });
+  const open = page.getByRole('button', { name: '独立窗口阅读' });
+  await open.click();
+  await expect.poll(() => page.evaluate(() => (window as any).__pipCalls)).toBe(1);
+  await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
+  expect(popups).toBe(0);
+  const popupPromise = page.waitForEvent('popup');
+  await open.click();
+  const popup = await popupPromise;
+  await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
+  await popup.close();
+});
+
+test('draft export offers an explicit incomplete backup when an attachment is missing', async ({ page }) => {
+  const missingId = randomUUID();
+  await page.goto('/');
+  await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+  await page.getByRole('textbox', { name: '笔记标题' }).fill(`抢救草稿-${randomUUID().slice(0, 8)}`);
+  await page.getByRole('textbox', { name: '笔记正文' })
+    .fill(`重要文本\n\n![缺失附件](/api/images/${missingId})`);
+  await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(async (missingId) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('easynote', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const drafts = await new Promise<Array<{ note: { content: string } }>>((resolve, reject) => {
+      const request = db.transaction('drafts').objectStore('drafts').getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return drafts.some((draft) => draft.note.content.includes(missingId));
+  }, missingId)).toBe(true);
+  await page.locator('.account').click();
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('1 个附件未缓存');
+    void dialog.accept();
+  });
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出草稿' }).click();
+  const download = await downloadPromise;
+  const archive = unzipSync(new Uint8Array(await readFile((await download.path())!)));
+  const manifest = JSON.parse(strFromU8(archive['manifest.json']));
+  expect(manifest.missingFileIds).toContain(missingId);
+  expect(download.suggestedFilename()).toContain('partial');
+  const markdown = strFromU8(archive[manifest.drafts[0].path]);
+  expect(markdown).toContain('重要文本');
+  expect(markdown).toContain(`../missing/${missingId}`);
+});
+
 test('a revoked offline session is removed as soon as the device reconnects', async ({ page, context }) => {
   await page.goto('/');
   const login = await page.request.post(`${origin}/api/login`, {
