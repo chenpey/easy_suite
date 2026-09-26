@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, PictureInPicture2, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -596,13 +596,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   const [dark, setDark] = useState(() => localStorage.getItem('easynote-theme') === 'dark');
   const [wideDocument, setWideDocument] = useState(() => localStorage.getItem('easynote-document-width') === 'wide');
-  const [popoutWindow, setPopoutWindow] = useState<{ win: Window; isPip: boolean } | null>(null);
+  const [popoutWindow, setPopoutWindow] = useState<Window | null>(null);
   const [popoutNoteId, setPopoutNoteId] = useState<string | null>(null);
   const [popoutNoteFallback, setPopoutNoteFallback] = useState<Note | null>(null);
   const [popoutMaximized, setPopoutMaximized] = useState(false);
   const popoutPrevBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
-  const popoutWindowRef = useRef<{ win: Window; isPip: boolean } | null>(null);
-  const pipHostWindow = useRef<Window | null>(null);
+  const popoutWindowRef = useRef<Window | null>(null);
   const popoutOpenGeneration = useRef(0);
   const lastNoteSelection = useRef<{ id: string; promise: Promise<Note | null> } | null>(null);
   popoutWindowRef.current = popoutWindow;
@@ -666,31 +665,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     localStorage.setItem('easynote-theme', dark ? 'dark' : 'light');
-    if (popoutWindow?.win && !popoutWindow.win.closed) {
-      popoutWindow.win.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    }
-    if (pipHostWindow.current && !pipHostWindow.current.closed) {
-      pipHostWindow.current.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    if (popoutWindow && !popoutWindow.closed) {
+      popoutWindow.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     }
   }, [dark, popoutWindow]);
   useEffect(() => {
-    const host = pipHostWindow.current;
-    if (!popoutWindow?.isPip || !host || host.closed) return;
-    const hint = host.document.createElement('button');
-    hint.type = 'button';
-    hint.className = 'popout-host-hint';
-    hint.textContent = t('当前笔记已在置顶窗口中阅读。点击返回；关闭此窗口将退出置顶。');
-    hint.onclick = () => popoutWindow.win.focus();
-    host.document.body.appendChild(hint);
-    return () => { hint.remove(); };
-  }, [popoutWindow]);
-  useEffect(() => {
     const onUnload = () => {
-      if (popoutWindowRef.current?.win && !popoutWindowRef.current.win.closed) {
-        try { popoutWindowRef.current.win.close(); } catch {}
-      }
-      if (pipHostWindow.current && !pipHostWindow.current.closed) {
-        try { pipHostWindow.current.close(); } catch {}
+      if (popoutWindowRef.current && !popoutWindowRef.current.closed) {
+        try { popoutWindowRef.current.close(); } catch {}
       }
     };
     window.addEventListener('beforeunload', onUnload);
@@ -863,49 +845,23 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setLinkPicker(false);
     return selected;
   };
-  const openPopoutReader = async (noteId: string, requestedPin?: boolean, callerWin: Window = window) => {
+  const openPopoutReader = async (noteId: string) => {
     const generation = ++popoutOpenGeneration.current;
     let targetNote: Note | null = (note?.id === noteId ? note : null);
-    const pipApi = callerWin.documentPictureInPicture;
-    const hasPipSupport = Boolean(pipApi?.requestWindow);
-
-    const existingWindow = popoutWindow?.win && !popoutWindow.win.closed ? popoutWindow : null;
-    const shouldPin = requestedPin ?? existingWindow?.isPip ?? false;
-
-    const reuseWindow = existingWindow &&
-      ((existingWindow.isPip && shouldPin) || (!existingWindow.isPip && !shouldPin) || (!hasPipSupport && shouldPin));
-    const previousWindow = reuseWindow ? null : existingWindow;
-    const restoredWindow = !shouldPin && existingWindow?.isPip &&
-      pipHostWindow.current && !pipHostWindow.current.closed ? pipHostWindow.current : null;
-
-    let newWin: Window | null = reuseWindow ? existingWindow.win : restoredWindow;
-    let isPip = reuseWindow ? existingWindow.isPip : false;
+    const existingWindow = popoutWindow && !popoutWindow.closed ? popoutWindow : null;
+    let newWin = existingWindow;
 
     const width = Math.min(680, window.screen?.availWidth ? window.screen.availWidth - 40 : 680);
     const height = Math.min(760, window.screen?.availHeight ? window.screen.availHeight - 60 : 760);
 
-    if (!reuseWindow) {
-      if (shouldPin && hasPipSupport && pipApi?.requestWindow) {
-        try {
-          newWin = await pipApi.requestWindow({ width, height });
-          isPip = true;
-        } catch (error) {
-          console.warn('documentPictureInPicture failed', error);
-          book.setError(t('置顶窗口打开失败，请重试。'));
-          return;
-        }
-      }
-
-      if (!newWin) {
-        const left = Math.max(0, Math.round((window.screen.width - width) / 2));
-        const top = Math.max(0, Math.round((window.screen.height - height) / 2));
-        newWin = window.open(
-          '',
-          `easynote-popout-reader-${generation}`,
-          `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
-        );
-        isPip = false;
-      }
+    if (!newWin) {
+      const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+      const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+      newWin = window.open(
+        '',
+        `easynote-popout-reader-${generation}`,
+        `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+      );
     }
 
     if (!newWin) {
@@ -935,19 +891,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
 
     if (!targetNote) targetNote = await openNote(noteId);
     if (!targetNote || generation !== popoutOpenGeneration.current) {
-      if (!reuseWindow) {
+      if (!existingWindow) {
         try { newWin.close(); } catch {}
       }
       return;
     }
 
-    if (reuseWindow || restoredWindow) {
-      if (restoredWindow) {
-        pipHostWindow.current = null;
-        popoutWindowRef.current = { win: newWin, isPip: false };
-        setPopoutWindow(popoutWindowRef.current);
-        try { previousWindow?.win.close(); } catch {}
-      }
+    if (existingWindow) {
       if (popoutNoteId !== targetNote.id) {
         newWin.document.querySelector<HTMLElement>('.popout-reader-content')?.scrollTo(0, 0);
       }
@@ -974,17 +924,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       winInstance.removeEventListener('resize', handleResize);
       winInstance.removeEventListener('pagehide', handleClose);
       winInstance.removeEventListener('beforeunload', handleClose);
-      if (pipHostWindow.current === winInstance) pipHostWindow.current = null;
-      if (popoutWindowRef.current?.win !== winInstance) return;
-      const host = isPip && pipHostWindow.current && !pipHostWindow.current.closed
-        ? pipHostWindow.current : null;
-      if (host) {
-        pipHostWindow.current = null;
-        popoutWindowRef.current = { win: host, isPip: false };
-        setPopoutWindow(popoutWindowRef.current);
-        host.focus();
-        return;
-      }
+      if (popoutWindowRef.current !== winInstance) return;
       popoutWindowRef.current = null;
       setPopoutWindow(null);
       setPopoutNoteId(null);
@@ -993,23 +933,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     };
     winInstance.addEventListener('pagehide', handleClose);
     winInstance.addEventListener('beforeunload', handleClose);
-    if (!isPip) winInstance.addEventListener('resize', handleResize);
+    winInstance.addEventListener('resize', handleResize);
 
     setPopoutMaximized(false);
     popoutPrevBounds.current = null;
     setPopoutNoteId(targetNote.id);
     setPopoutNoteFallback(targetNote);
-    popoutWindowRef.current = { win: winInstance, isPip };
-    setPopoutWindow(popoutWindowRef.current);
-    if (previousWindow) {
-      if (isPip && previousWindow.win === callerWin) {
-        pipHostWindow.current = callerWin;
-      } else {
-        window.setTimeout(() => {
-          try { previousWindow.win.close(); } catch {}
-        }, 100);
-      }
-    }
+    popoutWindowRef.current = winInstance;
+    setPopoutWindow(winInstance);
     winInstance.focus();
   };
 
@@ -1017,14 +948,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     ? (note?.id === popoutNoteId ? note : book.pending.find((item) => item.id === popoutNoteId) ?? popoutNoteFallback)
     : null;
 
-  const togglePopoutPin = () => {
-    if (!activePopoutNote) return;
-    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip, popoutWindow?.win);
-  };
-
   const togglePopoutMaximize = () => {
-    const win = popoutWindow?.win;
-    if (!win || win.closed || popoutWindow.isPip) return;
+    const win = popoutWindow;
+    if (!win || win.closed) return;
 
     try {
       if (popoutMaximized) {
@@ -1640,9 +1566,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
             <IconButton label={wideDocument ? '使用阅读宽度' : '使用宽屏'} className="icon-button document-width-toggle" aria-pressed={wideDocument} onClick={toggleDocumentWidth}>{wideDocument ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</IconButton>
             <IconButton label={t('独立窗口阅读')} className="icon-button popout-reader-action" onClick={() => note && void openPopoutReader(note.id)}><ExternalLink size={17} /></IconButton>
-            <IconButton label={window.documentPictureInPicture?.requestWindow ? t('置顶窗口在最前') : t('当前浏览器不支持窗口置顶')}
-              className="icon-button popout-pin-action" disabled={!window.documentPictureInPicture?.requestWindow}
-              onClick={() => void openPopoutReader(activePopoutNote?.id ?? note.id, true)}><PictureInPicture2 size={17} /></IconButton>
             <IconButton label={syncing ? '正在同步并更新历史版本' : '同步并更新历史版本'} disabled={disabled} onClick={() => void syncNow()}>{syncing ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}</IconButton>
             <IconButton label={note.pinned ? '取消置顶' : '置顶'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ pinned: !note.pinned })}><Pin size={17} fill={note.pinned ? 'currentColor' : 'none'} /></IconButton>
             <IconButton label={note.archived ? '取消归档' : '归档'} disabled={!!note.deletedAt || !!transfer} onClick={() => setNoteFields({ archived: !note.archived })}>{note.archived ? <ArchiveRestore size={17} /> : <Archive size={17} />}</IconButton>
@@ -2287,13 +2210,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <Preview content={printNote.content} onImage={() => undefined}
         resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={false} eagerImages />
     </section>}
-    {popoutWindow?.win && !popoutWindow.win.closed && activePopoutNote && createPortal(
+    {popoutWindow && !popoutWindow.closed && activePopoutNote && createPortal(
       <div className="popout-reader-shell">
         <header
           className="popout-reader-toolbar"
           onDoubleClick={(e) => {
             if ((e.target as HTMLElement).closest('button, .icon-button, a, input')) return;
-            if (!popoutWindow.isPip) togglePopoutMaximize();
+            togglePopoutMaximize();
           }}
         >
           <div className="popout-reader-title-area">
@@ -2305,33 +2228,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           </div>
           <div className="popout-reader-actions">
             <IconButton
-              label={
-                (popoutWindow.isPip || Boolean(popoutWindow.win.documentPictureInPicture?.requestWindow))
-                  ? t(popoutWindow.isPip ? '取消窗口置顶' : '置顶窗口在最前')
-                  : t('当前浏览器不支持窗口置顶')
-              }
-              className={`icon-button ${popoutWindow.isPip ? 'active' : ''}`}
-              disabled={!popoutWindow.isPip && !popoutWindow.win.documentPictureInPicture?.requestWindow}
-              onClick={togglePopoutPin}
-            >
-              <PictureInPicture2 size={15} />
-            </IconButton>
-            <IconButton
               label={t('深色外观')}
               className="icon-button"
               onClick={() => setDark((v) => !v)}
             >
               {dark ? <Moon size={15} /> : <Sun size={15} />}
             </IconButton>
-            {!popoutWindow.isPip && (
-              <IconButton
-                label={t(popoutMaximized ? '向下还原' : '最大化')}
-                className="icon-button popout-control-btn popout-control-maximize"
-                onClick={togglePopoutMaximize}
-              >
-                {popoutMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-              </IconButton>
-            )}
+            <IconButton
+              label={t(popoutMaximized ? '向下还原' : '最大化')}
+              className="icon-button popout-control-btn popout-control-maximize"
+              onClick={togglePopoutMaximize}
+            >
+              {popoutMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </IconButton>
           </div>
         </header>
         <main className="popout-reader-content">
@@ -2351,7 +2260,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <Preview
               content={activePopoutNote.content}
               dark={dark}
-              onImage={(src) => popoutWindow.win.open(src, '_blank', 'noopener,noreferrer')}
+              onImage={(src) => popoutWindow.open(src, '_blank', 'noopener,noreferrer')}
               onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
               onNote={(id) => void openPopoutReader(id)}
               onTask={!activePopoutNote.deletedAt && !transfer ? handlePopoutTask : undefined}
@@ -2361,7 +2270,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           </div>
         </main>
       </div>,
-      popoutWindow.win.document.body
+      popoutWindow.document.body
     )}
     </div>
   </DialogFeedbackContext.Provider>;
