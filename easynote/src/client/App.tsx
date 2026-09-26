@@ -1808,7 +1808,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <button className="mobile-share-action" disabled={disabled || note.revision === 0 || !!note.deletedAt || book.pending.some((item) => item.id === note.id)}
           onClick={() => { setMobileNoteActions(false); setSharing(true); }}><Share2 size={18} />{t('readonly_share')}</button>
         <button className="mobile-pdf-action" disabled={printing} onClick={() => { setMobileNoteActions(false); exportCurrentNote(); }}><Printer size={18} />{t('导出为 PDF')}</button>
-        <button onClick={() => { setMobileNoteActions(false); void openPopoutReader(note.id); }}><ExternalLink size={18} />{t('独立窗口阅读')}</button>
         <button disabled={disabled || note.revision === 0} onClick={() => { setMobileNoteActions(false); openHistory(); }}><History size={18} />{t('version_history')}</button>
         {!note.deletedAt
           ? <button className="danger" disabled={disabled} onClick={() => { setMobileNoteActions(false); setConfirmAction('trash'); }}><Trash2 size={18} />{t('move_to_trash')}</button>
