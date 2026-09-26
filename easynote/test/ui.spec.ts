@@ -2111,21 +2111,27 @@ test('double-clicking a note opens an independent reader window and supports pin
   await page.goto('/');
 
   await page.evaluate(() => {
-    const win = window as any;
-    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
-      let pipWin: Window | null = null;
-      win.documentPictureInPicture = {
-        async requestWindow({ width, height }: { width: number; height: number }) {
-          if (!navigator.userActivation.isActive) throw new DOMException('User activation required', 'NotAllowedError');
-          const fakeWin = window.open('', '_blank', `popup=yes,width=${width},height=${height}`);
-          pipWin = fakeWin;
-          return fakeWin;
+    const installPip = (owner: Window) => {
+      Object.defineProperty(owner, 'documentPictureInPicture', {
+        configurable: true,
+        value: {
+          async requestWindow({ width, height }: { width: number; height: number }) {
+            (owner as any).__pipCalls = ((owner as any).__pipCalls ?? 0) + 1;
+            if (!owner.navigator.userActivation.isActive) throw new DOMException('User activation required', 'NotAllowedError');
+            const child = owner.open('', '_blank', `popup=yes,width=${width},height=${height}`);
+            if (child) installPip(child);
+            return child;
+          },
         },
-        get window() { return pipWin; },
-        addEventListener() {},
-        removeEventListener() {},
-      };
-    }
+      });
+    };
+    const open = window.open.bind(window);
+    window.open = (...args) => {
+      const child = open(...args);
+      if (child) installPip(child);
+      return child;
+    };
+    installPip(window);
   });
 
   const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
@@ -2142,7 +2148,7 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
   await expect(popup.locator('.popout-reader-title-area')).toHaveCSS('font-size', '14px');
   await expect(popup.locator('link[rel="stylesheet"]')).toHaveCount(0);
-  const pinBtn = popup.getByRole('button', { name: '置顶窗口在最前' });
+  const pinBtn = popup.getByRole('button', { name: '置顶窗口在最前（画中画）' });
   await expect(pinBtn).toBeVisible();
   const maxBtn = popup.locator('.popout-control-maximize');
   await expect(maxBtn).toBeVisible();
@@ -2152,26 +2158,37 @@ test('double-clicking a note opens an independent reader window and supports pin
   await popup.locator('.popout-reader-title-area').dblclick();
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
 
-  const pinnedPromise = page.waitForEvent('popup');
-  const pinClick = pinBtn.click().catch(() => undefined);
+  const pinnedPromise = popup.waitForEvent('popup');
+  const pinClick = pinBtn.click();
   const pinned = await pinnedPromise;
   await pinClick;
   await pinned.waitForLoadState('domcontentloaded');
+  expect(await popup.evaluate(() => (window as any).__pipCalls)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__pipCalls ?? 0)).toBe(0);
+  expect(popup.isClosed()).toBe(false);
+  const hostHint = popup.getByRole('button', { name: '当前笔记已在置顶窗口中阅读。点击返回；关闭此窗口将退出置顶。' });
+  await expect(hostHint).toBeVisible();
   await expect(pinned.locator('.popout-reader-actions .icon-button').first())
     .toHaveAttribute('aria-label', '取消窗口置顶');
   await expect(pinned.locator('.popout-control-maximize')).toHaveCount(0);
   await expect(pinned.locator('.popout-control-close')).toHaveCount(0);
   await expect(page.locator('.error-strip')).toHaveCount(0);
+  await pinned.getByRole('button', { name: '深色外观' }).click();
+  await expect(popup.locator('html')).toHaveAttribute('data-theme', 'dark');
 
-  const unpinnedPromise = page.waitForEvent('popup');
-  const unpinClick = pinned.locator('.popout-reader-actions .icon-button').first().click().catch(() => undefined);
-  const unpinned = await unpinnedPromise;
-  await unpinClick;
-  await unpinned.waitForLoadState('domcontentloaded');
-  await expect(unpinned.locator('.popout-reader-actions .icon-button').first())
-    .toHaveAttribute('aria-label', '置顶窗口在最前');
-  await expect(unpinned.locator('.popout-control-close')).toHaveCount(0);
-  await unpinned.close();
+  await pinned.getByRole('button', { name: '取消窗口置顶' }).click().catch(() => undefined);
+  await expect.poll(() => pinned.isClosed()).toBe(true);
+  await expect(popup.getByRole('button', { name: '置顶窗口在最前（画中画）' })).toBeVisible();
+  await expect(hostHint).toHaveCount(0);
+  await expect(popup.locator('.popout-control-close')).toHaveCount(0);
+  const pinnedAgainPromise = popup.waitForEvent('popup');
+  await popup.getByRole('button', { name: '置顶窗口在最前（画中画）' }).click();
+  const pinnedAgain = await pinnedAgainPromise;
+  await expect(pinnedAgain.locator('.popout-reader-shell')).toBeVisible();
+  await pinnedAgain.close();
+  await expect(popup.locator('.popout-reader-shell')).toBeVisible();
+  await expect(hostHint).toHaveCount(0);
+  await popup.close();
 });
 
 test('double-click opens before loading an unloaded note and uses the loaded note', async ({ page }) => {
@@ -2325,22 +2342,26 @@ test('PiP failure leaves the regular reader window open', async ({ page }) => {
   await page.locator('.note-row').filter({ hasText: title }).click();
   await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
   await page.evaluate(() => {
-    (window as any).__pipCalls = 0;
-    Object.defineProperty(window, 'documentPictureInPicture', {
-      configurable: true,
-      value: { requestWindow: () => {
-        (window as any).__pipCalls++;
-        return Promise.reject(new Error('PiP denied'));
-      } },
-    });
+    const open = window.open.bind(window);
+    window.open = (...args) => {
+      const child = open(...args);
+      if (child) Object.defineProperty(child, 'documentPictureInPicture', {
+        configurable: true,
+        value: { requestWindow: () => {
+          (child as any).__pipCalls = ((child as any).__pipCalls ?? 0) + 1;
+          return Promise.reject(new Error('PiP denied'));
+        } },
+      });
+      return child;
+    };
   });
   const open = page.getByRole('button', { name: '独立窗口阅读' });
   const popupPromise = page.waitForEvent('popup');
   await open.click();
   const popup = await popupPromise;
   await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
-  await page.getByRole('button', { name: '置顶窗口在最前' }).click();
-  await expect.poll(() => page.evaluate(() => (window as any).__pipCalls)).toBe(1);
+  await popup.getByRole('button', { name: '置顶窗口在最前（画中画）' }).click();
+  await expect.poll(() => popup.evaluate(() => (window as any).__pipCalls)).toBe(1);
   await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
   await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
   await popup.close();
