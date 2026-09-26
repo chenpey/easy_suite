@@ -2100,7 +2100,7 @@ test('batch note actions and tag management preserve revisions', async ({ page }
 });
 
 
-test('double-clicking a note opens an independent reader window and supports pin to top', async ({ page }) => {
+test('double-clicking a note opens an independent reader window', async ({ page }) => {
   const title = `双击独立阅读-${randomUUID().slice(0, 8)}`;
   const content = '# 阅读测试\n\n这是一篇用于独立窗口阅读的笔记内容。\n\n- [ ] 待办任务 1';
   const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
@@ -2109,30 +2109,6 @@ test('double-clicking a note opens an independent reader window and supports pin
   });
   expect(created.status()).toBe(201);
   await page.goto('/');
-
-  await page.evaluate(() => {
-    const installPip = (owner: Window) => {
-      Object.defineProperty(owner, 'documentPictureInPicture', {
-        configurable: true,
-        value: {
-          async requestWindow({ width, height }: { width: number; height: number }) {
-            (owner as any).__pipCalls = ((owner as any).__pipCalls ?? 0) + 1;
-            if (!owner.navigator.userActivation.isActive) throw new DOMException('User activation required', 'NotAllowedError');
-            const child = owner.open('', '_blank', `popup=yes,width=${width},height=${height}`);
-            if (child) installPip(child);
-            return child;
-          },
-        },
-      });
-    };
-    const open = window.open.bind(window);
-    window.open = (...args) => {
-      const child = open(...args);
-      if (child) installPip(child);
-      return child;
-    };
-    installPip(window);
-  });
 
   const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
   await expect(noteRow).toBeVisible();
@@ -2148,8 +2124,8 @@ test('double-clicking a note opens an independent reader window and supports pin
   await expect(popup.locator('.markdown h1')).toHaveText('阅读测试');
   await expect(popup.locator('.popout-reader-title-area')).toHaveCSS('font-size', '14px');
   await expect(popup.locator('link[rel="stylesheet"]')).toHaveCount(0);
-  const pinBtn = popup.getByRole('button', { name: '置顶窗口在最前（画中画）' });
-  await expect(pinBtn).toBeVisible();
+  await expect(page.locator('.popout-pin-action')).toHaveCount(0);
+  await expect(popup.locator('.popout-reader-actions button')).toHaveCount(2);
   const maxBtn = popup.locator('.popout-control-maximize');
   await expect(maxBtn).toBeVisible();
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
@@ -2158,36 +2134,9 @@ test('double-clicking a note opens an independent reader window and supports pin
   await popup.locator('.popout-reader-title-area').dblclick();
   await expect(maxBtn).toHaveAttribute('aria-label', '最大化');
 
-  const pinnedPromise = popup.waitForEvent('popup');
-  const pinClick = pinBtn.click();
-  const pinned = await pinnedPromise;
-  await pinClick;
-  await pinned.waitForLoadState('domcontentloaded');
-  expect(await popup.evaluate(() => (window as any).__pipCalls)).toBe(1);
-  expect(await page.evaluate(() => (window as any).__pipCalls ?? 0)).toBe(0);
-  expect(popup.isClosed()).toBe(false);
-  const hostHint = popup.getByRole('button', { name: '当前笔记已在置顶窗口中阅读。点击返回；关闭此窗口将退出置顶。' });
-  await expect(hostHint).toBeVisible();
-  await expect(pinned.locator('.popout-reader-actions .icon-button').first())
-    .toHaveAttribute('aria-label', '取消窗口置顶');
-  await expect(pinned.locator('.popout-control-maximize')).toHaveCount(0);
-  await expect(pinned.locator('.popout-control-close')).toHaveCount(0);
-  await expect(page.locator('.error-strip')).toHaveCount(0);
-  await pinned.getByRole('button', { name: '深色外观' }).click();
+  await popup.getByRole('button', { name: '深色外观' }).click();
   await expect(popup.locator('html')).toHaveAttribute('data-theme', 'dark');
-
-  await pinned.getByRole('button', { name: '取消窗口置顶' }).click().catch(() => undefined);
-  await expect.poll(() => pinned.isClosed()).toBe(true);
-  await expect(popup.getByRole('button', { name: '置顶窗口在最前（画中画）' })).toBeVisible();
-  await expect(hostHint).toHaveCount(0);
   await expect(popup.locator('.popout-control-close')).toHaveCount(0);
-  const pinnedAgainPromise = popup.waitForEvent('popup');
-  await popup.getByRole('button', { name: '置顶窗口在最前（画中画）' }).click();
-  const pinnedAgain = await pinnedAgainPromise;
-  await expect(pinnedAgain.locator('.popout-reader-shell')).toBeVisible();
-  await pinnedAgain.close();
-  await expect(popup.locator('.popout-reader-shell')).toBeVisible();
-  await expect(hostHint).toHaveCount(0);
   await popup.close();
 });
 
@@ -2211,18 +2160,6 @@ test('double-click opens before loading an unloaded note and uses the loaded not
   });
 
   await page.goto('/');
-  await page.evaluate(() => {
-    const win = window as any;
-    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
-      win.documentPictureInPicture = {
-        requestWindow({ width, height }: { width: number; height: number }) {
-          return Promise.resolve(window.open('', '_blank', `popup=yes,width=${width},height=${height}`));
-        },
-        addEventListener() {},
-        removeEventListener() {},
-      };
-    }
-  });
   const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
   await expect(noteRow).toBeVisible();
 
@@ -2259,18 +2196,6 @@ test('popout fallback uses the note returned by selection after a direct read fa
   });
 
   await page.reload();
-  await page.evaluate(() => {
-    const win = window as any;
-    if (!('documentPictureInPicture' in win) || !win.documentPictureInPicture?.requestWindow) {
-      win.documentPictureInPicture = {
-        requestWindow({ width, height }: { width: number; height: number }) {
-          return Promise.resolve(window.open('', '_blank', `popup=yes,width=${width},height=${height}`));
-        },
-        addEventListener() {},
-        removeEventListener() {},
-      };
-    }
-  });
   const noteRow = page.locator('.note-row').filter({ hasText: title }).first();
   await expect(noteRow).toBeVisible();
   const popupPromise = page.waitForEvent('popup');
@@ -2328,42 +2253,6 @@ test('popout keeps the latest draft when the main view switches notes', async ({
   await page.locator('.note-row').filter({ hasText: firstTitle }).click();
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('新正文');
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('- [x] 待办');
-  await popup.close();
-});
-
-test('PiP failure leaves the regular reader window open', async ({ page }) => {
-  const title = `置顶失败-${randomUUID().slice(0, 8)}`;
-  const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
-    headers, data: { title, content: '普通窗口仍可阅读', tags: [], pinned: false,
-      archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
-  });
-  expect(created.status()).toBe(201);
-  await page.goto('/');
-  await page.locator('.note-row').filter({ hasText: title }).click();
-  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
-  await page.evaluate(() => {
-    const open = window.open.bind(window);
-    window.open = (...args) => {
-      const child = open(...args);
-      if (child) Object.defineProperty(child, 'documentPictureInPicture', {
-        configurable: true,
-        value: { requestWindow: () => {
-          (child as any).__pipCalls = ((child as any).__pipCalls ?? 0) + 1;
-          return Promise.reject(new Error('PiP denied'));
-        } },
-      });
-      return child;
-    };
-  });
-  const open = page.getByRole('button', { name: '独立窗口阅读' });
-  const popupPromise = page.waitForEvent('popup');
-  await open.click();
-  const popup = await popupPromise;
-  await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
-  await popup.getByRole('button', { name: '置顶窗口在最前（画中画）' }).click();
-  await expect.poll(() => popup.evaluate(() => (window as any).__pipCalls)).toBe(1);
-  await expect(page.locator('.error-strip pre')).toContainText('置顶窗口打开失败');
-  await expect(popup.locator('.markdown')).toContainText('普通窗口仍可阅读');
   await popup.close();
 });
 

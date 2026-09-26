@@ -2,14 +2,14 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.8.4`
+Current Version: `0.8.5`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
 
 ## Implemented Features
 
 - Multi-tenant model: Initial admin provisioning, user management, approval-based registration (disabled by default), recovery codes, account deletion, HttpOnly session cookies, CSRF, origin checks, and login rate limiting. Notes, versions, attachments, offline caches, and AI tokens are strictly tenant-isolated.
-- Note creation, standalone title, Markdown editing/preview, checkable tasks, autosave, pin to top, archive, tags, and full-text keyword search.
+- Note creation, standalone title, Markdown editing/preview, checkable tasks, autosave, pinning in the note list, archive, tags, and full-text keyword search.
 - Task Center: Aggregates incomplete Markdown TODOs with source note and line number references, with direct jump-to-source support.
 - Single blank note rule: Keeps at most one completely blank note per account; creating a new note reuses an existing blank note if present.
 - CodeMirror 6 editor, markdown-it parsing with DOMPurify sanitization, supporting footnotes, code highlighting, and safe HTML blocks.
@@ -20,7 +20,7 @@ A self-hosted Markdown note-taking application for individuals or small teams. R
 - Revision-based concurrency control, 3-way merge from base revisions, manual conflict resolution with conflict copies, idempotent retries, manual snapshot history, and version restore.
 - Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting.
 - Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
-- Installable PWA with standalone window, home screen icon, app shell caching, and offline cold start.
+- Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Notes can open in a regular separate reader window; system-level always-on-top is not supported.
 - Searchable command palette (`Cmd/Ctrl+K`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
 - Tag renaming, merging, deletion, plus batch archive and tagging.
 - AI read/write integration: Restricted tokens, exact note statistics, cross-status FTS5 relevance search, match character ranges, batch reading, MCP Resources, and writing tools. AI edits enter version history.
