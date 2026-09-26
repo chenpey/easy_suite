@@ -1409,6 +1409,18 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   background: var(--paper);
   color: var(--ink);
 }
+.popout-host-hint {
+  width: 100%;
+  height: 100%;
+  padding: 32px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  text-align: center;
+}
+.popout-host-hint:hover { color: var(--ink); }
 .popout-reader-toolbar {
   flex-shrink: 0;
   height: 44px;

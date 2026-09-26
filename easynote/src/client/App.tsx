@@ -602,6 +602,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [popoutMaximized, setPopoutMaximized] = useState(false);
   const popoutPrevBounds = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
   const popoutWindowRef = useRef<{ win: Window; isPip: boolean } | null>(null);
+  const pipHostWindow = useRef<Window | null>(null);
   const popoutOpenGeneration = useRef(0);
   const lastNoteSelection = useRef<{ id: string; promise: Promise<Note | null> } | null>(null);
   popoutWindowRef.current = popoutWindow;
@@ -668,11 +669,28 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     if (popoutWindow?.win && !popoutWindow.win.closed) {
       popoutWindow.win.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     }
+    if (pipHostWindow.current && !pipHostWindow.current.closed) {
+      pipHostWindow.current.document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    }
   }, [dark, popoutWindow]);
+  useEffect(() => {
+    const host = pipHostWindow.current;
+    if (!popoutWindow?.isPip || !host || host.closed) return;
+    const hint = host.document.createElement('button');
+    hint.type = 'button';
+    hint.className = 'popout-host-hint';
+    hint.textContent = t('当前笔记已在置顶窗口中阅读。点击返回；关闭此窗口将退出置顶。');
+    hint.onclick = () => popoutWindow.win.focus();
+    host.document.body.appendChild(hint);
+    return () => { hint.remove(); };
+  }, [popoutWindow]);
   useEffect(() => {
     const onUnload = () => {
       if (popoutWindowRef.current?.win && !popoutWindowRef.current.win.closed) {
         try { popoutWindowRef.current.win.close(); } catch {}
+      }
+      if (pipHostWindow.current && !pipHostWindow.current.closed) {
+        try { pipHostWindow.current.close(); } catch {}
       }
     };
     window.addEventListener('beforeunload', onUnload);
@@ -845,12 +863,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setLinkPicker(false);
     return selected;
   };
-  const openPopoutReader = async (noteId: string, requestedPin?: boolean) => {
+  const openPopoutReader = async (noteId: string, requestedPin?: boolean, callerWin: Window = window) => {
     const generation = ++popoutOpenGeneration.current;
     let targetNote: Note | null = (note?.id === noteId ? note : null);
-    const hasPipSupport = typeof window !== 'undefined' &&
-      'documentPictureInPicture' in window &&
-      Boolean(window.documentPictureInPicture?.requestWindow);
+    const pipApi = callerWin.documentPictureInPicture;
+    const hasPipSupport = Boolean(pipApi?.requestWindow);
 
     const existingWindow = popoutWindow?.win && !popoutWindow.win.closed ? popoutWindow : null;
     const shouldPin = requestedPin ?? existingWindow?.isPip ?? false;
@@ -858,17 +875,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const reuseWindow = existingWindow &&
       ((existingWindow.isPip && shouldPin) || (!existingWindow.isPip && !shouldPin) || (!hasPipSupport && shouldPin));
     const previousWindow = reuseWindow ? null : existingWindow;
+    const restoredWindow = !shouldPin && existingWindow?.isPip &&
+      pipHostWindow.current && !pipHostWindow.current.closed ? pipHostWindow.current : null;
 
-    let newWin: Window | null = reuseWindow ? existingWindow.win : null;
+    let newWin: Window | null = reuseWindow ? existingWindow.win : restoredWindow;
     let isPip = reuseWindow ? existingWindow.isPip : false;
 
     const width = Math.min(680, window.screen?.availWidth ? window.screen.availWidth - 40 : 680);
     const height = Math.min(760, window.screen?.availHeight ? window.screen.availHeight - 60 : 760);
 
     if (!reuseWindow) {
-      if (shouldPin && hasPipSupport && window.documentPictureInPicture?.requestWindow) {
+      if (shouldPin && hasPipSupport && pipApi?.requestWindow) {
         try {
-          newWin = await window.documentPictureInPicture.requestWindow({ width, height });
+          newWin = await pipApi.requestWindow({ width, height });
           isPip = true;
         } catch (error) {
           console.warn('documentPictureInPicture failed', error);
@@ -922,7 +941,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       return;
     }
 
-    if (reuseWindow) {
+    if (reuseWindow || restoredWindow) {
+      if (restoredWindow) {
+        pipHostWindow.current = null;
+        popoutWindowRef.current = { win: newWin, isPip: false };
+        setPopoutWindow(popoutWindowRef.current);
+        try { previousWindow?.win.close(); } catch {}
+      }
       if (popoutNoteId !== targetNote.id) {
         newWin.document.querySelector<HTMLElement>('.popout-reader-content')?.scrollTo(0, 0);
       }
@@ -949,7 +974,17 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       winInstance.removeEventListener('resize', handleResize);
       winInstance.removeEventListener('pagehide', handleClose);
       winInstance.removeEventListener('beforeunload', handleClose);
+      if (pipHostWindow.current === winInstance) pipHostWindow.current = null;
       if (popoutWindowRef.current?.win !== winInstance) return;
+      const host = isPip && pipHostWindow.current && !pipHostWindow.current.closed
+        ? pipHostWindow.current : null;
+      if (host) {
+        pipHostWindow.current = null;
+        popoutWindowRef.current = { win: host, isPip: false };
+        setPopoutWindow(popoutWindowRef.current);
+        host.focus();
+        return;
+      }
       popoutWindowRef.current = null;
       setPopoutWindow(null);
       setPopoutNoteId(null);
@@ -967,9 +1002,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     popoutWindowRef.current = { win: winInstance, isPip };
     setPopoutWindow(popoutWindowRef.current);
     if (previousWindow) {
-      window.setTimeout(() => {
-        try { previousWindow.win.close(); } catch {}
-      }, 100);
+      if (isPip && previousWindow.win === callerWin) {
+        pipHostWindow.current = callerWin;
+      } else {
+        window.setTimeout(() => {
+          try { previousWindow.win.close(); } catch {}
+        }, 100);
+      }
     }
     winInstance.focus();
   };
@@ -980,7 +1019,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
 
   const togglePopoutPin = () => {
     if (!activePopoutNote) return;
-    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip);
+    void openPopoutReader(activePopoutNote.id, !popoutWindow?.isPip, popoutWindow?.win);
   };
 
   const togglePopoutMaximize = () => {
@@ -2267,15 +2306,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <div className="popout-reader-actions">
             <IconButton
               label={
-                typeof window !== 'undefined' && 'documentPictureInPicture' in window && Boolean(window.documentPictureInPicture?.requestWindow)
+                (popoutWindow.isPip || Boolean(popoutWindow.win.documentPictureInPicture?.requestWindow))
                   ? t(popoutWindow.isPip ? '取消窗口置顶' : '置顶窗口在最前')
                   : t('当前浏览器不支持窗口置顶')
               }
               className={`icon-button ${popoutWindow.isPip ? 'active' : ''}`}
-              disabled={typeof window === 'undefined' || !('documentPictureInPicture' in window) || !window.documentPictureInPicture?.requestWindow}
+              disabled={!popoutWindow.isPip && !popoutWindow.win.documentPictureInPicture?.requestWindow}
               onClick={togglePopoutPin}
             >
-              <Pin size={15} fill={popoutWindow.isPip ? 'currentColor' : 'none'} />
+              <PictureInPicture2 size={15} />
             </IconButton>
             <IconButton
               label={t('深色外观')}
