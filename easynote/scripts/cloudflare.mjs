@@ -5,22 +5,35 @@ export function createCloudflareClient(token, {
   fetcher = fetch,
 } = {}) {
   async function call(method, path, body, { allowMissing = false } = {}) {
+    const maxRetries = 2;
     let response;
     let raw;
-    try {
-      response = await fetcher(`${baseUrl}${path}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(60000),
-        redirect: 'error',
-      });
-      raw = await response.text();
-    } catch (error) {
-      throw new Error(`${method} ${path}\nNetwork error: ${error.message}`, { cause: error });
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        response = await fetcher(`${baseUrl}${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: AbortSignal.timeout(60000),
+          redirect: 'error',
+        });
+        raw = await response.text();
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 600));
+        }
+      }
+    }
+    if (lastError) {
+      const detail = lastError.cause?.message || lastError.cause?.code || lastError.message;
+      throw new Error(`${method} ${path}\nNetwork error: ${detail}`, { cause: lastError });
     }
     let data;
     try {
@@ -195,10 +208,8 @@ export function validateWorkersSubdomain(value) {
 }
 
 async function assertBucketPrivate(api, bucketPath) {
-  const [managed, custom] = await Promise.all([
-    api.request('GET', `${bucketPath}/domains/managed`),
-    api.request('GET', `${bucketPath}/domains/custom`),
-  ]);
+  const managed = await api.request('GET', `${bucketPath}/domains/managed`);
+  const custom = await api.request('GET', `${bucketPath}/domains/custom`);
   if (managed?.enabled !== false || !Array.isArray(custom?.domains) ||
       custom.domains.some((domain) => domain.enabled !== false)) {
     throw new Error('R2 public access is enabled or could not be verified. Disable r2.dev and bucket custom domains first.');
