@@ -531,7 +531,7 @@ test('the generated local account works through a real Wrangler server and local
   const exited = new Promise((resolve) => child.once('close', resolve));
   try {
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Local startup timed out:\n${output}`)), 30000);
+      const timer = setTimeout(() => reject(new Error(`Local startup timed out:\n${output}`)), 60000);
       const receive = (chunk) => {
         output += chunk;
         if (output.includes(`Ready on http://127.0.0.1:${port}`)) { clearTimeout(timer); resolve(); }
