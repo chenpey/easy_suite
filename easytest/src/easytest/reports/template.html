@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>EasyTest 测试报告</title>
+<style>
+:root{color-scheme:light;--ink:#172c3a;--muted:#60727e;--line:#dce4e7;--paper:#fff;--bg:#f3f6f7;--teal:#06786d;--red:#b43e3a;--amber:#916315}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #279eaf;outline-offset:3px}
+button{border:1px solid var(--line);border-radius:8px;background:white;padding:8px 13px;color:var(--ink)}button:hover{background:#edf5f4}
+header{background:#173b46;color:#fff;padding:30px max(24px,calc((100vw - 1220px)/2));display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{letter-spacing:3px;font-size:11px;color:#95d9d0;font-weight:700}h1{font-size:27px;letter-spacing:-.7px;margin:4px 0}header p{margin:0;color:#c4d7dc;font-size:12px}.actions{display:flex;gap:8px;flex-shrink:0}header button{background:#234b57;color:#fff;border-color:#4a6973}
+main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.metric,.panel{background:var(--paper);border:1px solid var(--line);border-radius:12px}.metric{padding:19px 22px}.metric span{color:var(--muted);font-size:12px}.metric strong{display:block;font-size:32px;line-height:1.4;font-weight:650;font-variant-numeric:tabular-nums}.metric small{color:var(--muted);font-size:11px}.good{color:var(--teal)}.bad{color:var(--red)}
+.panel{padding:22px;margin-bottom:20px}h2{font-size:16px;margin:0 0 3px}.subtle{font-size:12px;color:var(--muted);margin:0 0 16px}.bar{display:flex;height:9px;overflow:hidden;background:#e9eef0;border-radius:8px;margin:17px 0 12px}.bar span{min-width:0}.legend{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted);font-size:12px}.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px}
+.analysis{display:grid;grid-template-columns:1fr 1.35fr;gap:20px}.analysis>.panel{min-width:0}.category-list{display:grid;gap:7px}.category{display:flex;justify-content:space-between;align-items:center;position:relative;overflow:hidden;text-align:left;width:100%;border:0;padding:9px 12px;background:#f5f8f9}.category span,.category b{position:relative;z-index:1}.category::before{content:"";background:#dfeeea;width:var(--width);position:absolute;inset:0 auto 0 0}.category[aria-pressed=true]{outline:2px solid var(--teal)}
+.scroll{overflow:auto;max-height:335px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #ebeff1;vertical-align:top}th{color:var(--muted);font-weight:500;white-space:nowrap}td code{word-break:break-all}.group-button{padding:0;border:0;background:none;text-align:left;color:var(--teal);font-family:ui-monospace,monospace}.group-button:hover{text-decoration:underline;background:none}
+.filters{display:flex;gap:10px;align-items:end;margin:18px 0 14px;flex-wrap:wrap}.filters label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px}.filters input,.filters select{padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);min-height:40px}.search{flex:1;min-width:190px}.match-count{color:var(--muted);font-size:12px;margin:10px 0}.active-group{display:none;background:#edf5f4;border-radius:7px;padding:6px 10px;color:var(--teal)}
+.case{border:1px solid var(--line);border-radius:9px;margin:8px 0;overflow:hidden}.case>summary{display:grid;grid-template-columns:18px 65px minmax(100px,1fr) 90px 75px;gap:12px;padding:14px 15px;align-items:center;cursor:pointer;list-style:none}.case>summary::-webkit-details-marker{display:none}.case>summary::before{content:"›";font-size:22px;line-height:1;color:var(--muted)}.case[open]>summary::before{transform:rotate(90deg)}.case[open]>summary{background:#f8fafb;border-bottom:1px solid var(--line)}.case-name{font-weight:600;overflow-wrap:anywhere}.case-id{display:block;color:var(--muted);font-size:11px;font-weight:400}.num{font-variant-numeric:tabular-nums;text-align:right;color:var(--muted);font-size:12px}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px;white-space:nowrap;background:#eef1f3;color:#60727e;width:fit-content}.badge.passed{background:#e2f2eb;color:var(--teal)}.badge.failed,.badge.interrupted{background:#fbeae8;color:var(--red)}.badge.skipped{background:#faf1d8;color:var(--amber)}
+.case-body{padding:16px}.metadata{color:var(--muted);font-size:12px;overflow-wrap:anywhere;margin-bottom:12px}.error{border-left:3px solid var(--red);background:#fff4f2;padding:9px 12px;margin:8px 0;font-size:12px;overflow-wrap:anywhere}.step{margin-top:10px;border:1px solid var(--line);border-radius:7px}.step>summary{padding:10px 12px;cursor:pointer;font-size:12px}.step>summary .badge{margin:0 8px}.step-body{padding:12px}.payloads,.diff-values{display:grid;grid-template-columns:1fr 1fr;gap:12px}.value-label{color:var(--muted);font-size:11px;margin:0 0 5px}pre{margin:0;padding:12px;background:#f2f5f7;border:1px solid #e8edef;border-radius:6px;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
+.diff{margin-top:13px;border-top:1px solid var(--line);padding-top:12px}.diff-title{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px;font-size:12px}.diff-title code{overflow-wrap:anywhere}.expected pre{background:#fff3f1;border-color:#f4dcd7}.actual pre{background:#eef8f2;border-color:#d6ecdf}.empty{padding:28px 10px;text-align:center;color:var(--muted);font-size:13px}.footer{color:var(--muted);font-size:11px;text-align:center;margin:18px 0}.hint{font-size:11px;color:var(--muted);margin:12px 0 0}
+@media(max-width:800px){header{padding:22px;align-items:start;flex-direction:column}.metrics{grid-template-columns:repeat(2,1fr)}.analysis{grid-template-columns:1fr;gap:0}.case>summary{grid-template-columns:15px 55px minmax(90px,1fr);gap:8px}.case>summary>.num{display:none}.payloads,.diff-values{grid-template-columns:1fr}.panel{padding:16px}main{padding:16px 12px}}
+</style>
+</head>
+<body>
+<header><div><div class="brand">EASYTEST / RUN REPORT</div><h1 id="title">测试报告</h1><p id="run-meta"></p></div><div class="actions"><button id="download">下载报告数据</button><button id="export-pdf" title="下载完整报告，包含全部用例、步骤和差异">导出 PDF</button></div></header>
+<main>
+<section class="metrics" aria-label="运行统计" id="metrics"></section>
+<section class="panel"><h2>运行概览</h2><div id="status-bar" class="bar" aria-label="用例状态分布"></div><div id="legend" class="legend"></div></section>
+<div class="analysis">
+<section class="panel"><h2>差异自动分类</h2><p class="subtle">点击类别筛选用例 · 按数据变化规则归类</p><div id="categories" class="category-list"></div></section>
+<section class="panel"><h2>相同字段的问题</h2><p class="subtle">按类别与字段聚合，列表下标统一为 [*]；点击字段查看受影响用例</p><div class="scroll" id="groups"></div></section>
+</div>
+<section class="panel"><h2>用例与步骤</h2><p class="subtle">展开查看来源、步骤结果与期望 / 实际差异</p>
+<div class="filters">
+<label class="search">搜索<input id="search" type="search" placeholder="用例、字段、操作或来源文件"></label>
+<label>状态<select id="status"><option value="">全部状态</option></select></label>
+<label>差异类别<select id="category"><option value="">全部类别</option></select></label>
+<button id="reset">重置筛选</button>
+</div><div id="active-group" class="active-group"></div><p id="match-count" class="match-count" aria-live="polite"></p><div id="cases"></div>
+<p class="hint">请求、响应和差异值经过敏感字段脱敏，长值标注截断。错误原文请查看本地终端。图片差异按文件哈希比较。</p>
+</section>
+<p class="footer">EasyTest · 离线报告 · 统计覆盖本次运行 · 自动分类不修改基线</p>
+<noscript>请启用 JavaScript 查看统计和用例详情。</noscript>
+</main>
+<script type="application/json" id="report-data">__REPORT_DATA__</script>
+<script type="application/octet-stream" id="report-pdf">__REPORT_PDF__</script>
+<script>
+(() => {
+  "use strict";
+  const data = JSON.parse(document.getElementById("report-data").textContent);
+  const $ = id => document.getElementById(id);
+  const reportId = String(data.report_id || "").slice(0,12) || "—";
+  const inputHash = String(data.input_hash || "").replace(/^sha256:/,"").slice(0,12) || "—";
+  const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
+  const statusColors = {passed:"#188775", failed:"#cb6259", skipped:"#d5ae5b", interrupted:"#845299", not_run:"#aab8c0"};
+  const label = key => data.category_labels[key] || key;
+  const statusLabel = key => data.status_labels[key] || key;
+  const ms = value => value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${Math.round(value)} ms`;
+  const badge = status => el("span", statusLabel(status), `badge ${status}`);
+  const pretty = value => value === undefined ? "—" : JSON.stringify(value, null, 2);
+  const values = (parent, title, value, cls) => { const col = el("div", undefined, cls); col.append(el("div",title,"value-label"), el("pre",pretty(value))); parent.append(col); };
+  $("title").textContent = data.title;
+  document.title = data.title;
+  $("run-meta").textContent = `${new Date(data.started_at).toLocaleString()} · 累计用例耗时 ${ms(data.summary.duration_ms)} · 输入 ${inputHash} · 报告 ${reportId}`;
+  $("run-meta").title = `输入哈希：${data.input_hash || "—"}\n报告 ID：${data.report_id || "—"}`;
+  const summary = data.summary;
+  const metrics = [
+    ["总用例",summary.total,"本次运行记录",""],
+    ["通过率",summary.pass_rate === null ? "—" : `${summary.pass_rate}%`,"通过数 / 全部用例（含跳过与未执行）","good"],
+    ["失败用例",summary.failed,`中断 ${summary.interrupted} · 跳过 ${summary.skipped}`,"bad"],
+    ["差异总数",summary.diff_count,`${Object.keys(data.categories).length} 类变化 · ${data.groups.length} 个字段分组`,""],
+  ];
+  metrics.forEach(([name,value,hint,cls]) => {
+    const card = el("div",undefined,"metric"); card.append(el("span",name),el("strong",value,cls),el("small",hint)); $("metrics").append(card);
+  });
+  Object.keys(data.status_labels).forEach(status => {
+    $("status").append(new Option(statusLabel(status),status));
+    const count = summary[status]; if (!count) return;
+    const segment = el("span"); segment.style.width = `${count / summary.total * 100}%`; segment.style.background = statusColors[status]; segment.title = `${statusLabel(status)} ${count}`; $("status-bar").append(segment);
+    const legend = el("span"); const dot = el("i",undefined,"dot"); dot.style.background = statusColors[status]; legend.append(dot,document.createTextNode(`${statusLabel(status)} ${count}`)); $("legend").append(legend);
+  });
+  if (!summary.total) $("legend").append(el("span","暂无用例记录"));
+  let groupFilter = null;
+  const sortedCategories = Object.entries(data.categories).sort((a,b) => b[1] - a[1]);
+  sortedCategories.forEach(([key,count]) => {
+    $("category").append(new Option(`${label(key)} (${count})`,key));
+    const button = el("button",undefined,"category"); button.type = "button"; button.dataset.category = key; button.setAttribute("aria-pressed","false");
+    button.style.setProperty("--width",`${count / Math.max(1,summary.diff_count) * 100}%`);
+    button.append(el("span",label(key)),el("b",count));
+    button.addEventListener("click",() => { $("category").value = $("category").value === key ? "" : key; groupFilter = null; render(); });
+    $("categories").append(button);
+  });
+  if (!sortedCategories.length) $("categories").append(el("div","本次运行没有快照差异","empty"));
+  if (data.groups.length) {
+    const table = el("table"), head = el("thead"), row = el("tr"); ["字段 / 类别","差异数","用例数"].forEach(text => row.append(el("th",text))); head.append(row); table.append(head);
+    const body = el("tbody");
+    data.groups.forEach(group => {
+      const row = el("tr"), field = el("td"), button = el("button",group.path,"group-button");
+      button.addEventListener("click",() => { groupFilter = group; $("category").value = group.category; $("status").value = ""; $("search").value = ""; render(); $("match-count").scrollIntoView({behavior:"smooth",block:"center"}); });
+      field.append(button,el("div",label(group.category),"subtle")); row.append(field,el("td",group.count),el("td",group.case_indexes.length)); body.append(row);
+    });
+    table.append(body); $("groups").append(table);
+  } else $("groups").append(el("div","没有待归类的字段差异","empty"));
+  function errors(parent, items) {
+    items.forEach(error => parent.append(el("div",`${error.type} · ${error.phase} — ${error.message}`,"error")));
+  }
+  function stepNode(step) {
+    const details = el("details",undefined,"step"), summary = el("summary");
+    summary.append(badge(step.status),document.createTextNode(`${step.id} · ${step.operation} · ${ms(step.duration_ms)}`)); details.append(summary);
+    let built = false;
+    details.addEventListener("toggle",() => {
+      if (!details.open || built) return; built = true;
+      const content = el("div",undefined,"step-body");
+      content.append(el("p",`${step.executor} · ${step.mocked ? "Mock" : "执行器"} · 阶段 ${step.phase || "未开始"}${step.source_row === null ? "" : ` · steps 第 ${step.source_row} 行`} · Case ${step.case_id}`,"metadata"));
+      errors(content, step.errors);
+      const payloads = el("div",undefined,"payloads"); values(payloads,"请求",step.request); values(payloads,"响应",step.response); content.append(payloads);
+      step.differences.forEach(diff => {
+        const block = el("div",undefined,"diff"), title = el("div",undefined,"diff-title");
+        title.append(el("span",label(diff.category),"badge failed"),el("code",diff.path));
+        block.append(title,el("p",`快照：${diff.target}`,"metadata"));
+        const pair = el("div",undefined,"diff-values");
+        values(pair,`期望 · ${diff.expected_type}`,diff.expected,"expected"); values(pair,`实际 · ${diff.actual_type}`,diff.actual,"actual"); block.append(pair); content.append(block);
+      });
+      details.append(content);
+    });
+    return details;
+  }
+  function caseNode(record) {
+    const details = el("details",undefined,"case"), summary = el("summary");
+    const name = el("span",record.name || record.id,"case-name"); name.append(el("span",record.id,"case-id"));
+    const count = record.steps.reduce((n,step) => n + step.differences.length,0);
+    summary.append(badge(record.status), name,el("span",`${count} 处差异`,"num"),el("span",ms(record.duration_ms),"num")); details.append(summary);
+    let built = false;
+    details.addEventListener("toggle",() => {
+      if (!details.open || built) return; built = true;
+      const content = el("div",undefined,"case-body");
+      content.append(el("div",`来源：${record.source || "—"} · Profile ${record.profile || "—"} · ${record.run_mode || "—"}`,"metadata"));
+      errors(content,record.errors); record.steps.forEach(step => content.append(stepNode(step)));
+      if (!record.steps.length) content.append(el("div","此记录没有框架步骤","metadata"));
+      details.append(content);
+    });
+    return details;
+  }
+  const searchable = data.cases.map(record => JSON.stringify(record).toLowerCase());
+  function render() {
+    const query = $("search").value.trim().toLowerCase(), status = $("status").value, category = $("category").value;
+    $("cases").replaceChildren();
+    const matching = data.cases.filter((record,index) =>
+      (!status || record.status === status) && (!query || searchable[index].includes(query)) &&
+      (!category || record.steps.some(step => step.differences.some(diff => diff.category === category))) &&
+      (!groupFilter || groupFilter.case_indexes.includes(index)));
+    matching.forEach(record => $("cases").append(caseNode(record)));
+    if (!matching.length) $("cases").append(el("div","没有匹配的用例，请调整或重置筛选条件。","empty"));
+    $("match-count").textContent = `显示 ${matching.length} / ${summary.total} 个用例 · 上方统计为本次运行的全量数据`;
+    $("active-group").style.display = groupFilter ? "block" : "none";
+    $("active-group").textContent = groupFilter ? `当前字段：${groupFilter.path} · ${label(groupFilter.category)}` : "";
+    document.querySelectorAll(".category").forEach(button => button.setAttribute("aria-pressed",String(button.dataset.category === category)));
+  }
+  $("search").addEventListener("input",render); $("status").addEventListener("change",render);
+  $("category").addEventListener("change",() => { groupFilter = null; render(); });
+  $("reset").addEventListener("click",() => { $("search").value = ""; $("status").value = ""; $("category").value = ""; groupFilter = null; render(); });
+  function exportFilename(extension) {
+    const now = new Date(), pad = value => String(value).padStart(2,"0");
+    const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const time = [now.getHours(),now.getMinutes(),now.getSeconds()].map(pad).join("");
+    return `easytest_report_${date}${time}.${extension}`;
+  }
+  function downloadFile(content, type, filename) {
+    const url = URL.createObjectURL(new Blob([content],{type}));
+    const link = el("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url),1000);
+  }
+  $("download").addEventListener("click",() => downloadFile(JSON.stringify(data,null,2),"application/json",exportFilename("json")));
+  $("export-pdf").addEventListener("click",() => {
+    const bytes = Uint8Array.from(atob($("report-pdf").textContent.trim()),character => character.charCodeAt(0));
+    downloadFile(bytes,"application/pdf",exportFilename("pdf"));
+  });
+  render();
+})();
+</script>
+</body>
+</html>

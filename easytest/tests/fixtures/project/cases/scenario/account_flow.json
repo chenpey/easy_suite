@@ -1,0 +1,126 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "scenario.account_flow",
+      "mock_profile": null,
+      "name": "Account flow across adapters",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "scenario",
+          "expect": {
+            "equals": "user-001",
+            "path": "$.value"
+          },
+          "id": "seed_user",
+          "mock": null,
+          "operation": "scenario.set_state",
+          "order": 1,
+          "request": {
+            "path": "user.id",
+            "value": "user-001"
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 2
+        },
+        {
+          "executor": "http",
+          "expect": {
+            "equals": 200,
+            "path": "$.status_code"
+          },
+          "id": "profile",
+          "mock": null,
+          "operation": "http.get_profile",
+          "order": 2,
+          "request": {
+            "params": {
+              "id": "${state.user.id}"
+            }
+          },
+          "save_as": "profile",
+          "snapshot": {
+            "name": "profile_response",
+            "rule": "response_default"
+          },
+          "source_row": 3
+        },
+        {
+          "executor": "rpc",
+          "expect": {
+            "equals": true,
+            "path": "$.approved"
+          },
+          "id": "limit",
+          "mock": null,
+          "operation": "rpc.calculate_limit",
+          "order": 3,
+          "request": {
+            "amount": "${variables.requested_amount}",
+            "user_id": "${steps.profile.body.id}"
+          },
+          "save_as": null,
+          "snapshot": {
+            "name": "limit_response",
+            "rule": "response_default"
+          },
+          "source_row": 4
+        },
+        {
+          "executor": "database",
+          "expect": {
+            "equals": 2,
+            "path": "$.rowcount"
+          },
+          "id": "accounts",
+          "mock": null,
+          "operation": "database.list_accounts",
+          "order": 4,
+          "request": {
+            "parameters": {
+              "user_id": "${state.user.id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": {
+            "name": "accounts",
+            "rule": "database_rows"
+          },
+          "source_row": 5
+        },
+        {
+          "executor": "ui",
+          "expect": {
+            "equals": true,
+            "path": "$.visible"
+          },
+          "id": "dashboard",
+          "mock": null,
+          "operation": "ui.open_dashboard",
+          "order": 5,
+          "request": {
+            "user_id": "${state.user.id}"
+          },
+          "save_as": null,
+          "snapshot": {
+            "name": "dashboard",
+            "rule": "screenshot_default"
+          },
+          "source_row": 6
+        }
+      ],
+      "tags": "smoke,offline",
+      "type": "scenario",
+      "variables": {
+        "requested_amount": "500.00"
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "account_flow.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "fe9bb63c489a83efd10f1510767b6e6235a88e4c3c7ca0cd45ca68f2f606a360"
+}

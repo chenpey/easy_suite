@@ -1,0 +1,59 @@
+[project]
+name = "easytest"
+version = "0.2.0"
+description = "XLSX-first test scaffold with deterministic JSON artifacts for scenario, HTTP, RPC, database, and UI workflows"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "filelock>=3.16.0",
+    "openpyxl>=3.1.5",
+    "pymysql>=1.1.1",
+    "pytest>=8.3.0",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.0",
+    "reportlab>=4.4.0,<5",
+    "sqlparse>=0.5.3",
+]
+
+[project.optional-dependencies]
+browser-auth = [
+    "browser-cookie3>=0.20.1",
+]
+examples = [
+    "pillow>=10.4.0",
+]
+notebook = [
+    "ipykernel>=6.29.0",
+]
+
+[dependency-groups]
+dev = [
+    "nbclient==0.11.0",
+    "pypdf>=6.0.0,<7",
+    "ruff==0.15.20",
+]
+
+[project.scripts]
+easytest = "easytest.cli:main"
+
+[project.entry-points.pytest11]
+easytest = "easytest.pytest_plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/easytest"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["easytest"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

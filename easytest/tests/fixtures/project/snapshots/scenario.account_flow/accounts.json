@@ -1,0 +1,12 @@
+[
+  {
+    "balance": "125.50",
+    "id": "account-001",
+    "status": "ACTIVE"
+  },
+  {
+    "balance": "0",
+    "id": "account-002",
+    "status": "CLOSED"
+  }
+]

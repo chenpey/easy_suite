@@ -1,0 +1,8 @@
+{
+  "default_profile": "offline-strict",
+  "run_mode": "read",
+  "allow_db_write": false,
+  "observability": {
+    "emit_stdout": false
+  }
+}

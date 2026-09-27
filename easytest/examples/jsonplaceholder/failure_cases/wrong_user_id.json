@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.wrong_user_id",
+      "mock_profile": null,
+      "name": "故意失败：用户 ID 预期错误",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.id": 999,
+            "$.status_code": 200
+          },
+          "id": "get_user",
+          "mock": null,
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 2
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "wrong_user_id.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "dbc1be3735a2db9d171e808b588596574755c92df31ab7c5fdee6ffc998fd9ba"
+}

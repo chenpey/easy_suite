@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "http.profile_api",
+      "mock_profile": null,
+      "name": "Profile HTTP API",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "checks": [
+              {
+                "equals": 200,
+                "path": "$.status_code"
+              },
+              {
+                "equals": "ACTIVE",
+                "path": "$.body.status"
+              }
+            ]
+          },
+          "id": "get_profile",
+          "mock": null,
+          "operation": "http.get_profile",
+          "order": 1,
+          "request": {
+            "params": {
+              "id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": {
+            "name": "response",
+            "rule": "response_default"
+          },
+          "source_row": 2
+        }
+      ],
+      "tags": "api,offline",
+      "type": "http",
+      "variables": {
+        "user_id": "user-001"
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "profile_api.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "1b2622539a630e966cb5e38fd29ce7d6c45328ba7ea42ee14ad9065203bc2d41"
+}

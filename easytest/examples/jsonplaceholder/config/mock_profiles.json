@@ -1,0 +1,87 @@
+{
+  "presets": {
+    "user_found": {
+      "kind": "response",
+      "response": {
+        "status_code": 200,
+        "body": {
+          "id": 1,
+          "name": "Leanne Graham",
+          "username": "Bret"
+        }
+      }
+    },
+    "user_not_found": {
+      "kind": "response",
+      "response": {
+        "status_code": 404,
+        "body": {}
+      }
+    },
+    "user_recovers": {
+      "kind": "sequence",
+      "repeat_last": false,
+      "values": [
+        {
+          "status_code": 503,
+          "body": {"message": "Temporarily unavailable"}
+        },
+        {
+          "status_code": 200,
+          "body": {"id": 1, "name": "Leanne Graham", "username": "Bret"}
+        }
+      ]
+    },
+    "rate_limited": {
+      "kind": "service_rejected",
+      "response": {
+        "status_code": 429,
+        "body": {"code": "RATE_LIMITED", "message": "Please try again later"}
+      }
+    },
+    "request_timeout": {
+      "kind": "timeout",
+      "delay_seconds": 0,
+      "message": "JSONPlaceholder demo: simulated request timeout"
+    },
+    "connection_error": {
+      "kind": "exception",
+      "exception": "ConnectionError",
+      "message": "JSONPlaceholder demo: simulated connection failure"
+    }
+  },
+  "profiles": {
+    "offline": {
+      "http.get_user": "user_found",
+      "http.list_posts": {
+        "kind": "response",
+        "response": {
+          "status_code": 200,
+          "body": [
+            {
+              "userId": 1,
+              "id": 1,
+              "title": "Offline demo post",
+              "body": "A small fixture for the user-to-posts workflow."
+            }
+          ]
+        }
+      },
+      "http.create_post": {
+        "kind": "response",
+        "response": {
+          "status_code": 201,
+          "body": {
+            "id": 101,
+            "userId": "${variables.user_id}",
+            "title": "${variables.title}",
+            "body": "${variables.post_body}"
+          }
+        }
+      }
+    },
+    "missing_user": {
+      "http.get_user": "user_not_found"
+    }
+  }
+}
