@@ -1,0 +1,63 @@
+{
+  "operations": {
+    "database.list_accounts": {
+      "connection": "default",
+      "executor": "database",
+      "statement": "SELECT id, status, balance FROM accounts WHERE user_id = :user_id ORDER BY id",
+      "write": false
+    },
+    "database.update_account": {
+      "connection": "default",
+      "executor": "database",
+      "statement": "UPDATE accounts SET status = :status WHERE id = :id",
+      "write": true
+    },
+    "http.get_profile": {
+      "executor": "http",
+      "headers": {
+        "Authorization": "Bearer ${HTTP_TOKEN}"
+      },
+      "expected_status": [
+        200
+      ],
+      "method": "GET",
+      "retry": {
+        "backoff_seconds": 0.25,
+        "jitter_seconds": 0.1,
+        "methods": [
+          "GET"
+        ],
+        "retries": 2,
+        "status_codes": [
+          429,
+          502,
+          503,
+          504
+        ]
+      },
+      "timeout": 5,
+      "url": "${BASE_URL}/profiles"
+    },
+    "rpc.calculate_limit": {
+      "auth": {
+        "client_id": "${RPC_CLIENT_ID}",
+        "client_secret": "${RPC_CLIENT_SECRET}"
+      },
+      "endpoint": "${RPC_ENDPOINT}",
+      "executor": "rpc",
+      "handler": "easytest.examples.handlers:rpc_calculate_limit"
+    },
+    "scenario.read_state": {
+      "builtin": "get",
+      "executor": "scenario"
+    },
+    "scenario.set_state": {
+      "builtin": "set",
+      "executor": "scenario"
+    },
+    "ui.open_dashboard": {
+      "executor": "ui",
+      "handler": "easytest.examples.handlers:open_dashboard"
+    }
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.create_post",
+      "mock_profile": null,
+      "name": "模拟创建文章并校验回显",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.body": "${variables.post_body}",
+            "$.body.id": 101,
+            "$.body.title": "${variables.title}",
+            "$.body.userId": "${variables.user_id}",
+            "$.status_code": 201
+          },
+          "id": "create_post",
+          "mock": null,
+          "operation": "http.create_post",
+          "order": 1,
+          "request": {
+            "json": {
+              "body": "${variables.post_body}",
+              "title": "${variables.title}",
+              "userId": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 5
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "post_body": "Created by the EasyTest demo.",
+        "title": "EasyTest JSONPlaceholder demo",
+        "user_id": 1
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.get_user",
+      "mock_profile": null,
+      "name": "查询用户信息",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "checks": [
+              {
+                "equals": 200,
+                "path": "$.status_code"
+              },
+              {
+                "equals": "${variables.user_id}",
+                "path": "$.body.id"
+              },
+              {
+                "contains": "name",
+                "path": "$.body"
+              },
+              {
+                "contains": "username",
+                "path": "$.body"
+              }
+            ]
+          },
+          "id": "get_user",
+          "mock": null,
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 2
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.user_posts",
+      "mock_profile": null,
+      "name": "查询用户后获取其文章",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "checks": [
+              {
+                "equals": 200,
+                "path": "$.status_code"
+              },
+              {
+                "equals": "${variables.user_id}",
+                "path": "$.body.id"
+              },
+              {
+                "contains": "name",
+                "path": "$.body"
+              },
+              {
+                "contains": "username",
+                "path": "$.body"
+              }
+            ]
+          },
+          "id": "get_user",
+          "mock": null,
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": "user",
+          "snapshot": null,
+          "source_row": 3
+        },
+        {
+          "executor": "http",
+          "expect": {
+            "$.body[0].userId": "${steps.user.body.id}",
+            "$.status_code": 200
+          },
+          "id": "get_posts",
+          "mock": null,
+          "operation": "http.list_posts",
+          "order": 2,
+          "request": {
+            "params": {
+              "userId": "${steps.user.body.id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 4
+        }
+      ],
+      "tags": "",
+      "type": "scenario",
+      "variables": {
+        "user_id": 1
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "demo.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "26e9069e462ddb92538c1ee56adc4d1d2ccd12c5783cb6a33908af21002dd604"
+}

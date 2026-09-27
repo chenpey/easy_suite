@@ -1,0 +1,205 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.inline",
+      "mock_profile": null,
+      "name": "Step 内联 Mock：自定义用户",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.id": "${variables.user_id}",
+            "$.body.name": "Mock Demo User",
+            "$.status_code": 200
+          },
+          "id": "custom_user",
+          "mock": {
+            "kind": "response",
+            "response": {
+              "body": {
+                "id": "${variables.user_id}",
+                "name": "Mock Demo User"
+              },
+              "status_code": 200
+            }
+          },
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 2
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 7
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.overrides",
+      "mock_profile": "missing_user",
+      "name": "Mock 优先级：Case 配置与 Step 预设",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.body": {},
+            "$.status_code": 404
+          },
+          "id": "case_profile",
+          "mock": null,
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "expected_status": [
+              404
+            ],
+            "path": {
+              "user_id": 0
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 3
+        },
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.id": "${variables.user_id}",
+            "$.status_code": 200
+          },
+          "id": "step_preset",
+          "mock": {
+            "preset": "user_found"
+          },
+          "operation": "http.get_user",
+          "order": 2,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 4
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.rejected",
+      "mock_profile": null,
+      "name": "业务拒绝：预期收到限流响应",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.code": "RATE_LIMITED",
+            "$.status_code": 429
+          },
+          "id": "rate_limited",
+          "mock": {
+            "preset": "rate_limited"
+          },
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "expected_status": [
+              429
+            ],
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 7
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.sequence",
+      "mock_profile": null,
+      "name": "连续响应：第一次 503，第二次 200",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": {
+            "$.status_code": 503
+          },
+          "id": "unavailable",
+          "mock": {
+            "preset": "user_recovers"
+          },
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "expected_status": [
+              503
+            ],
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 5
+        },
+        {
+          "executor": "http",
+          "expect": {
+            "$.body.id": "${variables.user_id}",
+            "$.status_code": 200
+          },
+          "id": "recovered",
+          "mock": {
+            "preset": "user_recovers"
+          },
+          "operation": "http.get_user",
+          "order": 2,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 6
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "demo.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "7578f57f964cd6682525099c05f49b57d1fdb3a09a05ee0c62e94778af0f3ad5"
+}

@@ -1,0 +1,11 @@
+{
+  "body": {
+    "id": "user-001",
+    "name": "Mock User",
+    "status": "ACTIVE"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "status_code": 200
+}

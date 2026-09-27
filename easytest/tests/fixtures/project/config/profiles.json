@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "offline-strict": {
+      "mock_profile": "offline",
+      "fail_on_mock_miss": true
+    },
+    "live": {
+      "fail_on_mock_miss": false
+    }
+  }
+}

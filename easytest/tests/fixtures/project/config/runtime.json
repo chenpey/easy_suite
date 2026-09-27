@@ -1,0 +1,38 @@
+{
+  "default_profile": "offline-strict",
+  "allow_db_write": false,
+  "database": {
+    "connections": {
+      "default": {
+        "database": "${DB_PATH}",
+        "driver": "${DB_DRIVER}",
+        "pragmas": {
+          "busy_timeout": 30000,
+          "foreign_keys": "ON",
+          "journal_mode": "WAL",
+          "synchronous": "NORMAL"
+        }
+      },
+      "mysql_example": {
+        "database": "${DB_NAME}",
+        "driver": "mysql",
+        "host": "${DB_HOST}",
+        "password_env": "DB_PASSWORD",
+        "port": 3306,
+        "read_only": true,
+        "read_retries": 1,
+        "retry_delay_seconds": 0.2,
+        "timeout_seconds": 20,
+        "user": "${DB_USER}"
+      }
+    }
+  },
+  "observability": {
+    "emit_stdout": false
+  },
+  "run_mode": "read",
+  "snapshot_backend": "file",
+  "snapshot_database": ".easytest/snapshots.db",
+  "snapshot_history_keep": 10,
+  "snapshot_dir": "snapshots"
+}

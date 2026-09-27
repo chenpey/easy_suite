@@ -1,0 +1,78 @@
+{
+  "presets": {
+    "seed_user": {
+      "kind": "state",
+      "updates": {"user": {"id": "user-001"}},
+      "response": {"path": "user.id", "value": "user-001"}
+    },
+    "database_rows": {
+      "kind": "response",
+      "response": {
+        "rowcount": 2,
+        "rows": [
+          {
+            "balance": "125.50",
+            "id": "account-001",
+            "status": "ACTIVE"
+          },
+          {
+            "balance": "0",
+            "id": "account-002",
+            "status": "CLOSED"
+          }
+        ],
+        "write": false
+      }
+    },
+    "http_success": {
+      "kind": "response",
+      "response": {
+        "body": {
+          "id": "user-001",
+          "name": "Mock User",
+          "status": "ACTIVE"
+        },
+        "elapsed_ms": 1.25,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status_code": 200
+      }
+    },
+    "rpc_rejected": {
+      "kind": "service_rejected",
+      "response": {
+        "code": "LIMIT_REJECTED",
+        "message": "mock risk rejection"
+      }
+    },
+    "rpc_success": {
+      "kind": "response",
+      "response": {
+        "approved": true,
+        "available_limit": "1000.00",
+        "request_id": "mock-rpc-request"
+      }
+    },
+    "ui_dashboard": {
+      "artifacts": {
+        "screenshot": "assets/dashboard.png"
+      },
+      "kind": "response",
+      "response": {
+        "page": "dashboard",
+        "title": "Account Dashboard",
+        "visible": true
+      }
+    }
+  },
+  "profiles": {
+    "offline": {
+      "scenario.set_state": "seed_user",
+      "database.list_accounts": "database_rows",
+      "http.get_profile": "http_success",
+      "rpc.calculate_limit": "rpc_success",
+      "ui.open_dashboard": "ui_dashboard"
+    }
+  }
+}

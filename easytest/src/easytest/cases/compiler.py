@@ -1,0 +1,289 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import tempfile
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+
+from openpyxl import load_workbook
+
+from easytest._version import __version__
+from easytest.cases.schema import SCHEMA_VERSION, parse_document
+from easytest.models import ContractError
+
+CASE_COLUMNS = {"case_id", "case_name", "case_type"}
+STEP_COLUMNS = {"case_id", "step_id", "order", "executor", "operation"}
+CASE_OPTIONAL_COLUMNS = {"enabled", "tags", "variables", "mock_profile", "snapshot_profile"}
+STEP_OPTIONAL_COLUMNS = {"request", "save_as", "mock", "snapshot", "expect"}
+JSON_COLUMNS = {"variables", "request", "mock", "snapshot", "expect"}
+
+
+def _atomic_write(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+        mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _parse_bool(value: Any, *, default: bool = True) -> bool:
+    if value in (None, ""):
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ContractError(f"invalid boolean value: {value!r}")
+
+
+def _parse_json_cell(value: Any, *, field: str) -> Any:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (dict, list, bool, int, float)):
+        return value
+    text = str(value).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ContractError(f"{field} must contain valid JSON: {exc.msg}") from exc
+
+
+def _cell_value(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _sheet_rows(workbook_path: Path, worksheet) -> list[dict[str, Any]]:
+    cells = iter(worksheet.iter_rows())
+    first = next(cells, None)
+    if first is None:
+        raise ContractError(f"{workbook_path.name}:{worksheet.title} is empty")
+
+    headers = [
+        str(cell.value).strip() if cell.value is not None else "" for cell in first
+    ]
+    if any(not header for header in headers):
+        raise ContractError(
+            f"{workbook_path.name}:{worksheet.title} has a blank header"
+        )
+    if len(headers) != len(set(headers)):
+        raise ContractError(
+            f"{workbook_path.name}:{worksheet.title} has duplicate headers"
+        )
+    allowed = (
+        CASE_COLUMNS | CASE_OPTIONAL_COLUMNS if worksheet.title == "cases"
+        else STEP_COLUMNS | STEP_OPTIONAL_COLUMNS
+    )
+    unknown = set(headers) - allowed
+    if unknown:
+        raise ContractError(
+            f"{workbook_path.name}:{worksheet.title} row=1 has unknown columns: {sorted(unknown)}"
+        )
+
+    rows: list[dict[str, Any]] = []
+    for row_index, row in enumerate(cells, start=2):
+        if all(cell.value in (None, "") for cell in row):
+            continue
+        record: dict[str, Any] = {}
+        for header, cell in zip(headers, row, strict=False):
+            if cell.data_type == "f":
+                raise ContractError(
+                    f"{workbook_path.name}:{worksheet.title}!{cell.coordinate} "
+                    "contains a formula; use a literal value"
+                )
+            value = _cell_value(cell.value)
+            if header in JSON_COLUMNS:
+                value = _parse_json_cell(
+                    value,
+                    field=f"{workbook_path.name}:{worksheet.title}!{cell.coordinate}",
+                )
+            record[header] = value
+        record["_row"] = row_index
+        rows.append(record)
+    return rows
+
+
+def _require_columns(
+    path: Path, sheet: str, rows: list[dict[str, Any]], required: set[str]
+) -> None:
+    if not rows:
+        raise ContractError(f"{path.name}:{sheet} must contain at least one data row")
+    missing = required - set(rows[0])
+    if missing:
+        raise ContractError(
+            f"{path.name}:{sheet} is missing columns: {sorted(missing)}"
+        )
+
+
+def workbook_document(path: str | Path) -> dict[str, Any]:
+    workbook_path = Path(path).resolve()
+    if workbook_path.suffix.lower() != ".xlsx":
+        raise ContractError(f"only .xlsx case sources are supported: {workbook_path}")
+    workbook = load_workbook(workbook_path, read_only=True, data_only=False)
+    try:
+        missing_sheets = {"cases", "steps"} - set(workbook.sheetnames)
+        if missing_sheets:
+            raise ContractError(
+                f"{workbook_path.name} is missing sheets: {sorted(missing_sheets)}"
+            )
+        case_rows = _sheet_rows(workbook_path, workbook["cases"])
+        step_rows = _sheet_rows(workbook_path, workbook["steps"])
+    finally:
+        workbook.close()
+
+    _require_columns(workbook_path, "cases", case_rows, CASE_COLUMNS)
+    _require_columns(workbook_path, "steps", step_rows, STEP_COLUMNS)
+
+    steps_by_case: dict[str, list[dict[str, Any]]] = {}
+    for row in step_rows:
+        case_id = str(row.get("case_id") or "").strip()
+        step = {
+            "id": row.get("step_id"),
+            "order": row.get("order"),
+            "executor": row.get("executor"),
+            "operation": row.get("operation"),
+            "request": row.get("request"),
+            "save_as": row.get("save_as") or None,
+            "mock": row.get("mock"),
+            "snapshot": row.get("snapshot"),
+            "expect": row.get("expect"),
+            "source_row": row["_row"],
+        }
+        steps_by_case.setdefault(case_id, []).append(step)
+
+    cases: list[dict[str, Any]] = []
+    seen_case_ids: set[str] = set()
+    for row in case_rows:
+        case_id = str(row.get("case_id") or "").strip()
+        if case_id in seen_case_ids:
+            raise ContractError(f"duplicate case_id {case_id!r} in cases sheet")
+        seen_case_ids.add(case_id)
+        cases.append(
+            {
+                "id": case_id,
+                "name": row.get("case_name") or case_id,
+                "type": str(row.get("case_type") or "").lower(),
+                "enabled": _parse_bool(row.get("enabled")),
+                "tags": row.get("tags") or "",
+                "variables": row.get("variables"),
+                "mock_profile": row.get("mock_profile") or None,
+                "snapshot_profile": row.get("snapshot_profile") or "default",
+                "steps": steps_by_case.pop(case_id, []),
+            }
+        )
+    if steps_by_case:
+        raise ContractError(
+            f"steps reference unknown case ids: {sorted(steps_by_case)}"
+        )
+
+    document = {
+        "schema_version": SCHEMA_VERSION,
+        "source_mode": "xlsx",
+        "source": workbook_path.name,
+        "source_sha256": hashlib.sha256(workbook_path.read_bytes()).hexdigest(),
+        "compiler_version": __version__,
+        "cases": sorted(cases, key=lambda item: item["id"]),
+    }
+    parse_document(document, source=str(workbook_path))
+    for case in document["cases"]:
+        case["steps"].sort(key=lambda item: int(item["order"]))
+    return document
+
+
+def compiled_content(path: str | Path) -> bytes:
+    document = workbook_document(path)
+    return (
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode()
+
+
+def compile_workbook(
+    path: str | Path, output: str | Path | None = None, *, check: bool = False,
+) -> Path:
+    source = Path(path).resolve()
+    target = Path(output).resolve() if output else source.with_suffix(".json")
+    expected_target = source.with_suffix(".json")
+    if target != expected_target:
+        raise ContractError(
+            f"compiled JSON must be the same-name sibling: {expected_target}",
+            code="INVALID_OUTPUT_PATH", field="output",
+        )
+    content = compiled_content(source)
+    if check:
+        try:
+            actual = target.read_bytes()
+        except FileNotFoundError as exc:
+            raise ContractError(
+                f"compiled JSON is missing: {target}; run easytest compile {source}",
+                code="COMPILED_JSON_MISSING", field="source",
+            ) from exc
+        if actual != content:
+            raise ContractError(
+                f"compiled JSON is out of date: {target}; run easytest compile {source}",
+                code="COMPILED_JSON_OUT_OF_DATE", field="source",
+            )
+        return target
+    if not target.exists() or target.read_bytes() != content:
+        _atomic_write(target, content)
+    return target
+
+
+def compile_path(path: str | Path, *, check: bool = False) -> list[Path]:
+    source = Path(path).resolve()
+    candidates = [source] if source.is_file() else sorted(source.rglob("*"))
+    workbooks = [
+        path for path in candidates
+        if path.is_file() and path.suffix.lower() == ".xlsx" and not path.name.startswith("~$")
+    ]
+    if not workbooks and (not check or not source.is_dir()):
+        raise ContractError(f"no .xlsx case files found under {source}")
+    outputs = [compile_workbook(workbook, check=check) for workbook in workbooks]
+    if check and source.is_dir():
+        paired = {path.resolve() for path in outputs}
+        json_sources = 0
+        for candidate in candidates:
+            if (
+                not candidate.is_file() or candidate.suffix.lower() != ".json"
+                or candidate.resolve() in paired
+            ):
+                continue
+            try:
+                document = json.loads(candidate.read_text(encoding="utf-8"))
+            except (UnicodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(document, dict) or (
+                "cases" not in document and "source_mode" not in document
+            ):
+                continue
+            if document.get("source_mode") != "json":
+                raise ContractError(
+                    f"unpaired JSON must explicitly use source_mode='json': {candidate}",
+                    code="ORPHAN_COMPILED_JSON", field="source_mode",
+                )
+            parse_document(document, source=str(candidate))
+            json_sources += 1
+        if not workbooks and not json_sources:
+            raise ContractError(f"no XLSX or JSON case files found under {source}")
+    return outputs

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "source_mode": "json",
+  "cases": [
+    {
+      "id": "pricing.quote",
+      "name": "计算两件商品总价",
+      "type": "scenario",
+      "steps": [
+        {
+          "id": "quote",
+          "order": 1,
+          "executor": "scenario",
+          "operation": "pricing.quote",
+          "request": {"unit_price": "12.50", "quantity": 2},
+          "expect": {"$.output.total": "25.00", "$.status": "SUCCESS", "$.quantity": 2}
+        }
+      ]
+    }
+  ]
+}

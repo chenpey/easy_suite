@@ -1,0 +1,73 @@
+{
+  "cases": [
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.connection_error",
+      "mock_profile": null,
+      "name": "故意失败：Mock 连接异常",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": null,
+          "id": "connection_error",
+          "mock": {
+            "preset": "connection_error"
+          },
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 3
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    },
+    {
+      "enabled": true,
+      "id": "jsonplaceholder.mock.timeout",
+      "mock_profile": null,
+      "name": "故意失败：Mock 请求超时",
+      "snapshot_profile": "default",
+      "steps": [
+        {
+          "executor": "http",
+          "expect": null,
+          "id": "timeout",
+          "mock": {
+            "preset": "request_timeout"
+          },
+          "operation": "http.get_user",
+          "order": 1,
+          "request": {
+            "path": {
+              "user_id": "${variables.user_id}"
+            }
+          },
+          "save_as": null,
+          "snapshot": null,
+          "source_row": 2
+        }
+      ],
+      "tags": "",
+      "type": "http",
+      "variables": {
+        "user_id": 1
+      }
+    }
+  ],
+  "compiler_version": "0.2.0",
+  "schema_version": 1,
+  "source": "mock_errors.xlsx",
+  "source_mode": "xlsx",
+  "source_sha256": "259dbf778617458a2cb647d7bca1e862b94fc2e32782c70ca96f5b53eca63aac"
+}
