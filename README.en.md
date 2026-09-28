@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite centrally manages four independent utility projects. Each project maintains its own dedicated dependencies, configuration, data storage, and documentation. Cloudflare D1/R2 resources and local runtime artifacts are also managed separately.
+Easy Suite is a multi-project repository containing four independent tools for file sharing, note-taking, Mac migration, and automated testing. Each project has its own dependencies, configuration, data storage, and documentation.
 
 ## Versions
 
@@ -19,7 +19,9 @@ Easy Suite centrally manages four independent utility projects. Each project mai
 
 ### [EasyDrop](easydrop/)
 
-A cross-device text and file sharing tool based on Cloudflare Workers. Features isolated multi-user workspaces, admin-controlled registration and account management, text sharing, chunked concurrent uploads with resume capability, client-side WebP thumbnails, time-limited login-free file links, and backoff-assisted cross-device history synchronization. D1 stores accounts, text, and upload states; private R2 stores original files and optional thumbnails.
+EasyDrop is a web-based file transfer service deployed on Cloudflare Workers. After signing in to the same site, users can send text and files between computers, phones, and tablets.
+
+Its main capabilities include isolated multi-user workspaces, admin-controlled registration and account management, chunked concurrent uploads with resume support, client-side WebP thumbnails, time-limited login-free file links, and backoff-assisted history synchronization. D1 stores accounts, text, and upload states; private R2 stores original files and optional thumbnails.
 
 Tech Stack: JavaScript, Cloudflare Workers, D1, R2.
 
@@ -29,7 +31,9 @@ See [EasyDrop README](easydrop/README.md) for details.
 
 ### [EasyNote](easynote/)
 
-A multi-user self-hosted Markdown note-taking app with images, powered by Cloudflare Workers. Each user is an isolated tenant; notes, attachments, offline caches, and AI tokens are completely separated. Administrators can manage users and approve registrations. Features autosave, task center, Obsidian/Markdown import, cross-platform PDF export with page-by-page preview, time-limited or permanent read-only sharing with centralized management, private images, full-text search, trash bin, version history, default-enabled full offline note library, and concurrent conflict protection, responsive for desktop and mobile.
+EasyNote is a self-hosted web application for writing, organizing, searching, and sharing Markdown notes across devices. It is designed for individuals and small teams, with a separate data space for every account.
+
+Its main capabilities include autosave, a task center, Obsidian/Markdown import, PDF export with page-by-page preview, time-limited or permanent read-only sharing, private images, full-text search, trash, version history, a complete offline notebook, and concurrent conflict protection. Administrators can manage users and approve registrations, while notes, attachments, offline caches, and AI tokens remain isolated by user.
 
 Tech Stack: React, TypeScript, CodeMirror, pdfmake, PDF.js, Cloudflare Workers, D1, R2.
 
@@ -39,7 +43,9 @@ See [EasyNote README](easynote/README.md) for details.
 
 ### [EasyMac](easymac/)
 
-Scans Homebrew, Mac App Store, and standard applications on an old Mac, allowing users to search, filter, and select items for migration, preview, and export an automated installation script for the new Mac. Composed of a terminal-free local launcher and a local web page, requiring no Xcode, developer account, or additional runtime environments. Scanned manifests are never uploaded, and EasyMac itself performs no installations.
+EasyMac is a migration inventory tool that runs on an old Mac. It helps users choose which software to carry over and generates a reviewable installation script for the new Mac; EasyMac itself does not install software.
+
+Its main capabilities include scanning Homebrew, Mac App Store, and standard applications, searching and filtering migration items, and previewing and exporting the installation script. It uses a terminal-free local launcher and local web page, requires no Xcode, developer account, or additional runtime, and never uploads the scanned inventory.
 
 Release Download: [EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
@@ -49,7 +55,9 @@ See [EasyMac README](easymac/README.md) for details.
 
 ### [EasyTest](easytest/)
 
-An XLSX-first test orchestration tool that uses deterministic JSON as its execution artifact and supports HTTP, RPC, database, UI, and business workflows. It provides whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, CLI and pytest integration, Notebook workflows, and self-contained HTML/PDF reports.
+EasyTest is a Python tool for testing APIs and business workflows. Testers author cases in Excel, which the framework compiles into deterministic JSON and runs through the CLI, pytest, or a Notebook.
+
+Its main capabilities include HTTP, RPC, database, UI, and business workflow orchestration, whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, and self-contained HTML/PDF reports.
 
 Tech Stack: Python 3.12/3.13, pytest, openpyxl, SQLite.
 

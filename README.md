@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
+Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移和自动化测试四个可独立使用的工具。每个项目拥有自己的依赖、配置、数据存储和使用文档。
 
 ## 版本
 
@@ -19,7 +19,9 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 ### [EasyDrop](easydrop/)
 
-基于 Cloudflare Workers 的跨设备文本与文件分享工具。提供隔离的多用户空间、管理员控制的注册与账号管理、文本分享、分片并发和断点续传、客户端 WebP 缩略图、限时免登录文件链接，以及带退避恢复的跨设备历史同步。D1 保存账号、文本和上传状态，私有 R2 保存原文件与可选缩略图。
+EasyDrop 是一个部署在 Cloudflare Workers 上的网页文件中转站。用户登录同一个网址后，可以在电脑、手机和平板之间发送文字和文件。
+
+主要能力包括多用户隔离、管理员控制的注册与账号管理、分片并发和断点续传、客户端 WebP 缩略图、限时免登录文件链接，以及带退避恢复的跨设备历史同步。D1 保存账号、文本和上传状态，私有 R2 保存原文件与可选缩略图。
 
 技术栈：JavaScript、Cloudflare Workers、D1、R2。
 
@@ -29,7 +31,9 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 ### [EasyNote](easynote/)
 
-基于 Cloudflare Workers 的多用户自托管 Markdown 图片笔记应用。用户即租户，笔记、附件、离线缓存和 AI 令牌完全隔离；管理员可管理用户及审批注册。提供自动保存、任务中心、Obsidian/Markdown 导入、带逐页预览的跨平台 PDF 导出、限时或永久只读分享及集中管理、私有图片、搜索、回收站、版本历史、默认开启的完整离线笔记库和并发冲突保护，并适配桌面与移动端。
+EasyNote 是一个可自行部署的网页 Markdown 笔记应用，适合个人或小团队在多台设备上记录、整理、搜索和分享笔记。每个账号拥有独立的数据空间。
+
+主要能力包括自动保存、任务中心、Obsidian/Markdown 导入、带逐页预览的 PDF 导出、限时或永久只读分享、私有图片、全文搜索、回收站、版本历史、完整离线笔记库和并发冲突保护。管理员可以管理用户及审批注册，笔记、附件、离线缓存和 AI 令牌按用户隔离。
 
 技术栈：React、TypeScript、CodeMirror、pdfmake、PDF.js、Cloudflare Workers、D1、R2。
 
@@ -39,7 +43,9 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 ### [EasyMac](easymac/)
 
-用于从旧 Mac 扫描 Homebrew、Mac App Store 和普通应用，让用户搜索、筛选并选择需要迁移的项目，预览后导出新 Mac 安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境；扫描清单不上传，EasyMac 本身也不执行安装。
+EasyMac 是一款在旧 Mac 上运行的迁移清单工具。它帮助用户整理需要带到新 Mac 的软件，并生成可检查、可执行的安装脚本；EasyMac 本身不会安装软件。
+
+主要能力包括扫描 Homebrew、Mac App Store 和普通应用，搜索、筛选和选择迁移项，以及预览和导出安装脚本。工具由无终端窗口的本地启动器和本地网页组成，不需要 Xcode、开发者账号或额外运行环境，扫描清单不会上传。
 
 发布下载：[EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
@@ -49,7 +55,9 @@ Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专
 
 ### [EasyTest](easytest/)
 
-以 XLSX 为人工维护源、确定性 JSON 为执行产物的测试编排工具，覆盖 HTTP、RPC、数据库、UI 和业务场景。提供整批静态预检、离线 Mock、文件与 SQLite 快照、外置截图、并发基线保护，以及 CLI、pytest、Notebook 和自包含 HTML/PDF 报告。
+EasyTest 是一个面向接口和业务流程测试的 Python 工具。测试人员在 Excel 中编写用例，框架将其编译为确定性 JSON，并通过命令行、pytest 或 Notebook 执行。
+
+主要能力包括 HTTP、RPC、数据库、UI 和业务场景编排，整批静态预检、离线 Mock、文件与 SQLite 快照、外置截图、并发基线保护，以及自包含 HTML/PDF 报告。
 
 技术栈：Python 3.12/3.13、pytest、openpyxl、SQLite。
 
