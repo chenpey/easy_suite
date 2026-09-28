@@ -1,6 +1,6 @@
 # AI 接入与执行指南
 
-适用版本：EasyTest `0.2.0`。本指南只规定 AI 的操作流程、安全边界和交付标准。
+适用版本：EasyTest `0.3.0`。本指南只规定 AI 的操作流程、安全边界和交付标准。
 安装及业务示例见 [新业务接入指南](新业务接入指南.md)，精确字段和错误契约见
 安装包内的 `easytest/CONTRACT.md`。
 
@@ -65,7 +65,7 @@ easytest list cases --root .
 优先使用结构化编辑命令：
 
 ```bash
-easytest edit cases/demo.xlsx --patch edit.json
+easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile offline-strict
 ```
 
 示例补丁：
@@ -89,6 +89,9 @@ easytest edit cases/demo.xlsx --patch edit.json
 
 支持 `case/step` 的 `add/update/rename/delete`。更新不存在的 ID、增加已有 ID、
 字段拼写错误或最终工作簿无效都会失败；成功后自动更新同名 JSON。
+`--validate` 在落盘前按所选 Profile 预检该工作簿内启用的 Case；配置错误保留原文件。
+不加该参数时仅检查工作簿契约。跨文件关系和最终运行选择仍须执行下一节的完整预检。
+Live 编辑预检需要对应环境变量；不能把离线预检通过当成 Live 鉴权可用。
 
 完整 XLSX 字段、模板和断言规则只在 `CONTRACT.md` 维护。
 
@@ -146,11 +149,14 @@ easytest run cases/demo.xlsx \
   --profile live \
   --run-mode read \
   --no-allow-db-write \
+  --fail-fast \
   --result artifacts/result.json
 ```
 
 执行前再次核对 Case 范围、目标环境和写操作。`run` 会自行整批预检，无需先运行
 一次更大范围的命令。写操作必须有幂等或状态查询机制，不能因超时就假定没有成功。
+`--fail-fast` 在首个失败 Case 后停止；也可使用 `--max-failures N`。默认仍继续执行，
+剩余项标记 `not_run`，不能按通过或已清理处理。
 
 ## 7. 读取结果
 
@@ -179,6 +185,9 @@ easytest run cases/demo.xlsx \
 | cleanup/interrupt | 明确已完成、未执行和状态未知的动作 |
 
 HTTP 默认只重试 GET、HEAD、OPTIONS。POST 只有具备幂等保障时才能显式加入重试。
+`HTTP_RESPONSE_TOO_LARGE` 表示响应超过读取上限；不自动重试，断言和快照没有执行。
+报告中的 `hash_scope=observed_prefix` 只校验已读取前缀；先核对接口契约和副作用，
+再决定收窄查询或使用业务下载 handler，不盲目提高上限。
 清理使用业务 `try/finally` 或 pytest yield fixture，不依赖最后一个测试步骤。
 
 ## 9. 交付标准
@@ -201,5 +210,7 @@ HTTP 默认只重试 GET、HEAD、OPTIONS。POST 只有具备幂等保障时才�
 - 执行策略不替代操作系统网络沙箱；获准 handler 仍是受信任代码。
 - 输入哈希不包含环境变量值、handler 源码或外部状态。
 - JSON Schema、OpenAPI/curl 导入和 MCP/Skill 尚未提供。
+- HTTP 敏感 header 来源会被校验，项目可配置附加脱敏键；无法识别的业务字段、
+  原始返回值、Notebook 输出、业务日志和 artifact 仍需人工核对后交付。
 
 AI 接入仍需通过无历史上下文的新会话和真实业务环境验证，框架单测不能替代该验收。

@@ -1,4 +1,4 @@
-# EasyTest 0.2.0 安装包契约
+# EasyTest 0.3.0 安装包契约
 
 本文是随 wheel 分发的最小稳定契约，不承担教程职责。业务项目未必拥有源码仓库
 文档，`easytest init` 生成的 AI 指南因此引用本文件。运行时解析器和预检是最终
@@ -10,7 +10,7 @@
 easytest list cases --root /业务目录
 easytest validate cases --root /业务目录 --case-id user.get --profile live
 easytest run cases --root /业务目录 --case-id user.get --profile live
-easytest edit cases/demo.xlsx --patch edit.json
+easytest edit cases/demo.xlsx --patch edit.json --validate --root .
 easytest compile cases --check
 ```
 
@@ -25,6 +25,10 @@ schema_version, command, status, data, errors, artifacts
 
 成功状态为 `listed/valid/passed/edited`，失败或中断为 `failed/interrupted` 并返回
 非零退出码。`run --result` 将同一 JSON 原子写入文件；日志和原始异常在 stderr。
+`init/compile` 输出普通文本。CLI `run` 默认继续执行失败 Case 后的 Case；
+`--fail-fast` 等价于 `--max-failures 1`，两个选项互斥，后者必须为正整数。
+剩余 Case/Step 为 `not_run`，中断的当前 Case 为 `interrupted`。
+pytest 使用自己的 `-x/--maxfail`；Notebook 每次独立调用，失败会抛出异常。
 
 `validate.data` 包含 `case_count/step_count/deferred/input_hash`；
 `run.data` 包含 `summary/cases/input_hash`。哈希覆盖 Case、配置、运行设置和策略，
@@ -66,7 +70,14 @@ Case type 为 `scenario/http/rpc`，executor 为
 ```
 
 `entity` 为 `case/step`，`action` 为 `add/update/rename/delete`。操作按 ID 严格
-匹配，最终工作簿通过完整校验后才替换并重新编译。
+匹配，最终工作簿通过契约校验后才替换并重新编译。`--validate --root ROOT`
+使用项目配置对编辑后的工作簿内所有启用 Case 预检，可加 `--profile`、
+`--execution-policy`；未指定 `--validate` 时不能指定后二者。
+预检失败不替换 XLSX/JSON，不调用业务服务或 handler。整项目跨文件校验仍使用
+`validate cases`；原子替换不等于 XLSX/JSON 的跨文件崩溃事务。
+Python API 为 `edit_workbook(path, operations, *, validate=False, root=".",
+profile=None, execution_policy=None)`；API 的 path 相对工作目录，CLI path 相对 `--root`。
+Case 单元格错误附 sheet、行号、列头和原始/期望类型；文本 ID 不自动从数字或日期转换。
 
 ## 断言和模板
 
@@ -98,10 +109,40 @@ HTTP request 支持：
 ```text
 method, url, path, headers, params, data, json, retry, expected_status,
 raise_for_status, timeout, trust_env, verify, cookies, files,
-allow_redirects, cert, stream
+allow_redirects, cert, stream, max_response_bytes
 ```
 
 `data` 是表单或原始体，`json` 是 JSON 请求体。POST 默认不重试。
+
+`runtime.http.max_response_bytes` 默认 10485760（10 MiB），必须为正整数且不超过
+67108864（64 MiB）；operation 可以降低上限，request 可以继续降低。无论 `stream`
+真假均按块读取，重定向响应同样受限。计数针对解压后的字节，不依赖 Content-Length。
+成功结果附 `response_bytes/sha256/hash_scope="complete"/truncated=false`。
+超限抛出 `HTTP_RESPONSE_TOO_LARGE`，不重试、不执行断言或快照，也不保存步骤输出；
+报告响应保留状态码、脱敏 headers/URL、`body=null`、`observed_bytes`、
+`max_response_bytes`、`sha256`、`hash_scope="observed_prefix"` 与截断原因。
+哈希仅对应已观察前缀，不能当完整响应校验和。限制的是读取体积，不是进程总内存。
+大文件下载应由业务 handler 流式落盘，返回独立 `ExecutionResult.artifacts`；
+内置 HTTP 不提供下载开关。
+
+operation 的 `Authorization/Proxy-Authorization/Cookie/API-Key` 及含
+`token/secret/password/apikey` 的 header 必须使用 `${ENV_NAME}`，支持前缀
+`Bearer ` 或 `Basic `；显式 null 用于移除 header。Step 和 inject Mock 的敏感
+header 只接受 `${variables.*}/${steps.*}/${state.*}` 引用，动态来源可信性由业务方负责。
+该检查不证明任意 body/query/cookie-jar 中都没有凭据，配置不得保存真实密钥。
+
+项目附加脱敏规则示例：
+
+```json
+{"redaction":{"secret_keys":["access_code"],"pii_keys":["customer_code"]},
+ "http":{"max_response_bytes":10485760}}
+```
+
+写入 `runtime.json`；附加键不移除内置键，忽略键名大小写和分隔符并支持后缀匹配。
+规则在 Runner 的报告、断言差异和事件中生效，执行结束恢复，项目间不共享。
+URL 用户信息、敏感 query（含百分号编码的键）及 fragment 会脱敏。
+原始 ExecutionResult、Notebook 交互输出、业务日志、快照基线及 artifact 文件仍可能
+携带原始数据，需业务方管理；脱敏不能识别任意未知业务字段。
 
 数据库 SQL 固定在 operation 中，用例只提供绑定参数。内置数据库写入同时受
 operation `write`、连接 `read_only` 和 `allow_db_write` 控制。
@@ -163,6 +204,7 @@ UNKNOWN_OPERATION, EXECUTOR_MISMATCH, UNKNOWN_PROFILE, MOCK_MISS,
 EMPTY_SELECTION, UNKNOWN_CASE_ID, ORPHAN_COMPILED_JSON,
 COMPILED_JSON_MISSING, COMPILED_JSON_OUT_OF_DATE,
 INVALID_EDIT, EDIT_CONFLICT, EXECUTION_POLICY_VIOLATION,
+HTTP_SECRET_SOURCE, HTTP_RESPONSE_TOO_LARGE,
 ASSERTION_FAILED, ASSERTION_PATH_MISSING, SNAPSHOT_MISMATCH,
 CLEANUP_FAILED, INTERRUPTED
 ```
@@ -190,5 +232,5 @@ from easytest import (
 不同数据场景应显式设置稳定 ID。
 
 Runner 顺序使用且不保证并发安全；pytest-xdist 不合并 EasyTest HTML 报告。
-数据库每步独立连接提交，HTTP `stream=true` 仍读取完整响应。框架不提供业务事务
+数据库每步独立连接提交，HTTP `stream=true` 仍在上限内读取完整响应。框架不提供业务事务
 回滚、全局取消、恢复执行、浏览器自动化、OpenAPI 导入或分布式调度。

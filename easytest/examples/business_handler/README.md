@@ -11,7 +11,7 @@
 uv build --wheel
 uv venv examples/business_handler/.venv
 uv pip install --python examples/business_handler/.venv/bin/python \
-  dist/easytest-0.2.0-py3-none-any.whl ./examples/business_handler
+  dist/easytest-0.3.0-py3-none-any.whl ./examples/business_handler
 examples/business_handler/.venv/bin/easytest list --root examples/business_handler/project
 examples/business_handler/.venv/bin/easytest validate --root examples/business_handler/project --case-id pricing.quote
 examples/business_handler/.venv/bin/easytest run --root examples/business_handler/project --case-id pricing.quote

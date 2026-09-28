@@ -40,6 +40,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Apply validated structured operations to an XLSX source and recompile it",
     )
     edit_command.add_argument("path", help="XLSX case source")
+    edit_command.add_argument("--validate", action="store_true", help="Preflight edited cases before replacing the source.")
+    edit_command.add_argument("--root", default=".")
+    edit_command.add_argument("--profile")
+    edit_command.add_argument("--execution-policy")
     edit_source = edit_command.add_mutually_exclusive_group(required=True)
     edit_source.add_argument(
         "--patch",
@@ -55,6 +59,9 @@ def _parser() -> argparse.ArgumentParser:
     run_command.add_argument("source", nargs="?", default="cases")
     run_command.add_argument("--root", default=".")
     run_command.add_argument("--profile")
+    failure_options = run_command.add_mutually_exclusive_group()
+    failure_options.add_argument("--fail-fast", action="store_true", help="Stop after the first failed case.")
+    failure_options.add_argument("--max-failures", type=_positive_integer, help="Stop after this many failed cases.")
     report_options = run_command.add_mutually_exclusive_group()
     report_options.add_argument(
         "--report", default="artifacts/report.html",
@@ -100,6 +107,16 @@ def _parser() -> argparse.ArgumentParser:
             help="Select an exact enabled Case ID; repeat to select several, in source order.",
         )
     return parser
+
+
+def _positive_integer(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be a positive integer") from None
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -169,7 +186,11 @@ def _edit(args):
                         code="INVALID_EDIT",
                         field="operation",
                     ) from exc
-        data = edit_workbook(args.path, operations)
+        data = edit_workbook(
+            Path(args.root) / args.path, operations,
+            validate=args.validate, root=args.root, profile=args.profile,
+            execution_policy=args.execution_policy,
+        )
     except BaseException as error:
         status = "failed" if isinstance(error, Exception) else "interrupted"
         return _envelope("edit", status, None, [error_info(error, phase)]), error, error.__traceback__
@@ -283,11 +304,14 @@ def _run(args):
         checked = runner.preflight(cases, reuse_for_run=True)
         report.input_hash = checked.input_hash
         phase = "execution"
+        failures = 0
+        max_failures = 1 if args.fail_fast else args.max_failures
         for index, case in enumerate(cases):
             before = len(runner.case_reports)
             try:
                 runner.run(case)
             except BaseException as exc:
+                failures += 1
                 if len(runner.case_reports) == before:
                     record = CaseReport.for_case(
                         case,
@@ -297,7 +321,9 @@ def _run(args):
                     runner.case_reports.append(record)
                 if error is None or not isinstance(exc, Exception):
                     error, traceback = exc, exc.__traceback__
-                if not isinstance(exc, Exception):
+                if not isinstance(exc, Exception) or (
+                    max_failures is not None and failures >= max_failures
+                ):
                     runner.case_reports.extend(
                         CaseReport.for_case(
                             pending,

@@ -5,6 +5,8 @@ import json
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -12,6 +14,7 @@ from enum import Enum
 from itertools import islice
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from easytest.serialization import to_jsonable
 
@@ -62,6 +65,16 @@ DEFAULT_PII_KEYS = frozenset(
         "walletunifieduid",
     }
 )
+_PROJECT_KEYS: ContextVar[dict] = ContextVar("easytest_redaction", default={})
+
+
+@contextmanager
+def redaction_scope(settings: dict):
+    token = _PROJECT_KEYS.set(settings)
+    try:
+        yield
+    finally:
+        _PROJECT_KEYS.reset(token)
 
 
 def _normalized_key(key: Any) -> str:
@@ -70,7 +83,7 @@ def _normalized_key(key: Any) -> str:
 
 def _matches_key(key: Any, candidates: frozenset[str]) -> bool:
     normalized = _normalized_key(key)
-    return normalized in candidates or any(
+    return any(word in candidates and word in normalized for word in ("token", "secret")) or normalized in candidates or any(
         normalized.endswith(candidate) for candidate in candidates
     )
 
@@ -111,8 +124,41 @@ def redact(
     _key: Any = None,
 ) -> Any:
     """Inspect retained values only; never stringify arbitrary objects or large payloads."""
+    project = _PROJECT_KEYS.get()
+    secret_keys = secret_keys | frozenset(_normalized_key(key) for key in project.get("secret_keys", []))
+    pii_keys = pii_keys | frozenset(_normalized_key(key) for key in project.get("pii_keys", []))
     active: set[int] = set()
     remaining = max(1, max_items) * max(1, max_depth) * 10
+
+    def clean_text(text: str) -> str:
+        def clean_url(match):
+            try:
+                parts = urlsplit(match.group(0))
+                netloc = parts.netloc.rsplit("@", 1)[-1]
+                if "@" in parts.netloc:
+                    netloc = REDACTED + "@" + netloc
+                query = [
+                    (key, REDACTED if _matches_key(key, secret_keys)
+                     else _masked_identifier(value) if _matches_key(key, pii_keys) else value)
+                    for key, value in parse_qsl(parts.query, keep_blank_values=True)
+                ]
+                return urlunsplit((parts.scheme, netloc, parts.path, urlencode(query),
+                                   REDACTED if parts.fragment else ""))
+            except ValueError:
+                return "<redacted-url>"
+
+        text = re.sub(r"https?://[^\s<>\"']+", clean_url, text)
+        text = _redact_text(text)
+        # Include project keys in assignment-style text as well as structured values.
+        text = re.sub(
+            r"""\b([\w.-]+)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)""",
+            lambda m: (
+                m[1] + m[2] + REDACTED if _matches_key(m[1], secret_keys)
+                or _matches_key(m[1], pii_keys) else m[0]
+            ),
+            text,
+        )
+        return text
 
     def visit(item: Any, depth: int, key: Any = None) -> Any:
         nonlocal remaining
@@ -137,7 +183,7 @@ def redact(
                 except (ValueError, RecursionError):
                     return "<unparsed-json>"
                 return visit(parsed, depth + 1)
-            return _limited_text(_redact_text(item), max_string_length)
+            return _limited_text(clean_text(item), max_string_length)
         if id(item) in active:
             raise ValueError("cyclic observability value")
         active.add(id(item))
@@ -148,7 +194,7 @@ def redact(
                     if remaining <= 0:
                         break
                     label = str(name) if isinstance(name, (str, int, float, bool)) else "<key>"
-                    label = _limited_text(_redact_text(label), max_string_length)
+                    label = _limited_text(clean_text(label), max_string_length)
                     result[label] = (
                         REDACTED if _matches_key(name, secret_keys)
                         else visit(item[name], depth + 1, name)

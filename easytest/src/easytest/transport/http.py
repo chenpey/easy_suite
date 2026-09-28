@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import random
 import time
 from collections.abc import Collection, Mapping
@@ -8,10 +9,62 @@ from typing import Any
 
 import requests
 
-from easytest.models import ConfigurationError
+from easytest.models import ConfigurationError, TableTestError
 
 DEFAULT_RETRY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 DEFAULT_RETRY_STATUS_CODES = frozenset({429, 502, 503, 504})
+DEFAULT_MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+HARD_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+
+
+def response_limit(value: Any) -> int:
+    if type(value) is not int or not 1 <= value <= HARD_MAX_RESPONSE_BYTES:
+        raise ConfigurationError(
+            f"max_response_bytes must be an integer in 1..{HARD_MAX_RESPONSE_BYTES}",
+            code="INVALID_VALUE", field="max_response_bytes",
+        )
+    return value
+
+
+class ResponseTooLarge(TableTestError):
+    code = "HTTP_RESPONSE_TOO_LARGE"
+    field = "max_response_bytes"
+
+    def __init__(self, metadata: dict[str, Any]) -> None:
+        self.response_metadata = metadata
+        super().__init__("HTTP response exceeded max_response_bytes")
+
+
+def _bounded_body(response: requests.Response, limit: int) -> dict[str, Any]:
+    content = bytearray()
+    digest = hashlib.sha256()
+    try:
+        for chunk in response.iter_content(chunk_size=min(65536, limit + 1)):
+            # Hash only the observed prefix; never claim a complete-body hash on failure.
+            part = chunk[:limit + 1 - len(content)]
+            content.extend(part)
+            digest.update(part)
+            if len(content) > limit:
+                raise ResponseTooLarge({
+                    "status_code": response.status_code,
+                    "headers": dict(response.headers),
+                    "url": response.url,
+                    "body": None,
+                    "truncated": True,
+                    "reason": "max_response_bytes",
+                    "max_response_bytes": limit,
+                    "observed_bytes": len(content),
+                    "sha256": digest.hexdigest(),
+                    "hash_scope": "observed_prefix",
+                })
+    except BaseException:
+        response.close()
+        raise
+    # Requests can now decode JSON/text and consume redirects without unbounded reads.
+    response._content = bytes(content)
+    response._content_consumed = True
+    return {"response_bytes": len(content), "sha256": digest.hexdigest(),
+            "hash_scope": "complete", "truncated": False}
 
 
 @dataclass(frozen=True)
@@ -118,8 +171,10 @@ class HttpClient:
         expected_status: int | Collection[int] | None = None,
         raise_for_status: bool = False,
         timeout: float | tuple[float, float] = 10,
+        max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        limit = response_limit(max_response_bytes)
         method = method.upper()
         if path:
             try:
@@ -129,7 +184,14 @@ class HttpClient:
 
         policy = RetryPolicy.from_value(retry)
         attempts = policy.retries + 1 if method in policy.methods else 1
-        request_kwargs = {"timeout": timeout, **kwargs}
+        def guard(response, **_options):
+            _bounded_body(response, limit)
+            return response
+
+        hooks = dict(kwargs.pop("hooks", {}) or {})
+        existing = hooks.get("response", [])
+        hooks["response"] = [guard, *(existing if isinstance(existing, list) else [existing])]
+        request_kwargs = {"timeout": timeout, **kwargs, "stream": True, "hooks": hooks}
         if headers:
             request_kwargs["headers"] = dict(headers)
         if query:
@@ -160,6 +222,7 @@ class HttpClient:
         if response is None:
             raise RuntimeError("HTTP request ended without a response")
         try:
+            metadata = _bounded_body(response, limit)
             if expected_status is not None:
                 if isinstance(expected_status, (str, bytes)):
                     raise TypeError(
@@ -190,6 +253,7 @@ class HttpClient:
                 "elapsed_ms": round((time.perf_counter() - started) * 1000, 3),
                 "url": getattr(response, "url", url),
                 "attempts": attempt,
+                **metadata,
             }
         finally:
             response.close()
@@ -216,6 +280,7 @@ def send_http(
     retry_methods: Collection[str] = DEFAULT_RETRY_METHODS,
     trust_env: bool = True,
     json_body: Any = None,
+    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
 ) -> dict[str, Any]:
     """Send HTTP; data is form/raw content, json_body is explicit JSON."""
     retry = RetryPolicy(
@@ -234,6 +299,7 @@ def send_http(
             retry=retry,
             timeout=timeout,
             verify=verify,
+            max_response_bytes=max_response_bytes,
         )
     if full_response:
         return response

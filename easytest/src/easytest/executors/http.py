@@ -8,7 +8,7 @@ import requests
 from easytest.config import resolve_env
 from easytest.executors.base import Executor
 from easytest.models import ConfigurationError, ExecutionResult, RunContext
-from easytest.transport.http import HttpClient
+from easytest.transport.http import DEFAULT_MAX_RESPONSE_BYTES, HttpClient, response_limit
 from easytest.validation import http_settings
 
 def request_settings(
@@ -51,6 +51,12 @@ class HttpExecutor(Executor):
         context: RunContext,
     ) -> ExecutionResult:
         http_settings(request)
+        ceiling = response_limit(operation.get("max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES))
+        if "max_response_bytes" in request and response_limit(request["max_response_bytes"]) > ceiling:
+            raise ConfigurationError(
+                "HTTP request max_response_bytes exceeds operation limit",
+                code="INVALID_VALUE", field="max_response_bytes",
+            )
         settings = request_settings(operation, request, context.environment)
         http_settings(settings, operation=True, required=True)
         method = str(settings.get("method", "GET"))
@@ -80,6 +86,7 @@ class HttpExecutor(Executor):
                 tuple(settings["timeout"]) if isinstance(settings.get("timeout"), list)
                 else settings.get("timeout", 10)
             ),
+            max_response_bytes=settings.get("max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES),
             **options,
         )
         return ExecutionResult(

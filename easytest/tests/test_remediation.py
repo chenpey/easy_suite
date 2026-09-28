@@ -252,6 +252,7 @@ def test_unsupported_state_writes_fail_before_any_execution(project, path):
 def test_http_always_closes_response_and_keeps_borrowed_session(failure):
     response = Mock(status_code=500, headers={}, url="https://example.invalid")
     response.json.return_value = {"ok": True}
+    response.iter_content.return_value = [b'{"ok":true}']
     session = Mock()
     session.request.return_value = response
     options = {"stream": True}
@@ -279,6 +280,7 @@ def test_http_always_closes_response_and_keeps_borrowed_session(failure):
 def test_retry_closes_each_response():
     responses = [Mock(status_code=503), Mock(status_code=200, headers={}, url="https://example.invalid")]
     responses[1].json.return_value = {}
+    responses[1].iter_content.return_value = [b"{}"]
     session = Mock()
     session.request.side_effect = responses
     with HttpClient(session) as client:

@@ -44,6 +44,9 @@ class _Response:
     def json():
         return {"created": True}
 
+    def iter_content(self, chunk_size):
+        yield b'{"created":true}'
+
     def close(self):
         pass
 
@@ -77,11 +80,15 @@ def test_http_executor_resolves_environment_and_merges_request(
     )
 
     assert result.output["status_code"] == 201
+    hooks = session.call[3].pop("hooks")
+    assert len(hooks["response"]) == 1
+    assert callable(hooks["response"][0])
     assert session.call == (
         "POST",
         "https://example.invalid/users",
         3.0,
         {
+            "stream": True,
             "headers": {"Authorization": "Bearer runtime-token"},
             "json": {"id": "user-001"},
         },

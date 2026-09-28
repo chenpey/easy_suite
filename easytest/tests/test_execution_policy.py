@@ -111,6 +111,9 @@ def test_policy_allows_exact_http_method_and_origin(tmp_path, monkeypatch, capsy
         def json():
             return {"ok": True}
 
+        def iter_content(self, chunk_size):
+            yield b'{"ok":true}'
+
         @staticmethod
         def close():
             return None

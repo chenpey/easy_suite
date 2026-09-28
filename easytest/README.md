@@ -3,13 +3,14 @@
 EasyTest 是面向场景、HTTP、RPC、数据库和封装 UI 请求的 XLSX 表格驱动测试框架。
 人工维护 XLSX，框架生成确定性 JSON，用于执行、Git diff、代码审查和 AI 分析。
 
-当前版本：`0.2.0`，支持 Python 3.12 和 3.13。
+当前版本：`0.3.0`，支持 Python 3.12 和 3.13。
 
 ## 文档入口
 
 - [新业务接入指南](docs/新业务接入指南.md)：面向业务测试人员的完整教程。
 - [AI 接入与执行指南](docs/AI接入与执行指南.md)：AI 操作、安全与交付规程。
 - [安装包契约](src/easytest/CONTRACT.md)：随 wheel 分发的字段、命令与 API 契约。
+- [0.3.0 迁移与整改记录](docs/0.3.0迁移与整改记录.md)：本版变更、验证结果和待验收事项。
 - [JSONPlaceholder Demo](examples/jsonplaceholder/README.md)：公开 API 的离线和真实示例。
 - [业务 handler 示例](examples/business_handler/README.md)：独立安装业务适配器。
 
@@ -30,7 +31,8 @@ easytest list
 easytest validate --case-id http.demo
 easytest run --case-id http.demo
 easytest run --result artifacts/result.json
-easytest edit cases/demo.xlsx --patch edit.json
+easytest edit cases/demo.xlsx --patch edit.json --validate --root .
+easytest run --fail-fast --result artifacts/result.json
 easytest compile cases --check
 pytest
 ```
@@ -52,11 +54,14 @@ pytest
 AI 和脚本修改用例时使用结构化补丁：
 
 ```bash
-easytest edit cases/demo.xlsx --patch edit.json
+easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile offline-strict
 ```
 
 补丁支持 `case/step` 的 `add/update/rename/delete`，按 ID 严格查找，最终工作簿
-有效后才替换 XLSX 并更新 JSON。格式见 [安装包契约](src/easytest/CONTRACT.md#来源与字段)。
+有效后才替换 XLSX 并更新 JSON。`--validate` 额外使用项目配置与策略预检该工作簿
+中的启用 Case，失败时保留原 XLSX/JSON；默认只校验工作簿契约。
+跨文件重复 ID 及完整运行选择仍需执行 `validate cases`。
+格式见 [安装包契约](src/easytest/CONTRACT.md#来源与字段)。
 
 ## 报告与机器结果
 
@@ -70,6 +75,8 @@ schema_version, command, status, data, errors, artifacts
 `run --result` 将 stdout 的同一 JSON 原子写入文件；日志和事件写入 stderr。
 `validate.data.input_hash` 与 `run.data.input_hash` 可用于核对所选 Case、配置、
 运行设置和执行策略。该哈希不包含环境变量值、handler 源码或外部服务状态。
+CLI 默认在普通 Case 失败后继续；`--fail-fast` 或 `--max-failures N` 停止后续 Case，
+剩余项标为 `not_run`。已发生的业务写入不回滚；pytest 使用自身的 `-x/--maxfail`。
 
 ## 配置按需添加
 
@@ -81,7 +88,10 @@ schema_version, command, status, data, errors, artifacts
 | `config/mock_profiles.json` | Mock preset 和 Profile |
 | `config/snapshots.json` | 快照规则 |
 
-凭据只从业务项目 `.env` 或进程环境读取。数据库写权限由 `allow_db_write` 独立控制。
+配置凭据使用业务项目 `.env` 或进程环境。敏感 HTTP header 在 operation 中必须使用
+环境引用；步骤中可引用当前 Case 的动态值，其来源仍需业务方管理。
+`runtime.redaction.secret_keys/pii_keys` 可扩展报告和事件脱敏键，不能保证识别任意字段。
+数据库写权限由 `allow_db_write` 独立控制。
 `run_mode=read` 只表示读取快照，不能阻止 HTTP、RPC 或 handler 产生业务写入。
 
 ### 执行策略
@@ -98,7 +108,7 @@ easytest run cases --root /业务目录 --profile live
 
 ## 操作与适配器
 
-- HTTP：method、URL、headers、timeout、expected status 和安全重试。
+- HTTP：method、URL、headers、timeout、expected status、安全重试和响应大小保护。
 - Database：MySQL/SQLite、绑定参数、读写声明和独立写权限。
 - Scenario：内置 `set/get/wait` 或业务 handler。
 - RPC/UI：由业务安装包提供 handler。
@@ -165,7 +175,10 @@ with NotebookSession("examples/jsonplaceholder", profile="offline-strict") as se
 uv sync
 uv run pytest
 uv run ruff check src tests scripts
+uv run easytest compile examples --check
+uv run easytest compile tests/fixtures/project/cases --check
 uv build --wheel --offline
+uv run python scripts/verify_wheel.py
 ```
 
 仓库示例：
@@ -185,6 +198,9 @@ uv run pytest -c examples/jsonplaceholder/pytest.ini \
 - Runner 顺序执行，不保证并发安全。
 - pytest-xdist 暂不合并 EasyTest HTML 报告。
 - 数据库每步独立连接并提交，不提供连接池。
-- `stream=true` 仍会读取完整响应，不用于大文件下载。
+- HTTP 默认限制解压后响应体为 10 MiB，超限显式失败；operation/request 只能降低
+  项目上限，项目最多配置 64 MiB。`stream` 不能绕过上限，不用于大文件下载。
 - 不提供业务事务回滚、全局取消、恢复执行或分布式调度。
 - 不内置 OpenAPI 导入、浏览器自动化、MCP 或业务 SDK。
+- 真实业务接入、独立 AI 首次接入、性能规模和 xdist 聚合仍未验收；单测与离线
+  示例不代表生产验收。Case/Step 只浅层冻结，Runner 不跨线程共享。

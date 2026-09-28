@@ -34,7 +34,7 @@
       }
     }
   ],
-  "compiler_version": "0.2.0",
+  "compiler_version": "0.3.0",
   "schema_version": 1,
   "source": "wrong_user_id.xlsx",
   "source_mode": "xlsx",

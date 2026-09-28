@@ -17,6 +17,7 @@ def captured(monkeypatch):
         response = requests.Response()
         response.status_code = 200
         response._content = b'{"ok":true}'
+        response._content_consumed = True
         response.url = request.url
         return response
 
