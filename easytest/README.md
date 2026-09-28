@@ -37,6 +37,8 @@ pytest
 ```
 
 `init` 只写入新目录或空目录。生成项目默认使用 `offline-strict`，无需真实服务。
+TRAE CN、VS Code/Cursor、PyCharm 和 Notebook 的解释器选择方法见
+[新业务接入指南：在编辑器中选择正确解释器](docs/新业务接入指南.md#21-在编辑器中选择正确解释器)。
 
 ## 用例与执行
 
