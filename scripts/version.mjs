@@ -30,6 +30,24 @@ const projects = {
     versionPath: 'easymac/VERSION',
     notesPath: 'easymac/RELEASE_NOTES.md',
   },
+  easytest: {
+    title: 'EasyTest',
+    directory: 'easytest',
+    readmePath: 'easytest/README.md',
+    readmeVersionSuffix: '，支持 Python 3.12 和 3.13。',
+    pyprojectPath: 'easytest/pyproject.toml',
+    uvLockPath: 'easytest/uv.lock',
+    pythonVersionPath: 'easytest/src/easytest/_version.py',
+    compiledCasePaths: [
+      'easytest/examples/jsonplaceholder/cases/demo.json',
+      'easytest/examples/jsonplaceholder/failure_cases/mock_errors.json',
+      'easytest/examples/jsonplaceholder/failure_cases/wrong_user_id.json',
+      'easytest/examples/jsonplaceholder/mock_cases/demo.json',
+      'easytest/tests/fixtures/project/cases/http/profile_api.json',
+      'easytest/tests/fixtures/project/cases/rpc/limit_service.json',
+      'easytest/tests/fixtures/project/cases/scenario/account_flow.json',
+    ],
+  },
 };
 
 function fail(message) {
@@ -37,7 +55,9 @@ function fail(message) {
 }
 
 function validateProject(name) {
-  if (!projects[name]) fail(`Unknown project "${name}". Use easynote, easydrop or easymac.`);
+  if (!projects[name]) {
+    fail(`Unknown project "${name}". Use ${Object.keys(projects).join(', ')}.`);
+  }
   return projects[name];
 }
 
@@ -98,8 +118,8 @@ function jsonContent(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function versionReadmeLine(version) {
-  return `当前版本：\`${version}\``;
+function versionReadmeLine(version, project = {}) {
+  return `当前版本：\`${version}\`${project.readmeVersionSuffix || ''}`;
 }
 
 function versionReadmeEnLine(version) {
@@ -114,6 +134,7 @@ function rootReadmeBlock(versions) {
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
+    `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
 }
@@ -126,6 +147,7 @@ function rootReadmeEnBlock(versions) {
     `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
+    `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
 }
@@ -144,6 +166,67 @@ async function syncPackage(project, version) {
   await writeIfChanged(lockPath, jsonContent(lockJson));
 }
 
+function replaceTomlProjectVersion(content, version, label) {
+  const pattern = /(\[project\][\s\S]*?^version\s*=\s*")[^"]+(")/m;
+  if (!pattern.test(content)) fail(`${label} is missing [project].version.`);
+  return content.replace(pattern, (_match, prefix, suffix) => `${prefix}${version}${suffix}`);
+}
+
+function tomlProjectVersion(content, label) {
+  const match = /(\[project\][\s\S]*?^version\s*=\s*")([^"]+)(")/m.exec(content);
+  if (!match) fail(`${label} is missing [project].version.`);
+  return match[2];
+}
+
+function replaceUvPackageVersion(content, packageName, version, label) {
+  const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(
+    `(\\[\\[package\\]\\]\\nname = "${escaped}"\\nversion = ")[^"]+(")`,
+  );
+  if (!pattern.test(content)) fail(`${label} is missing package ${packageName}.`);
+  return content.replace(pattern, (_match, prefix, suffix) => `${prefix}${version}${suffix}`);
+}
+
+function uvPackageVersion(content, packageName, label) {
+  const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(
+    `\\[\\[package\\]\\]\\nname = "${escaped}"\\nversion = "([^"]+)"`,
+  ).exec(content);
+  if (!match) fail(`${label} is missing package ${packageName}.`);
+  return match[1];
+}
+
+async function syncPythonPackage(project, version) {
+  if (!project.pyprojectPath) return;
+  const pyprojectPath = resolve(root, project.pyprojectPath);
+  const pyproject = await readFile(pyprojectPath, 'utf8');
+  await writeIfChanged(
+    pyprojectPath,
+    replaceTomlProjectVersion(pyproject, version, project.pyprojectPath),
+  );
+
+  const lockPath = resolve(root, project.uvLockPath);
+  const lock = await readFile(lockPath, 'utf8');
+  await writeIfChanged(
+    lockPath,
+    replaceUvPackageVersion(lock, project.directory, version, project.uvLockPath),
+  );
+  await writeIfChanged(
+    resolve(root, project.pythonVersionPath),
+    `__version__ = "${version}"\n`,
+  );
+
+  for (const relativePath of project.compiledCasePaths || []) {
+    const path = resolve(root, relativePath);
+    const document = await readJson(path);
+    if (document.source_mode !== 'xlsx') {
+      fail(`${relativePath} must be an XLSX-generated case document.`);
+    }
+    document.compiler_version = version;
+    await writeIfChanged(path, jsonContent(document));
+  }
+}
+
 async function syncVersionFile(project, version) {
   if (!project.versionPath) return;
   await writeIfChanged(resolve(root, project.versionPath), `${version}\n`);
@@ -152,7 +235,7 @@ async function syncVersionFile(project, version) {
 async function syncProjectReadme(project, version) {
   const path = resolve(root, project.readmePath);
   let content = await readFile(path, 'utf8');
-  const line = versionReadmeLine(version);
+  const line = versionReadmeLine(version, project);
   if (/^当前版本：.*$/m.test(content)) {
     content = content.replace(/^当前版本：.*$/m, line);
   } else {
@@ -208,6 +291,7 @@ async function syncReadme(versions) {
 async function syncAll(versions) {
   for (const [name, project] of Object.entries(projects)) {
     await syncPackage(project, versions[name]);
+    await syncPythonPackage(project, versions[name]);
     await syncVersionFile(project, versions[name]);
     await syncProjectReadme(project, versions[name]);
     await syncRuntimeVersion(project, versions[name]);
@@ -226,12 +310,40 @@ async function checkVersions(versions) {
         errors.push(`${project.lockPath} root version is not ${versions[name]}`);
       }
     }
+    if (project.pyprojectPath) {
+      const pyproject = await readFile(resolve(root, project.pyprojectPath), 'utf8');
+      if (tomlProjectVersion(pyproject, project.pyprojectPath) !== versions[name]) {
+        errors.push(`${project.pyprojectPath} version is not ${versions[name]}`);
+      }
+      const lock = await readFile(resolve(root, project.uvLockPath), 'utf8');
+      if (uvPackageVersion(lock, project.directory, project.uvLockPath) !== versions[name]) {
+        errors.push(`${project.uvLockPath} package version is not ${versions[name]}`);
+      }
+      const pythonVersion = await readFile(
+        resolve(root, project.pythonVersionPath),
+        'utf8',
+      );
+      if (pythonVersion.trim() !== `__version__ = "${versions[name]}"`) {
+        errors.push(`${project.pythonVersionPath} is stale`);
+      }
+      for (const relativePath of project.compiledCasePaths || []) {
+        const document = await readJson(resolve(root, relativePath));
+        if (
+          document.source_mode !== 'xlsx'
+          || document.compiler_version !== versions[name]
+        ) {
+          errors.push(`${relativePath} compiler_version is not ${versions[name]}`);
+        }
+      }
+    }
     if (project.versionPath) {
       const versionFile = (await readFile(resolve(root, project.versionPath), 'utf8')).trim();
       if (versionFile !== versions[name]) errors.push(`${project.versionPath} is ${versionFile}`);
     }
     const readme = await readFile(resolve(root, project.readmePath), 'utf8');
-    if (!readme.includes(versionReadmeLine(versions[name]))) errors.push(`${project.readmePath} is missing ${versions[name]}`);
+    if (!readme.includes(versionReadmeLine(versions[name], project))) {
+      errors.push(`${project.readmePath} is missing ${versions[name]}`);
+    }
     const enPath = resolve(root, project.directory, 'README.en.md');
     try {
       const enReadme = await readFile(enPath, 'utf8');

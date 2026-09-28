@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite centrally manages three independent utility projects. Each project maintains its own dedicated dependencies, configuration, data storage, and documentation. Cloudflare D1/R2 resources and local runtime artifacts are also managed separately.
+Easy Suite centrally manages four independent utility projects. Each project maintains its own dedicated dependencies, configuration, data storage, and documentation. Cloudflare D1/R2 resources and local runtime artifacts are also managed separately.
 
 ## Versions
 
@@ -12,6 +12,7 @@ Easy Suite centrally manages three independent utility projects. Each project ma
 | [EasyDrop](easydrop/) | `1.3.0` |
 | [EasyNote](easynote/) | `0.8.6` |
 | [EasyMac](easymac/) | `0.4.4` |
+| [EasyTest](easytest/) | `0.3.1` |
 <!-- versions:end -->
 
 ## Projects
@@ -46,12 +47,23 @@ Tech Stack: AppleScript, Zsh, HTML, CSS, JavaScript.
 
 See [EasyMac README](easymac/README.md) for details.
 
+### [EasyTest](easytest/)
+
+An XLSX-first test orchestration tool that uses deterministic JSON as its execution artifact and supports HTTP, RPC, database, UI, and business workflows. It provides whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, CLI and pytest integration, Notebook workflows, and self-contained HTML/PDF reports.
+
+Tech Stack: Python 3.12/3.13, pytest, openpyxl, SQLite.
+
+For local development, navigate into the directory and run `uv sync` and `uv run pytest`. Create a project with `uv run easytest init ../my-tests`.
+
+See [EasyTest README](easytest/README.md) for details.
+
 ## Usage
 
-The three projects are completely independent; all commands should be executed within their respective project directories:
+The four projects are completely independent; all commands should be executed within their respective project directories:
 
 - EasyDrop and EasyNote require Node.js 22 or later.
 - EasyMac requires macOS 13 or later. After unzipping the release package, complete the one-time authorization command in Terminal per `首次使用.txt` to open, and double-click `EasyMac.app` directly thereafter.
+- EasyTest requires Python 3.12 or 3.13; `uv` is recommended for environment management.
 
 Refer to each project's README for specific startup, testing, deployment, configuration, and security boundaries.
 
@@ -62,10 +74,11 @@ The single source of truth for versions is [`versions.json`](versions.json). Do 
 ```bash
 node scripts/version.mjs bump easynote patch
 # or: node scripts/version.mjs bump easymac minor
+# or: node scripts/version.mjs bump easytest patch
 node scripts/version.mjs check
 ```
 
-The script synchronizes project version files, `package.json`, lockfiles, runtime versions, README files, and the root version tables. `patch` is suited for backwards-compatible fixes, `minor` for new features, and `major` for breaking changes. Follow up with a versioned commit message, e.g., `发布：EasyMac v0.1.0`.
+The script synchronizes project version files, package manifests, lockfiles, runtime versions, README files, and the root version tables. `patch` is suited for backwards-compatible fixes, `minor` for new features, and `major` for breaking changes. Follow up with a versioned commit message, e.g., `发布：EasyMac v0.1.0`.
 
 ## Clean Reset
 
