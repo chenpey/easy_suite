@@ -197,7 +197,8 @@
       }
     }
   ],
-  "compiler_version": "0.4.0",
+  "compiled_sha256": "0bbd5bd039256b28bd210663bf98333a7cc52638553129bc64572063f4fe64be",
+  "compiler_version": "0.4.1",
   "schema_version": 1,
   "source": "demo.xlsx",
   "source_mode": "xlsx",

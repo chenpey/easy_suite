@@ -91,6 +91,79 @@ def test_editor_adds_related_case_and_step_in_one_validated_batch(tmp_path):
     assert cases[1].steps[0].expect == {"$.status_code": 200}
 
 
+def test_editor_adds_updates_renames_and_deletes_data_rows(tmp_path):
+    root = init_project(tmp_path / "project")
+    source = root / "cases/demo.xlsx"
+
+    edit_workbook(source, [
+        {
+            "entity": "data",
+            "action": "update",
+            "data_set": "login_cases",
+            "data_id": "valid",
+            "values": {"username": "updated-user", "expected_status": 201},
+        },
+        {
+            "entity": "data",
+            "action": "rename",
+            "data_set": "login_cases",
+            "data_id": "wrong_password",
+            "new_id": "invalid_password",
+        },
+        {
+            "entity": "data",
+            "action": "delete",
+            "data_set": "login_cases",
+            "data_id": "empty_phone",
+        },
+        {
+            "entity": "data",
+            "action": "add",
+            "data_set": "login_cases",
+            "data_id": "locked",
+            "values": {
+                "enabled": True,
+                "username": "locked-user",
+                "password": "secret",
+                "phone": "13800000003",
+                "expected_status": 423,
+            },
+        },
+    ])
+
+    document = json.loads(source.with_suffix(".json").read_text())
+    rows = document["data_sets"]["login_cases"]
+    assert [row["id"] for row in rows] == ["valid", "invalid_password", "locked"]
+    assert rows[0]["values"]["username"] == "updated-user"
+    assert rows[0]["values"]["expected_status"] == 201
+    assert rows[-1]["values"]["expected_status"] == 423
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        ({"invalid-field": "value"}, "unsupported values"),
+        ({"payload": {"nested": True}}, "Excel scalar values"),
+    ],
+)
+def test_editor_rejects_invalid_data_value_without_writing(tmp_path, values, message):
+    root = init_project(tmp_path / "project")
+    source = root / "cases/demo.xlsx"
+    compiled = source.with_suffix(".json")
+    before = source.read_bytes(), compiled.read_bytes()
+
+    with pytest.raises(ContractError, match=message):
+        edit_workbook(source, [{
+            "entity": "data",
+            "action": "update",
+            "data_set": "login_cases",
+            "data_id": "valid",
+            "values": values,
+        }])
+
+    assert (source.read_bytes(), compiled.read_bytes()) == before
+
+
 def test_editor_rejects_invalid_final_workbook_without_writing(tmp_path):
     root = init_project(tmp_path / "project")
     source = root / "cases/demo.xlsx"

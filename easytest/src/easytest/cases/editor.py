@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import stat
 import tempfile
 from pathlib import Path
@@ -33,13 +34,17 @@ _OPERATION_FIELDS = {
     "entity",
     "case_id",
     "step_id",
+    "data_set",
+    "data_id",
     "new_id",
     "values",
 }
 _ACTIONS = {"add", "update", "rename", "delete"}
-_ENTITIES = {"case", "step"}
+_ENTITIES = {"case", "step", "data"}
 _CASE_VALUES = (CASE_COLUMNS | CASE_OPTIONAL_COLUMNS) - {"case_id"}
 _STEP_VALUES = (STEP_COLUMNS | STEP_OPTIONAL_COLUMNS) - {"case_id", "step_id"}
+_DATA_FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_DATA_RESERVED_FIELDS = {"data_set", "data_id"}
 
 
 def _error(message: str, field_name: str = "edit") -> ContractError:
@@ -127,23 +132,73 @@ def _validate_operation(value: Any, index: int) -> dict[str, Any]:
     if entity not in _ENTITIES:
         raise _error(f"edit operation {index} has invalid entity", f"operations[{index}].entity")
     case_id = value.get("case_id")
-    if not isinstance(case_id, str) or not case_id.strip():
+    if entity in {"case", "step"} and (
+        not isinstance(case_id, str) or not case_id.strip()
+    ):
         raise _error(f"edit operation {index} requires case_id", f"operations[{index}].case_id")
     step_id = value.get("step_id")
     if entity == "step" and (not isinstance(step_id, str) or not step_id.strip()):
         raise _error(f"edit operation {index} requires step_id", f"operations[{index}].step_id")
-    if entity == "case" and step_id is not None:
+    if entity != "step" and step_id is not None:
         raise _error(f"edit operation {index} cannot use step_id", f"operations[{index}].step_id")
+    data_set = value.get("data_set")
+    data_id = value.get("data_id")
+    if entity == "data":
+        if not isinstance(data_set, str) or not data_set.strip():
+            raise _error(
+                f"edit operation {index} requires data_set",
+                f"operations[{index}].data_set",
+            )
+        if not isinstance(data_id, str) or not data_id.strip():
+            raise _error(
+                f"edit operation {index} requires data_id",
+                f"operations[{index}].data_id",
+            )
+        if case_id is not None:
+            raise _error(
+                f"edit operation {index} cannot use case_id",
+                f"operations[{index}].case_id",
+            )
+    elif data_set is not None or data_id is not None:
+        field = "data_set" if data_set is not None else "data_id"
+        raise _error(
+            f"edit operation {index} cannot use {field}",
+            f"operations[{index}].{field}",
+        )
     values = value.get("values", {})
     if not isinstance(values, dict):
         raise _error(f"edit operation {index}.values must be an object", f"operations[{index}].values")
     allowed = _CASE_VALUES if entity == "case" else _STEP_VALUES
-    invalid = values.keys() - allowed
+    invalid = (
+        {
+            key
+            for key in values
+            if (
+                not isinstance(key, str)
+                or key in _DATA_RESERVED_FIELDS
+                or not _DATA_FIELD_PATTERN.fullmatch(key)
+            )
+        }
+        if entity == "data"
+        else values.keys() - allowed
+    )
     if invalid:
+        invalid_names = sorted(str(item) for item in invalid)
         raise _error(
-            f"edit operation {index} contains unsupported values: {sorted(invalid)}",
-            f"operations[{index}].values.{sorted(invalid)[0]}",
+            f"edit operation {index} contains unsupported values: {invalid_names}",
+            f"operations[{index}].values.{invalid_names[0]}",
         )
+    if entity == "data":
+        structured = sorted(
+            key
+            for key, item in values.items()
+            if isinstance(item, (dict, list, tuple, set))
+        )
+        if structured:
+            raise _error(
+                f"data values must be Excel scalar values: {structured}",
+                f"operations[{index}].values.{structured[0]}",
+            )
     if action in {"add", "update"} and not values:
         raise _error(f"edit operation {index} requires values", f"operations[{index}].values")
     if action in {"rename", "delete"} and values:
@@ -156,8 +211,10 @@ def _validate_operation(value: Any, index: int) -> dict[str, Any]:
     return {
         "action": action,
         "entity": entity,
-        "case_id": case_id.strip(),
+        "case_id": case_id.strip() if isinstance(case_id, str) else None,
         "step_id": step_id.strip() if isinstance(step_id, str) else None,
+        "data_set": data_set.strip() if isinstance(data_set, str) else None,
+        "data_id": data_id.strip() if isinstance(data_id, str) else None,
         "new_id": new_id.strip() if isinstance(new_id, str) else None,
         "values": values,
     }
@@ -238,6 +295,46 @@ def _apply_step(workbook, operation: dict[str, Any]) -> None:
         steps.delete_rows(row)
 
 
+def _apply_data(workbook, operation: dict[str, Any]) -> None:
+    action = operation["action"]
+    if "data" not in workbook.sheetnames:
+        if action != "add":
+            raise _error("data sheet does not exist", "data")
+        data = workbook.create_sheet("data")
+        data.append(["data_set", "data_id"])
+    else:
+        data = workbook["data"]
+
+    headers = _headers(data)
+    data_set = operation["data_set"]
+    data_id = operation["data_id"]
+    matches = _rows(data, headers, data_set=data_set, data_id=data_id)
+    if action == "add":
+        if matches:
+            raise _error(f"data row already exists: {data_set}/{data_id}", "data_id")
+        values = {
+            "data_set": data_set,
+            "data_id": data_id,
+            **operation["values"],
+        }
+        headers = _ensure_columns(data, set(values))
+        _append_row(data, headers, values)
+        return
+    if not matches:
+        raise _error(f"data row does not exist: {data_set}/{data_id}", "data_id")
+    row = matches[0]
+    if action == "update":
+        headers = _ensure_columns(data, set(operation["values"]))
+        _set_values(data, row, headers, operation["values"])
+    elif action == "rename":
+        new_id = operation["new_id"]
+        if _rows(data, headers, data_set=data_set, data_id=new_id):
+            raise _error(f"data row already exists: {data_set}/{new_id}", "new_id")
+        data.cell(row, headers["data_id"], new_id)
+    else:
+        data.delete_rows(row)
+
+
 def edit_workbook(
     path: str | Path,
     operations: list[dict[str, Any]],
@@ -273,9 +370,11 @@ def edit_workbook(
         for operation in validated:
             if operation["entity"] == "case":
                 _apply_case(workbook, operation)
-            else:
+            elif operation["entity"] == "step":
                 _apply_step(workbook, operation)
-        for worksheet in (workbook["cases"], workbook["steps"]):
+            else:
+                _apply_data(workbook, operation)
+        for worksheet in workbook.worksheets:
             worksheet.auto_filter.ref = worksheet.dimensions
         workbook.save(temporary)
     except BaseException:

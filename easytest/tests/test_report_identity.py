@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import base64
 import json
 import re
-from io import BytesIO
 from uuid import UUID
 
 import pytest
 from pypdf import PdfReader
 
 from easytest.reports.html import write_html
-from easytest.reports.pdf import render_pdf
+from easytest.reports.pdf import render_pdf, write_pdf
 from easytest.reports.results import RunReport
 
 
@@ -33,8 +31,7 @@ def test_html_json_and_pdf_share_the_report_id_across_exports(tmp_path):
         assert data["report_id"] == report.report_id
         assert data["input_hash"] == report.input_hash
         assert "input-finger" in html
-        encoded = re.search(r'id="report-pdf">([^<]+)</script>', html)[1]
-        pdf = PdfReader(BytesIO(base64.b64decode(encoded, validate=True)))
+        pdf = PdfReader(write_pdf(report, tmp_path / name.replace(".html", ".pdf")))
         assert report.report_id in pdf.pages[0].extract_text()
         assert report.input_hash in pdf.pages[0].extract_text()
 

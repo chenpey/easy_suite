@@ -5,9 +5,30 @@ import json
 from pathlib import Path
 
 from easytest._version import __version__
-from easytest.cases.compiler import compile_workbook, workbook_document
+from easytest.cases.compiler import (
+    compile_workbook,
+    compiled_document_sha256,
+    workbook_document,
+)
 from easytest.cases.schema import parse_document
 from easytest.models import Case, ContractError
+
+
+def _load_current_compiled(workbook: Path) -> list[Case] | None:
+    compiled = workbook.with_suffix(".json")
+    if not compiled.is_file():
+        return None
+    try:
+        document = json.loads(compiled.read_text(encoding="utf-8"))
+        if (
+            not isinstance(document, dict)
+            or document.get("compiled_sha256")
+            != compiled_document_sha256(document)
+        ):
+            return None
+        return load_cases(compiled)
+    except (ContractError, UnicodeError, json.JSONDecodeError):
+        return None
 
 
 def _document_origin(document: object, source: Path) -> Path:
@@ -15,7 +36,12 @@ def _document_origin(document: object, source: Path) -> Path:
         return source
     mode = document.get("source_mode")
     if mode == "json":
-        forbidden = {"source", "source_sha256", "compiler_version"} & document.keys()
+        forbidden = {
+            "source",
+            "source_sha256",
+            "compiler_version",
+            "compiled_sha256",
+        } & document.keys()
         if forbidden:
             raise ContractError(
                 f"JSON-only source cannot define generated metadata: {sorted(forbidden)}",
@@ -112,10 +138,12 @@ def load_project_cases(
     seen_ids = {}
     for _, source in sorted(files.items()):
         if source.suffix.lower() == ".xlsx":
-            loaded = (
-                load_cases(compile_workbook(source)) if write_compiled
-                else parse_document(workbook_document(source), source=str(source))
-            )
+            loaded = _load_current_compiled(source)
+            if loaded is None:
+                loaded = (
+                    load_cases(compile_workbook(source)) if write_compiled
+                    else parse_document(workbook_document(source), source=str(source))
+                )
         else:
             loaded = load_cases(source)
         for case in loaded:

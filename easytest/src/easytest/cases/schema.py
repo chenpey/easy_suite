@@ -178,7 +178,7 @@ def parse_document(document: dict[str, Any], source: str = "") -> list[Case]:
         raise ContractError("compiled case document must be a JSON object")
     _fields(document, {
         "schema_version", "source_mode", "source", "source_sha256",
-        "compiler_version", "data_sets", "cases",
+        "compiler_version", "compiled_sha256", "data_sets", "cases",
     }, "document")
     if type(document.get("schema_version")) is not int or document["schema_version"] != SCHEMA_VERSION:
         raise ContractError(

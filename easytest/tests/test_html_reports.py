@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from easytest.cli import main
+from easytest.cases.compiler import compile_workbook
 from easytest.models import ContractError
 from easytest.notebook import NotebookSession
 from easytest.reports.html import write_html
@@ -58,11 +59,35 @@ def test_cli_success_stdout_and_no_report_option(tmp_path, capsys):
     root = init_project(tmp_path / "project")
     main(["run", "--root", str(root)])
     captured = capsys.readouterr()
-    assert json.loads(captured.out)["data"]["cases"][0]["steps"][0]["mocked"] is True
+    result = json.loads(captured.out)
+    assert result["data"]["cases"][0]["steps"][0]["mocked"] is True
+    assert result["artifacts"]["pdf"] is None
     assert "EasyTest report:" in captured.err
     assert read_report(root / "artifacts/report.html")["summary"]["passed"] == 1
     main(["run", "--root", str(root), "--no-report"])
     assert "EasyTest report:" not in capsys.readouterr().err
+
+
+def test_cli_generates_pdf_only_when_explicitly_requested(tmp_path, capsys):
+    root = init_project(tmp_path / "project")
+
+    main([
+        "run",
+        "--root",
+        str(root),
+        "--no-report",
+        "--pdf-report",
+        "artifacts/report.pdf",
+    ])
+
+    result = json.loads(capsys.readouterr().out)
+    target = root / "artifacts/report.pdf"
+    assert result["artifacts"] == {
+        "html": None,
+        "pdf": str(target),
+        "result": None,
+    }
+    assert target.read_bytes().startswith(b"%PDF")
 
 
 def test_cli_collection_error_still_writes_failed_report(tmp_path):
@@ -108,6 +133,7 @@ def test_report_write_error_preserves_existing_failure(tmp_path, monkeypatch):
         main(["run", "cases/demo.json", "--root", str(root)])
     assert "OSError" in str(caught.value.__notes__)
     assert "a secret from filesystem" not in str(caught.value.__notes__)
+    compile_workbook(root / "cases/demo.xlsx")
     with pytest.raises(OSError):
         main(["run", "cases/demo.xlsx", "--root", str(root)])
 

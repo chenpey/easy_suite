@@ -113,6 +113,12 @@ class NotebookSession:
         """Export all Case/Step runs in this session, including failed attempts."""
         return write_html(RunReport(cases=list(self.runner.case_reports)), self._path(path))
 
+    def write_pdf_report(self, path: str | Path = "artifacts/report.pdf") -> Path:
+        """Export all Case/Step runs in this session as a PDF."""
+        from easytest.reports.pdf import write_pdf
+
+        return write_pdf(RunReport(cases=list(self.runner.case_reports)), self._path(path))
+
     def __enter__(self) -> NotebookSession:
         return self
 
