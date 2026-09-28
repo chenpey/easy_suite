@@ -10,7 +10,6 @@ EasyTest 是面向场景、HTTP、RPC、数据库和封装 UI 请求的 XLSX 表
 - [新业务接入指南](docs/新业务接入指南.md)：面向业务测试人员的完整教程。
 - [AI 接入与执行指南](docs/AI接入与执行指南.md)：AI 操作、安全与交付规程。
 - [安装包契约](src/easytest/CONTRACT.md)：随 wheel 分发的字段、命令与 API 契约。
-- [0.3.1 快照存储优化记录](docs/0.3.1快照存储优化记录.md)：图片外置、并发保护和维护命令。
 - [JSONPlaceholder Demo](examples/jsonplaceholder/README.md)：公开 API 的离线和真实示例。
 - [业务 handler 示例](examples/business_handler/README.md)：独立安装业务适配器。
 
