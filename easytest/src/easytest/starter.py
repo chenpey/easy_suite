@@ -36,6 +36,24 @@ easytest run
 pytest
 ```
 
+编辑器需选择本项目的 `.venv`，不要选择用户级 base 环境或系统 Python：
+
+- TRAE CN / VS Code / Cursor：点击状态栏 Python 版本，或执行
+  `Python: Select Interpreter`，选择“输入解释器路径”。
+- PyCharm：`Settings/Preferences > Project > Python Interpreter >
+  Add Interpreter > Add Local Interpreter > Existing`。
+- Jupyter / VS Code Notebook：右上角 `Select Kernel > Python Environments`。
+
+macOS/Linux 选择 `.venv/bin/python`，Windows 选择
+`.venv\\Scripts\\python.exe`。在编辑器终端确认：
+
+```bash
+python -c "import sys, easytest; print(sys.executable); print(easytest.__version__)"
+```
+
+第一行必须指向本项目 `.venv`。如果编辑器打开的是 `easy_suite/` 仓库根目录，
+框架开发解释器应选择 `easytest/.venv/bin/python`。
+
 Excel 的 cases 页维护用例名称，steps 页维护 operation、request、expect；
 data 页集中维护可复用的多组业务数据。`sample.login` 是默认禁用的数据驱动样例，
 启用后会按 data 页中 `login_cases` 的每个启用行独立执行。
