@@ -337,22 +337,23 @@ class DatabaseExecutor(Executor):
                 f"database operation {operation_name!r} declares write={declared_write}, "
                 f"but SQL type is {kind}"
             )
-        allow_write = (
-            context.run_mode != "read"
-            if context.allow_db_write is None else context.allow_db_write
-        )
+        allow_write = context.allow_db_write
         if not isinstance(allow_write, bool):
             raise ConfigurationError("allow_db_write must be a boolean")
         if actual_write and not allow_write:
             reason = (
-                "blocked in read mode"
-                if context.allow_db_write is None else "blocked by allow_db_write=false"
+                "blocked by allow_db_write=false"
             )
             raise ConfigurationError(
                 f"database write operation {operation_name!r} is {reason}"
             )
 
-        parameters = request.get("parameters", request)
+        unknown = set(request) - {"parameters"}
+        if unknown:
+            raise ConfigurationError(
+                f"database request has unknown fields: {sorted(unknown)}"
+            )
+        parameters = request.get("parameters", {})
         if not isinstance(parameters, (dict, list, tuple)):
             raise ConfigurationError(
                 f"database operation {operation_name!r} parameters must be an object or list"

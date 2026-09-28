@@ -1,11 +1,11 @@
 [project]
 name = "easytest"
-version = "0.3.0"
+version = "0.3.1"
 description = "XLSX-first test scaffold with deterministic JSON artifacts for scenario, HTTP, RPC, database, and UI workflows"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "filelock>=3.16.0",
+    "filelock>=4.0.1",
     "openpyxl>=3.1.5",
     "pymysql>=1.1.1",
     "pytest>=8.3.0",

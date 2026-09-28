@@ -4,7 +4,14 @@
       "database_rows": {
         "kind": "database",
         "select": "$.rows",
-        "sort_lists_by": "id"
+        "unordered_lists": [
+          {
+            "keys": [
+              "id"
+            ],
+            "path": "$"
+          }
+        ]
       },
       "response_default": {
         "ignore_paths": [

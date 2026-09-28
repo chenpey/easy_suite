@@ -108,7 +108,7 @@ class RunContext:
     step_outputs: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
-    allow_db_write: bool | None = None
+    allow_db_write: bool = False
     environment: Mapping[str, str | None] | None = field(default=None, repr=False)
 
     def template_scope(self) -> dict[str, Any]:

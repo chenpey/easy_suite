@@ -3,14 +3,14 @@
 EasyTest 是面向场景、HTTP、RPC、数据库和封装 UI 请求的 XLSX 表格驱动测试框架。
 人工维护 XLSX，框架生成确定性 JSON，用于执行、Git diff、代码审查和 AI 分析。
 
-当前版本：`0.3.0`，支持 Python 3.12 和 3.13。
+当前版本：`0.3.1`，支持 Python 3.12 和 3.13。
 
 ## 文档入口
 
 - [新业务接入指南](docs/新业务接入指南.md)：面向业务测试人员的完整教程。
 - [AI 接入与执行指南](docs/AI接入与执行指南.md)：AI 操作、安全与交付规程。
 - [安装包契约](src/easytest/CONTRACT.md)：随 wheel 分发的字段、命令与 API 契约。
-- [0.3.0 迁移与整改记录](docs/0.3.0迁移与整改记录.md)：本版变更、验证结果和待验收事项。
+- [0.3.1 快照存储优化记录](docs/0.3.1快照存储优化记录.md)：图片外置、并发保护和维护命令。
 - [JSONPlaceholder Demo](examples/jsonplaceholder/README.md)：公开 API 的离线和真实示例。
 - [业务 handler 示例](examples/business_handler/README.md)：独立安装业务适配器。
 
@@ -66,7 +66,7 @@ easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile of
 ## 报告与机器结果
 
 `run` 和 pytest 默认生成自包含的 `artifacts/report.html`，内嵌 PDF 和脱敏 JSON。
-CLI 的 `list/validate/run/edit` 使用统一封装：
+CLI 的 `list/validate/run/edit/snapshot` 使用统一封装：
 
 ```text
 schema_version, command, status, data, errors, artifacts
@@ -148,8 +148,21 @@ Mock 优先级为 Step > Case Mock Profile > 运行 Profile 默认 Mock Profile�
 | `write` | 创建缺失基线；已有内容不同则失败 |
 | `baseline` | 更新基线；必须设置 `CONFIRM_BASELINE=1` |
 
-文件后端在 Case 成功后统一提交；SQLite 后端只将成功运行作为基线。两者都不能
-回滚已经提交的业务数据，强制终止时也不保证跨文件事务。
+文件后端在 Case 成功后统一提交。SQLite 后端压缩 JSON 等文本 payload，图片使用
+`snapshot_artifact_dir` 下的内容寻址文件，库内只保存路径、大小和 SHA-256。
+同一 Case 的并发更新发生版本竞争时返回 `SNAPSHOT_CONFLICT`，不会静默覆盖基线。
+
+SQLite 快照维护：
+
+```bash
+easytest snapshot check --root .
+easytest snapshot maintain --root . --keep-failed 1
+easytest snapshot maintain --root . --keep-failed 1 --compact
+```
+
+`maintain` 清理超过 24 小时的中断运行、超额失败记录和孤立图片，并执行 WAL
+checkpoint；`--compact` 额外执行阻塞性的 `VACUUM`，只能在没有测试任务写入时运行。
+两种后端都不能回滚已经提交的业务数据。
 
 ## Notebook 手动测试
 
@@ -197,6 +210,7 @@ uv run pytest -c examples/jsonplaceholder/pytest.ini \
 
 - Runner 顺序执行，不保证并发安全。
 - pytest-xdist 暂不合并 EasyTest HTML 报告。
+- SQLite 快照存储允许多进程写不同 Case；同一 Case 的并发基线更新仅允许一个完成。
 - 数据库每步独立连接并提交，不提供连接池。
 - HTTP 默认限制解压后响应体为 10 MiB，超限显式失败；operation/request 只能降低
   项目上限，项目最多配置 64 MiB。`stream` 不能绕过上限，不用于大文件下载。

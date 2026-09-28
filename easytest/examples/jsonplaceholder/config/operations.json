@@ -5,7 +5,6 @@
       "method": "GET",
       "url": "https://jsonplaceholder.typicode.com/users/{user_id}",
       "timeout": 15,
-      "retry": 0,
       "expected_status": [200]
     },
     "http.list_posts": {
@@ -13,7 +12,6 @@
       "method": "GET",
       "url": "https://jsonplaceholder.typicode.com/posts",
       "timeout": 15,
-      "retry": 0,
       "expected_status": [200]
     },
     "http.create_post": {
@@ -21,7 +19,6 @@
       "method": "POST",
       "url": "https://jsonplaceholder.typicode.com/posts",
       "timeout": 15,
-      "retry": 0,
       "expected_status": [201]
     }
   }

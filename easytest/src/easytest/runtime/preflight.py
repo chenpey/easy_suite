@@ -5,6 +5,7 @@ import ast
 import importlib.machinery
 import inspect
 import json
+import os
 import re
 import sqlite3
 import symtable
@@ -15,6 +16,7 @@ from typing import Any, Iterable
 
 import pymysql
 import sqlparse
+from filelock import lock_descriptor, unlock_descriptor
 
 from easytest.cases.schema import parse_document
 from easytest.config import ProjectConfig, resolve_env
@@ -27,6 +29,14 @@ from easytest.runtime.mocks import MockEngine
 from easytest.runtime.policy import ExecutionPolicy, execution_input_hash
 from easytest.runtime.values import merge_nested, path_parts, render_templates, state_write_parts
 from easytest.snapshots.manager import SnapshotManager, snapshot_target
+from easytest.snapshots.codec import (
+    DEFAULT_MAX_SNAPSHOT_BYTES,
+    SNAPSHOT_RAW_MAGIC,
+    decode_artifact_reference,
+    decode_snapshot,
+    read_bounded_file,
+    read_snapshot_artifact,
+)
 from easytest.validation import (
     DEFERRED, Deferred, fields, has_deferred, http_settings, mock_settings, number,
     snapshot_settings, template_shape, text, typed,
@@ -172,7 +182,8 @@ def _database(config: ProjectConfig, operation: dict, request: Any, settings: di
         if key in operation:
             number(operation[key], key, integer=key == "read_retries")
     if not isinstance(request, Deferred):
-        parameters = request.get("parameters", request)
+        fields(request, {"parameters"}, "database request")
+        parameters = request.get("parameters", {})
         typed(parameters, (dict, list, tuple), "database parameters")
         if operation.get("execute_many"):
             typed(parameters, list, "database execute_many parameters")
@@ -217,9 +228,9 @@ def _database(config: ProjectConfig, operation: dict, request: Any, settings: di
         else set(inspect.signature(pymysql.connect).parameters) | {"timeout_seconds"}
     )
     fields(connection, common | supported, "database connection")
-    permission = settings["allow_db_write"]
-    allowed = settings["run_mode"] != "read" if permission is None else permission
-    if write and (not allowed or connection.get("read_only", False)):
+    if write and (
+        not settings["allow_db_write"] or connection.get("read_only", False)
+    ):
         raise ConfigurationError("database write blocked by run settings or read-only connection")
     for key in ("read_retries", "retry_delay_seconds", "timeout_seconds"):
         if key in connection:
@@ -276,28 +287,97 @@ def _snapshot(config: ProjectConfig, case: Case, step_id: str, spec: Any, mode: 
             # Pending writer state cannot be read immutably without losing WAL data.
             # Defer instead of creating/updating shared-memory sidecar files.
             return True
+        lock_fd = None
+        locked = False
         try:
-            # Never construct SqliteSnapshotStore here: its constructor writes schema.
-            connection = sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro&immutable=1", uri=True)
+            flags = os.O_RDWR
+            if nofollow := getattr(os, "O_NOFOLLOW", 0):
+                flags |= nofollow
+            lock_fd = os.open(f"{database.resolve()}.lock", flags)
+            locked = lock_descriptor(lock_fd, blocking=False)
+            if not locked or (wal.is_file() and wal.stat().st_size):
+                return True
+            # Immutable mode is safe while the shared writer lock is held and
+            # preserves preflight's no-write contract.
+            connection = sqlite3.connect(
+                f"{database.resolve().as_uri()}?mode=ro&immutable=1",
+                uri=True,
+            )
             try:
+                max_bytes = config.runtime.get(
+                    "snapshot_max_bytes",
+                    DEFAULT_MAX_SNAPSHOT_BYTES,
+                )
                 row = connection.execute(
-                    "SELECT 1 FROM snapshot_items i JOIN snapshot_runs r "
+                    "SELECT i.kind, length(i.content), "
+                    "CASE WHEN length(i.content) <= ? THEN i.content END "
+                    "FROM snapshot_items i JOIN snapshot_runs r "
                     "ON i.run_id=r.run_id AND i.case_id=r.case_id "
                     "WHERE i.case_id=? AND i.name=? AND r.status='completed' LIMIT 1",
-                    (case.id, name),
+                    (
+                        max_bytes + len(SNAPSHOT_RAW_MAGIC),
+                        case.id,
+                        name,
+                    ),
                 ).fetchone()
             finally:
                 connection.close()
+        except FileNotFoundError:
+            return True
         except sqlite3.Error as exc:
             raise ConfigurationError("cannot read SQLite snapshot baseline") from exc
+        finally:
+            if locked and lock_fd is not None:
+                unlock_descriptor(lock_fd)
+            if lock_fd is not None:
+                os.close(lock_fd)
         if row is None:
             raise ConfigurationError(f"SQLite snapshot baseline does not exist: {case.id}/{name}")
+        if row[2] is None:
+            raise ConfigurationError(
+                f"SQLite snapshot baseline exceeds snapshot_max_bytes: "
+                f"{case.id}/{name}",
+                code="SNAPSHOT_TOO_LARGE",
+                field="snapshot_max_bytes",
+            )
+        if row[0] == "screenshot":
+            try:
+                content = decode_snapshot(
+                    row[2],
+                    max_bytes=max_bytes,
+                )
+                reference = decode_artifact_reference(content)
+                if reference is None:
+                    raise ValueError(
+                        "screenshot snapshot must use external artifact storage"
+                    )
+                read_snapshot_artifact(
+                    config.root / config.runtime.get(
+                        "snapshot_artifact_dir",
+                        ".easytest/snapshot-artifacts",
+                    ),
+                    reference,
+                    max_bytes=max_bytes,
+                )
+            except (ValueError, ConfigurationError) as exc:
+                raise ConfigurationError(
+                    f"cannot read SQLite snapshot artifact: {case.id}/{name}"
+                ) from exc
     else:
         if not target.is_file():
             raise ConfigurationError(f"snapshot baseline does not exist: {target}")
         if suffix == ".json":
             try:
-                json.loads(target.read_text(encoding="utf-8"))
+                json.loads(
+                    read_bounded_file(
+                        target,
+                        max_bytes=config.runtime.get(
+                            "snapshot_max_bytes",
+                            DEFAULT_MAX_SNAPSHOT_BYTES,
+                        ),
+                        label="snapshot baseline",
+                    )
+                )
             except (ValueError, UnicodeError) as exc:
                 raise ConfigurationError(f"invalid JSON snapshot baseline: {target}") from exc
     return False

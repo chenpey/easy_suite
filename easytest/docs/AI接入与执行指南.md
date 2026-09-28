@@ -1,6 +1,6 @@
 # AI 接入与执行指南
 
-适用版本：EasyTest `0.3.0`。本指南只规定 AI 的操作流程、安全边界和交付标准。
+适用版本：EasyTest `0.3.1`。本指南只规定 AI 的操作流程、安全边界和交付标准。
 安装及业务示例见 [新业务接入指南](新业务接入指南.md)，精确字段和错误契约见
 安装包内的 `easytest/CONTRACT.md`。
 
@@ -189,6 +189,10 @@ HTTP 默认只重试 GET、HEAD、OPTIONS。POST 只有具备幂等保障时才�
 报告中的 `hash_scope=observed_prefix` 只校验已读取前缀；先核对接口契约和副作用，
 再决定收窄查询或使用业务下载 handler，不盲目提高上限。
 清理使用业务 `try/finally` 或 pytest yield fixture，不依赖最后一个测试步骤。
+`SNAPSHOT_CONFLICT` 表示同一 Case 运行期间已有其他进程提交新基线；重新读取差异，
+不要直接重试覆盖。SQLite 截图位于 `snapshot_artifact_dir`，必须与数据库一起归档。
+维护前先停止快照写入，再执行 `easytest snapshot check/maintain`；只有明确需要回收
+数据库空闲页时才增加 `--compact`。
 
 ## 9. 交付标准
 

@@ -2,12 +2,11 @@
 
 from easytest.cases.compiler import compile_path, compile_workbook
 from easytest.cases.editor import edit_workbook
-from easytest.cases.loader import discover_cases, load_cases
+from easytest.cases.loader import load_cases
 
 __all__ = [
     "compile_path",
     "compile_workbook",
-    "discover_cases",
     "edit_workbook",
     "load_cases",
 ]

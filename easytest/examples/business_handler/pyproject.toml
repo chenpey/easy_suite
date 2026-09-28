@@ -2,7 +2,7 @@
 name = "easytest-business-example"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
-dependencies = ["easytest>=0.3.0,<0.4"]
+dependencies = ["easytest>=0.3.1,<0.4"]
 
 [build-system]
 requires = ["hatchling"]

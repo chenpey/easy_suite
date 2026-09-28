@@ -37,7 +37,7 @@
       }
     }
   ],
-  "compiler_version": "0.3.0",
+  "compiler_version": "0.3.1",
   "schema_version": 1,
   "source": "limit_service.xlsx",
   "source_mode": "xlsx",

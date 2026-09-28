@@ -74,8 +74,7 @@ def render_pdf(data: dict[str, Any]) -> bytes:
     summary = data["summary"]
     add(data["title"], "title")
     add(f"运行时间：{data['started_at']} · 累计用例耗时：{summary['duration_ms']} ms", "muted")
-    if data.get("report_id"):
-        add(f"报告 ID：{data['report_id']}", "muted")
+    add(f"报告 ID：{data['report_id']}", "muted")
     if data.get("input_hash"):
         add(f"输入哈希：{data['input_hash']}", "muted")
     add("完整报告：包含全部用例与步骤，不受网页筛选或折叠状态影响。", "muted")

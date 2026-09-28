@@ -68,7 +68,12 @@ def test_response_over_limit_stops_and_closes_without_retry(compressed):
     body = b"x" * 100000
     adapter = Adapter([gzip.compress(body) if compressed else body], compressed=compressed)
     with client_for(adapter) as client, pytest.raises(ResponseTooLarge) as caught:
-        client.request("GET", "https://example.invalid", max_response_bytes=32, retry=3)
+        client.request(
+            "GET",
+            "https://example.invalid",
+            max_response_bytes=32,
+            retry={"retries": 3},
+        )
     data = caught.value.response_metadata
     assert caught.value.code == "HTTP_RESPONSE_TOO_LARGE"
     assert data["body"] is None

@@ -57,11 +57,11 @@ def test_database_write_is_blocked_in_read_mode(tmp_path: Path) -> None:
         variables={},
     )
 
-    with pytest.raises(ConfigurationError, match="blocked in read mode"):
+    with pytest.raises(ConfigurationError, match="allow_db_write=false"):
         executor.execute(
             "database.update_account",
             config.operation("database.update_account", "database"),
-            {"id": "account-001", "status": "CLOSED"},
+            {"parameters": {"id": "account-001", "status": "CLOSED"}},
             context,
         )
 

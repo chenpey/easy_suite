@@ -5,38 +5,14 @@ from dataclasses import dataclass
 import pytest
 import requests
 
-from easytest.runtime.dict_object import dict_to_obj, obj_to_dict
 from easytest.models import ConfigurationError, ContractError
 from easytest.transport.browser_auth import (
     BrowserCookieError,
     cookie_header,
     get_cookies,
 )
-from easytest.transport.http import HttpClient, RetryPolicy, send_http
+from easytest.transport.http import HttpClient, RetryPolicy
 from easytest.runtime.values import render_templates
-
-
-def test_dict_object_is_recursive_and_fail_fast() -> None:
-    value = dict_to_obj({"user": {"ids": [{"value": "u1"}]}})
-
-    assert value.user.ids[0].value == "u1"
-    assert obj_to_dict(value) == {"user": {"ids": [{"value": "u1"}]}}
-    with pytest.raises(AttributeError, match="missing"):
-        _ = value.missing
-
-
-def test_dict_object_supports_explicit_default() -> None:
-    value = dict_to_obj({"present": 1}, default=None)
-
-    assert value.missing is None
-
-
-def test_dict_object_rejects_cycles() -> None:
-    value = {}
-    value["self"] = value
-
-    with pytest.raises(ValueError, match="cyclic"):
-        dict_to_obj(value)
 
 
 @pytest.mark.parametrize(
@@ -144,26 +120,28 @@ def test_http_client_does_not_retry_post_by_default() -> None:
     client = HttpClient(session)
 
     with pytest.raises(requests.ConnectionError, match="offline"):
-        client.request("POST", "https://example.invalid", retry=3)
+        client.request(
+            "POST",
+            "https://example.invalid",
+            retry={"retries": 3},
+        )
 
     assert session.calls == 1
 
 
 def test_retry_policy_rejects_ambiguous_or_negative_configuration() -> None:
     with pytest.raises(ValueError, match="non-negative"):
-        RetryPolicy.from_value(-1)
+        RetryPolicy.from_value({"retries": -1})
+    with pytest.raises(TypeError, match="mapping"):
+        RetryPolicy.from_value(1)
     with pytest.raises(TypeError, match="collection"):
         RetryPolicy(methods="GET")
-
-
-def test_send_http_closes_owned_session_when_request_fails(monkeypatch) -> None:
-    session = _Session([requests.ConnectionError("offline")])
-    monkeypatch.setattr(requests, "Session", lambda: session)
-
-    with pytest.raises(requests.ConnectionError, match="offline"):
-        send_http("GET", "https://example.invalid")
-
-    assert session.closed is True
+    with pytest.raises(TypeError, match="integer"):
+        RetryPolicy.from_value({"retries": "1"})
+    with pytest.raises(TypeError, match="HTTP status integers"):
+        RetryPolicy.from_value({"status_codes": ["503"]})
+    with pytest.raises(TypeError, match="unknown retry policy fields"):
+        RetryPolicy.from_value({"retry_count": 1})
 
 
 def test_borrowed_session_preserves_settings_and_ownership():

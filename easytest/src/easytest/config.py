@@ -14,6 +14,7 @@ from dotenv import dotenv_values
 from dotenv.variables import parse_variables
 
 from easytest.models import ConfigurationError
+from easytest.snapshots.codec import DEFAULT_MAX_SNAPSHOT_BYTES, snapshot_size_limit
 from easytest.validation import http_secret_sources, mock_settings, snapshot_settings, template_shape, text
 from easytest.transport.http import DEFAULT_MAX_RESPONSE_BYTES, response_limit
 
@@ -168,7 +169,7 @@ class ProjectConfig:
         _known_fields(self.runtime, {
             "run_mode", "allow_db_write", "default_profile", "database", "observability",
             "snapshot_backend", "snapshot_database", "snapshot_dir", "snapshot_history_keep",
-            "http", "redaction",
+            "snapshot_artifact_dir", "snapshot_max_bytes", "http", "redaction",
         }, "runtime")
         http = _object(self.runtime.get("http", {}), "runtime.http")
         _known_fields(http, {"max_response_bytes"}, "runtime.http")
@@ -183,9 +184,12 @@ class ProjectConfig:
         _run_mode(self.runtime.get("run_mode", "read"))
         if "allow_db_write" in self.runtime:
             _boolean(self.runtime["allow_db_write"], "runtime.allow_db_write")
-        for key in ("snapshot_dir", "snapshot_database"):
+        for key in ("snapshot_dir", "snapshot_database", "snapshot_artifact_dir"):
             if key in self.runtime:
                 text(self.runtime[key], f"runtime.{key}")
+        snapshot_size_limit(
+            self.runtime.get("snapshot_max_bytes", DEFAULT_MAX_SNAPSHOT_BYTES)
+        )
         for label, values in (
             ("mock presets", self.mock_presets),
             ("mock profiles", self.mock_profiles),
@@ -321,15 +325,15 @@ class ProjectConfig:
         }
         mode = run_mode
         if mode is None:
-            mode = overrides.get("run_mode", self.environment.get("RUN_MODE"))
-        if mode is None:
-            mode = runtime.get("run_mode", "read")
+            mode = overrides.get("run_mode", runtime.get("run_mode", "read"))
         runtime["run_mode"] = _run_mode(mode)
         permission = allow_db_write
         if permission is None:
-            permission = preset.get("allow_db_write", runtime.get("allow_db_write"))
-        if permission is not None:
-            _boolean(permission, "allow_db_write")
+            permission = preset.get(
+                "allow_db_write",
+                runtime.get("allow_db_write", False),
+            )
+        _boolean(permission, "allow_db_write")
         return {
             "profile": selected,
             "runtime": runtime,

@@ -45,7 +45,7 @@
       }
     }
   ],
-  "compiler_version": "0.3.0",
+  "compiler_version": "0.3.1",
   "schema_version": 1,
   "source": "profile_api.xlsx",
   "source_mode": "xlsx",

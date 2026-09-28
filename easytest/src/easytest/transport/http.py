@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import random
 import time
 from collections.abc import Collection, Mapping
@@ -78,47 +79,69 @@ class RetryPolicy:
     )
 
     def __post_init__(self) -> None:
+        if type(self.retries) is not int:
+            raise TypeError("retry count must be an integer")
+        if type(self.backoff_seconds) not in (int, float) or type(
+            self.jitter_seconds
+        ) not in (int, float):
+            raise TypeError("retry delays must be numbers")
+        if not math.isfinite(self.backoff_seconds) or not math.isfinite(
+            self.jitter_seconds
+        ):
+            raise ValueError("retry delays must be finite")
         if self.retries < 0:
             raise ValueError("retry count must be non-negative")
         if self.backoff_seconds < 0 or self.jitter_seconds < 0:
             raise ValueError("retry delays must be non-negative")
-        if isinstance(self.methods, (str, bytes)):
+        if not isinstance(self.methods, (list, tuple, set, frozenset)):
             raise TypeError("retry methods must be a collection of method names")
-        if isinstance(self.status_codes, (str, bytes)):
+        if any(
+            not isinstance(method, str) or not method.strip()
+            for method in self.methods
+        ):
+            raise TypeError("retry methods must contain non-empty strings")
+        if not isinstance(self.status_codes, (list, tuple, set, frozenset)):
             raise TypeError("retry status codes must be a collection of integers")
+        if any(
+            type(status) is not int or not 100 <= status <= 599
+            for status in self.status_codes
+        ):
+            raise TypeError("retry status codes must contain HTTP status integers")
         object.__setattr__(
             self,
             "methods",
-            frozenset(str(method).upper() for method in self.methods),
+            frozenset(method.upper() for method in self.methods),
         )
         object.__setattr__(
             self,
             "status_codes",
-            frozenset(int(status) for status in self.status_codes),
+            frozenset(self.status_codes),
         )
 
     @classmethod
-    def from_value(cls, value: RetryPolicy | Mapping[str, Any] | int | None):
+    def from_value(cls, value: RetryPolicy | Mapping[str, Any] | None):
         if value is None:
             return cls()
         if isinstance(value, cls):
             return value
-        if isinstance(value, int):
-            return cls(retries=value)
         if not isinstance(value, Mapping):
-            raise TypeError("retry policy must be an integer or mapping")
+            raise TypeError("retry policy must be a mapping")
+        allowed = {
+            "retries",
+            "backoff_seconds",
+            "jitter_seconds",
+            "methods",
+            "status_codes",
+        }
+        unknown = value.keys() - allowed
+        if unknown:
+            raise TypeError(f"unknown retry policy fields: {sorted(unknown)}")
         return cls(
-            retries=int(value.get("retries", 0)),
-            backoff_seconds=float(value.get("backoff_seconds", 0.25)),
-            jitter_seconds=float(value.get("jitter_seconds", 0.1)),
-            methods=frozenset(
-                str(method).upper()
-                for method in value.get("methods", DEFAULT_RETRY_METHODS)
-            ),
-            status_codes=frozenset(
-                int(status)
-                for status in value.get("status_codes", DEFAULT_RETRY_STATUS_CODES)
-            ),
+            retries=value.get("retries", 0),
+            backoff_seconds=value.get("backoff_seconds", 0.25),
+            jitter_seconds=value.get("jitter_seconds", 0.1),
+            methods=value.get("methods", DEFAULT_RETRY_METHODS),
+            status_codes=value.get("status_codes", DEFAULT_RETRY_STATUS_CODES),
         )
 
 
@@ -167,7 +190,7 @@ class HttpClient:
         query: Mapping[str, Any] | None = None,
         data: Any = None,
         json_body: Any = None,
-        retry: RetryPolicy | Mapping[str, Any] | int | None = None,
+        retry: RetryPolicy | Mapping[str, Any] | None = None,
         expected_status: int | Collection[int] | None = None,
         raise_for_status: bool = False,
         timeout: float | tuple[float, float] = 10,
@@ -263,49 +286,3 @@ class HttpClient:
         delay = policy.backoff_seconds * (2 ** (attempt - 1))
         delay += random.uniform(0, policy.jitter_seconds)
         time.sleep(delay)
-
-
-def send_http(
-    method: str,
-    url: str,
-    path: dict[str, Any] | None = None,
-    headers: dict[str, str] | None = None,
-    query: dict[str, Any] | None = None,
-    data: Any = None,
-    retry_count: int = 0,
-    full_response: bool = False,
-    verify: bool = True,
-    timeout: int | float = 180,
-    *,
-    retry_methods: Collection[str] = DEFAULT_RETRY_METHODS,
-    trust_env: bool = True,
-    json_body: Any = None,
-    max_response_bytes: int = DEFAULT_MAX_RESPONSE_BYTES,
-) -> dict[str, Any]:
-    """Send HTTP; data is form/raw content, json_body is explicit JSON."""
-    retry = RetryPolicy(
-        retries=retry_count,
-        methods=frozenset(method.upper() for method in retry_methods),
-    )
-    with HttpClient(trust_env=trust_env) as client:
-        response = client.request(
-            method,
-            url,
-            path=path,
-            headers=headers,
-            query=query,
-            data=data,
-            json_body=json_body,
-            retry=retry,
-            timeout=timeout,
-            verify=verify,
-            max_response_bytes=max_response_bytes,
-        )
-    if full_response:
-        return response
-    return {
-        "status_code": response["status_code"],
-        "body": response["body"],
-        "elapsed_ms": response["elapsed_ms"],
-        "attempts": response["attempts"],
-    }
