@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
+Easy Suite 集中管理四个相互独立的实用工具。每个项目使用专属依赖、配置、数据存储和使用文档，Cloudflare D1/R2 资源与本地运行产物也分别管理。
 
 ## 版本
 
@@ -12,6 +12,7 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 | [EasyDrop](easydrop/) | `1.3.0` |
 | [EasyNote](easynote/) | `0.8.6` |
 | [EasyMac](easymac/) | `0.4.4` |
+| [EasyTest](easytest/) | `0.3.1` |
 <!-- versions:end -->
 
 ## 项目目录
@@ -46,12 +47,23 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 
 详细说明见 [EasyMac README](easymac/README.md)。
 
+### [EasyTest](easytest/)
+
+以 XLSX 为人工维护源、确定性 JSON 为执行产物的测试编排工具，覆盖 HTTP、RPC、数据库、UI 和业务场景。提供整批静态预检、离线 Mock、文件与 SQLite 快照、外置截图、并发基线保护，以及 CLI、pytest、Notebook 和自包含 HTML/PDF 报告。
+
+技术栈：Python 3.12/3.13、pytest、openpyxl、SQLite。
+
+本地使用进入目录执行 `uv sync` 和 `uv run pytest`；创建项目可运行 `uv run easytest init ../my-tests`。
+
+详细说明见 [EasyTest README](easytest/README.md)。
+
 ## 使用
 
-三个项目相互独立，所有命令都应在对应项目目录中执行：
+四个项目相互独立，所有命令都应在对应项目目录中执行：
 
 - EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
 - EasyMac 需要 macOS 13 或更新版本，解压发布包后按“首次使用.txt”在终端完成单次授权即可打开使用，以后可直接双击 `EasyMac.app`。
+- EasyTest 需要 Python 3.12 或 3.13，并推荐使用 `uv` 管理环境。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
 
@@ -62,10 +74,11 @@ Easy Suite 集中管理三个相互独立的实用工具。每个项目使用专
 ```bash
 node scripts/version.mjs bump easynote patch
 # 或：node scripts/version.mjs bump easymac minor
+# 或：node scripts/version.mjs bump easytest patch
 node scripts/version.mjs check
 ```
 
-脚本会同步项目的版本文件、`package.json`、锁文件、运行时版本、README 和根目录版本表。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyMac v0.1.0`。
+脚本会同步项目的版本文件、包清单、锁文件、运行时版本、README 和根目录版本表。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyMac v0.1.0`。
 
 ## 清空重建
 
