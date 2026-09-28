@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Iterable
 from pathlib import Path
@@ -103,6 +104,7 @@ class CaseRunner:
         }
         self._closed = False
         self._closed_resources: set[int] = set()
+        self._data_owned: dict[str, dict[str, Executor]] = {}
         self._preflight_permits: dict[int, tuple[Case, str]] = {}
         try:
             for name, factory in factories.items():
@@ -121,7 +123,15 @@ class CaseRunner:
     def close(self) -> None:
         self._closed = True
         self._preflight_permits.clear()
-        _close_resources(self.executors.values(), self._closed_resources)
+        resources = [
+            *self.executors.values(),
+            *(
+                resource
+                for owned in self._data_owned.values()
+                for resource in owned.values()
+            ),
+        ]
+        _close_resources(resources, self._closed_resources)
 
     def __enter__(self) -> CaseRunner:
         return self
@@ -161,17 +171,32 @@ class CaseRunner:
                 int(observability.get("max_event_length", 12000)),
             ),
         )
+        execution_case = copy.deepcopy(case)
         context = RunContext(
-            case=case,
+            case=execution_case,
             root=self.root,
             run_mode=self.run_mode,
-            variables=dict(case.variables),
+            variables=execution_case.variables,
             events=recorder.events,
             allow_db_write=self.settings["allow_db_write"],
             environment=self.config.environment,
         )
         results: dict[str, ExecutionResult] = {}
-        owned: dict[str, Executor] = {}
+        shared_resources = case.data_id is not None
+        owned = (
+            self._data_owned.setdefault(case.id, {})
+            if shared_resources
+            else {}
+        )
+        if shared_resources:
+            reset_resources = {
+                id(resource): resource
+                for resource in [*self.executors.values(), *owned.values()]
+            }
+            for resource in reset_resources.values():
+                reset = getattr(resource, "reset_context", None)
+                if callable(reset):
+                    reset(context)
         error: BaseException | None = None
         traceback = None
         report = CaseReport.for_case(
@@ -187,7 +212,9 @@ class CaseRunner:
             recorder.emit(
                 "case.start",
                 run_id=context.run_id,
-                case_id=case.id,
+                case_id=case.execution_id,
+                data_set=case.data_set,
+                data_id=case.data_id,
                 run_mode=context.run_mode,
                 profile=self.settings["profile"],
             )
@@ -212,7 +239,9 @@ class CaseRunner:
                     recorder.emit(
                         "step.start",
                         run_id=context.run_id,
-                        case_id=case.id,
+                        case_id=case.execution_id,
+                        data_set=case.data_set,
+                        data_id=case.data_id,
                         step_id=step.id,
                         executor=step.executor,
                         operation=step.operation,
@@ -227,7 +256,7 @@ class CaseRunner:
                         context=context,
                         executor=step.executor,
                         operation=step.operation,
-                        invocation_key=f"{case.id}.{step.operation}",
+                        invocation_key=f"{case.execution_id}.{step.operation}",
                     )
                     step_report.request = safe_value(decision.request)
                     result = decision.result
@@ -285,7 +314,9 @@ class CaseRunner:
                     recorder.emit(
                         "step.done",
                         run_id=context.run_id,
-                        case_id=case.id,
+                        case_id=case.execution_id,
+                        data_set=case.data_set,
+                        data_id=case.data_id,
                         step_id=step.id,
                         executor=step.executor,
                         operation=step.operation,
@@ -299,21 +330,37 @@ class CaseRunner:
                     if isinstance(exc, ResponseTooLarge):
                         step_report.response = safe_value(exc.response_metadata)
                     exc.easytest_location = {
-                        "case_id": case.id, "step_id": step.id, "operation": step.operation,
+                        "case_id": case.id,
+                        "execution_id": case.execution_id,
+                        "data_set": case.data_set,
+                        "data_id": case.data_id,
+                        "data_source_row": case.data_source_row,
+                        "step_id": step.id,
+                        "operation": step.operation,
                         "source": case.source, "source_row": step.source_row,
                     }
                     step_report.fail(exc)
-                    location = f"Case={case.id}, Step={step.id}, Operation={step.operation}"
+                    location = (
+                        f"Case={case.execution_id}, Step={step.id}, "
+                        f"Operation={step.operation}"
+                    )
                     if case.source:
                         location += f", Source={case.source}"
                     if step.source_row is not None:
                         location += f", sheet=steps, row={step.source_row}"
+                    if case.data_id is not None:
+                        location += (
+                            f", data_set={case.data_set}, data_id={case.data_id}, "
+                            f"data_row={case.data_source_row}"
+                        )
                     try:
                         exc.add_note(str(redact(location)))
                         recorder.emit(
                             "step.error",
                             run_id=context.run_id,
-                            case_id=case.id,
+                            case_id=case.execution_id,
+                            data_set=case.data_set,
+                            data_id=case.data_id,
                             step_id=step.id,
                             executor=step.executor,
                             operation=step.operation,
@@ -330,14 +377,15 @@ class CaseRunner:
         except BaseException as exc:
             error, traceback = exc, exc.__traceback__
             report.fail(exc, phase)
-        try:
-            _close_resources(owned.values(), set())
-        except BaseException as failure:
-            report.fail(failure, "case_cleanup")
-            if error is None:
-                error, traceback = failure, failure.__traceback__
-            else:
-                _add_failure_note(error, "case cleanup", failure)
+        if not shared_resources:
+            try:
+                _close_resources(owned.values(), set())
+            except BaseException as failure:
+                report.fail(failure, "case_cleanup")
+                if error is None:
+                    error, traceback = failure, failure.__traceback__
+                else:
+                    _add_failure_note(error, "case cleanup", failure)
         try:
             self.snapshots.finish_case(context, success=error is None)
         except BaseException as failure:
@@ -354,7 +402,9 @@ class CaseRunner:
                 recorder.emit(
                     "case.error",
                     run_id=context.run_id,
-                    case_id=case.id,
+                    case_id=case.execution_id,
+                    data_set=case.data_set,
+                    data_id=case.data_id,
                 )
             except BaseException as failure:
                 _add_failure_note(error, "error reporting", failure)
@@ -364,7 +414,9 @@ class CaseRunner:
         recorder.emit(
             "case.done",
             run_id=context.run_id,
-            case_id=case.id,
+            case_id=case.execution_id,
+            data_set=case.data_set,
+            data_id=case.data_id,
             step_count=len(results),
         )
         self.last_events = list(recorder.events)
@@ -394,16 +446,23 @@ class CaseRunner:
             return checked
         except (ConfigurationError, ContractError) as error:
             self.last_events = []
-            for case in selected:
-                report = CaseReport.for_case(
-                    case, profile=self.settings["profile"], run_mode=self.run_mode,
-                )
-                if case.id == getattr(error, "preflight_case_id", None):
-                    report.fail(error, "preflight")
-                    for step in report.steps:
-                        if step.id == getattr(error, "preflight_step_id", None):
-                            step.phase = "preflight"
-                            step.fail(error)
-                    self.last_report = report
-                self.case_reports.append(report)
+            with redaction_scope(self.config.runtime.get("redaction", {})):
+                for case in selected:
+                    report = CaseReport.for_case(
+                        case,
+                        profile=self.settings["profile"],
+                        run_mode=self.run_mode,
+                    )
+                    if case.execution_id == getattr(
+                        error,
+                        "preflight_execution_id",
+                        getattr(error, "preflight_case_id", None),
+                    ):
+                        report.fail(error, "preflight")
+                        for step in report.steps:
+                            if step.id == getattr(error, "preflight_step_id", None):
+                                step.phase = "preflight"
+                                step.fail(error)
+                        self.last_report = report
+                    self.case_reports.append(report)
             raise

@@ -103,18 +103,20 @@ class SnapshotManager:
             )
 
     def begin_case(self, context: RunContext) -> None:
+        case_id = context.case.execution_id
         if self.store is not None and context.run_mode != "read":
             self._require_baseline_confirmation(context.run_mode, self.config.environment)
-            self.store.begin(context.run_id, context.case.id)
+            self.store.begin(context.run_id, case_id)
         elif context.run_mode != "read":
             self._require_baseline_confirmation(context.run_mode, self.config.environment)
-            self._pending_files[(context.run_id, context.case.id)] = {}
+            self._pending_files[(context.run_id, case_id)] = {}
 
     def finish_case(self, context: RunContext, *, success: bool) -> None:
+        case_id = context.case.execution_id
         if self.store is not None and context.run_mode != "read":
-            self.store.finish(context.run_id, context.case.id, success=success)
+            self.store.finish(context.run_id, case_id, success=success)
         elif context.run_mode != "read":
-            pending = self._pending_files.pop((context.run_id, context.case.id), {})
+            pending = self._pending_files.pop((context.run_id, case_id), {})
             if success:
                 self._commit_files(pending)
 
@@ -195,7 +197,12 @@ class SnapshotManager:
             )
             return self.store.path
 
-        target = snapshot_target(self.snapshot_dir, context.case.id, name, extension)
+        target = snapshot_target(
+            self.snapshot_dir,
+            context.case.execution_id,
+            name,
+            extension,
+        )
         if kind in {"response", "database"} and context.run_mode == "read" and target.is_file():
             expected = json.loads(
                 read_bounded_file(
@@ -229,7 +236,7 @@ class SnapshotManager:
         content: bytes,
         context: RunContext,
     ) -> None:
-        key = (context.run_id, context.case.id)
+        key = (context.run_id, context.case.execution_id)
         pending = self._pending_files.setdefault(key, {})
         if context.run_mode == "write":
             current = pending.get(target)
@@ -326,15 +333,16 @@ class SnapshotManager:
     ) -> None:
         if self.store is None:
             raise RuntimeError("SQLite snapshot store is not configured")
+        case_id = context.case.execution_id
         baseline = self.store.latest_completed(
-            context.case.id,
+            case_id,
             name,
             exclude_run_id=context.run_id,
         )
         if context.run_mode != "read":
             record = SnapshotRecord(
                 run_id=context.run_id,
-                case_id=context.case.id,
+                case_id=case_id,
                 name=name,
                 kind=kind,
                 content=content,
@@ -348,8 +356,8 @@ class SnapshotManager:
         if baseline is None:
             if context.run_mode == "read":
                 raise SnapshotMismatchError(
-                    f"SQLite snapshot baseline does not exist: {context.case.id}/{name}",
-                    target=f"{context.case.id}/{name}",
+                    f"SQLite snapshot baseline does not exist: {case_id}/{name}",
+                    target=f"{case_id}/{name}",
                     differences=(Difference(
                         "$", "missing_expected", None, payload if kind != "screenshot"
                         else {"sha256": hashlib.sha256(content).hexdigest()},
@@ -363,18 +371,18 @@ class SnapshotManager:
             comparison = compare(expected, payload, rule)
             if not comparison.equal:
                 raise SnapshotMismatchError(
-                    f"SQLite snapshot mismatch: {context.case.id}/{name}\n"
+                    f"SQLite snapshot mismatch: {case_id}/{name}\n"
                     f"{format_differences(comparison)}",
-                    target=f"{context.case.id}/{name}",
+                    target=f"{case_id}/{name}",
                     differences=comparison.differences,
                 )
         elif baseline.content != content:
             expected_hash = hashlib.sha256(baseline.content).hexdigest()[:12]
             actual_hash = hashlib.sha256(content).hexdigest()[:12]
             raise SnapshotMismatchError(
-                f"SQLite screenshot snapshot mismatch: {context.case.id}/{name} "
+                f"SQLite screenshot snapshot mismatch: {case_id}/{name} "
                 f"(expected sha256={expected_hash}, actual sha256={actual_hash})",
-                target=f"{context.case.id}/{name}",
+                target=f"{case_id}/{name}",
                 differences=_byte_differences(baseline.content, content, is_json=False),
             )
 

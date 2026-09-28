@@ -59,17 +59,27 @@ class PreflightResult:
 
 
 def _case_contract(case: Case) -> None:
+    data_sets = {}
+    if case.data_set is not None and case.data_id is not None:
+        data_sets[case.data_set] = [{
+            "id": case.data_id,
+            "enabled": True,
+            "values": case.data,
+            "source_row": case.data_source_row,
+        }]
     document = {
         "schema_version": 1,
         "cases": [{
             "id": case.id, "name": case.name, "type": case.case_type,
             "enabled": case.enabled, "tags": list(case.tags), "variables": case.variables,
             "mock_profile": case.mock_profile, "snapshot_profile": case.snapshot_profile,
+            "data_set": case.data_set,
             "steps": [
                 {item.name: getattr(step, item.name) for item in dataclass_fields(step)}
                 for step in case.steps
             ],
         }],
+        "data_sets": data_sets,
     }
     parse_document(document, source=case.source)
     if list(case.steps) != sorted(case.steps, key=lambda step: step.order):
@@ -274,14 +284,17 @@ def _snapshot(config: ProjectConfig, case: Case, step_id: str, spec: Any, mode: 
     if config.runtime.get("snapshot_backend", "file").lower() == "file":
         target = snapshot_target(
             config.root / config.runtime.get("snapshot_dir", "snapshots"),
-            case.id, name, suffix,
+            case.execution_id, name, suffix,
         )
     if mode != "read":
         return False
     if config.runtime.get("snapshot_backend", "file").lower() == "sqlite":
         database = config.root / config.runtime.get("snapshot_database", ".easytest/snapshots.db")
         if not database.is_file():
-            raise ConfigurationError(f"SQLite snapshot baseline does not exist: {case.id}/{name}")
+            raise ConfigurationError(
+                "SQLite snapshot baseline does not exist: "
+                f"{case.execution_id}/{name}"
+            )
         wal = database.with_name(database.name + "-wal")
         if wal.is_file() and wal.stat().st_size:
             # Pending writer state cannot be read immutably without losing WAL data.
@@ -316,7 +329,7 @@ def _snapshot(config: ProjectConfig, case: Case, step_id: str, spec: Any, mode: 
                     "WHERE i.case_id=? AND i.name=? AND r.status='completed' LIMIT 1",
                     (
                         max_bytes + len(SNAPSHOT_RAW_MAGIC),
-                        case.id,
+                        case.execution_id,
                         name,
                     ),
                 ).fetchone()
@@ -332,11 +345,14 @@ def _snapshot(config: ProjectConfig, case: Case, step_id: str, spec: Any, mode: 
             if lock_fd is not None:
                 os.close(lock_fd)
         if row is None:
-            raise ConfigurationError(f"SQLite snapshot baseline does not exist: {case.id}/{name}")
+            raise ConfigurationError(
+                "SQLite snapshot baseline does not exist: "
+                f"{case.execution_id}/{name}"
+            )
         if row[2] is None:
             raise ConfigurationError(
                 f"SQLite snapshot baseline exceeds snapshot_max_bytes: "
-                f"{case.id}/{name}",
+                f"{case.execution_id}/{name}",
                 code="SNAPSHOT_TOO_LARGE",
                 field="snapshot_max_bytes",
             )
@@ -361,7 +377,8 @@ def _snapshot(config: ProjectConfig, case: Case, step_id: str, spec: Any, mode: 
                 )
             except (ValueError, ConfigurationError) as exc:
                 raise ConfigurationError(
-                    f"cannot read SQLite snapshot artifact: {case.id}/{name}"
+                    "cannot read SQLite snapshot artifact: "
+                    f"{case.execution_id}/{name}"
                 ) from exc
     else:
         if not target.is_file():
@@ -400,9 +417,11 @@ def preflight(
         step_id = ""
         field_name = "case"
         try:
-            if case.id in seen:
-                raise ContractError(f"duplicate case id: {case.id}")
-            seen.add(case.id)
+            if case.execution_id in seen:
+                raise ContractError(
+                    f"duplicate case/data execution id: {case.execution_id}"
+                )
+            seen.add(case.execution_id)
             _case_contract(case)
             if execution_policy is not None:
                 execution_policy.check_case(case)
@@ -513,19 +532,35 @@ def preflight(
                 ):
                     deferred_reasons.append("Dynamic snapshot rules, artifacts or pending SQLite WAL require runtime validation.")
                 if deferred_reasons:
-                    result.deferred.append({
-                        "case_id": case.id, "step_id": step.id,
+                    deferred = {
+                        "case_id": case.id,
+                        "step_id": step.id,
                         "reason": " ".join(deferred_reasons),
-                    })
+                    }
+                    if case.data_id is not None:
+                        deferred["data_id"] = case.data_id
+                    result.deferred.append(deferred)
                 scope["steps"][step.save_as or step.id] = DEFERRED
                 result.step_count += 1
         except (ConfigurationError, ContractError) as exc:
             if exc.field in {"config", "cases"}:
                 exc.field = field_name
             exc.preflight_case_id = case.id
+            exc.preflight_execution_id = case.execution_id
+            exc.preflight_data_set = case.data_set
+            exc.preflight_data_id = case.data_id
+            exc.preflight_data_source_row = case.data_source_row
             exc.preflight_step_id = step_id
             exc.preflight_source = case.source
-            location = f"Case={case.id}, Step={step_id or 'unknown'}, Source={case.source}"
+            location = (
+                f"Case={case.execution_id}, Step={step_id or 'unknown'}, "
+                f"Source={case.source}"
+            )
+            if case.data_id is not None:
+                location += (
+                    f", data_set={case.data_set}, data_id={case.data_id}, "
+                    f"data_row={case.data_source_row}"
+                )
             if step_id:
                 failed = next(step for step in case.steps if step.id == step_id)
                 exc.preflight_operation = failed.operation

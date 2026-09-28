@@ -285,7 +285,13 @@ def _list(args):
             "case_count": len(cases), "step_count": sum(len(case.steps) for case in cases),
             "cases": [
                 {
-                    "id": case.id, "name": safe_value(case.name), "source": safe_value(case.source),
+                    "id": case.id,
+                    "execution_id": case.execution_id,
+                    "name": safe_value(case.name),
+                    "source": safe_value(case.source),
+                    "data_set": case.data_set,
+                    "data_id": case.data_id,
+                    "data_source_row": case.data_source_row,
                     "tags": [safe_value(tag) for tag in case.tags],
                     "steps": [
                         {"id": step.id, "order": step.order, "executor": step.executor,

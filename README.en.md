@@ -12,7 +12,7 @@ Easy Suite is a multi-project repository containing four independent tools for f
 | [EasyDrop](easydrop/) | `1.3.0` |
 | [EasyNote](easynote/) | `0.8.6` |
 | [EasyMac](easymac/) | `0.4.4` |
-| [EasyTest](easytest/) | `0.3.1` |
+| [EasyTest](easytest/) | `0.4.0` |
 <!-- versions:end -->
 
 ## Projects
@@ -57,7 +57,7 @@ See [EasyMac README](easymac/README.md) for details.
 
 EasyTest is a Python tool for testing APIs and business workflows. Testers author cases in Excel, which the framework compiles into deterministic JSON and runs through the CLI, pytest, or a Notebook.
 
-Its main capabilities include HTTP, RPC, database, UI, and business workflow orchestration, whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, and self-contained HTML/PDF reports.
+Its main capabilities include HTTP, RPC, database, UI, and business workflow orchestration, shared Excel data sets for data-driven tests, whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, and self-contained HTML/PDF reports.
 
 Tech Stack: Python 3.12/3.13, pytest, openpyxl, SQLite.
 

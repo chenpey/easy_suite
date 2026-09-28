@@ -43,6 +43,10 @@ class HttpExecutor(Executor):
         if self._owns_client:
             self.client.close()
 
+    def reset_context(self, _context: RunContext | None = None) -> None:
+        """Clear row-local browser state while retaining pooled connections."""
+        self.client.session.cookies.clear()
+
     def execute(
         self,
         operation_name: str,

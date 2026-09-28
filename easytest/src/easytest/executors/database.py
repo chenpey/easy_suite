@@ -173,6 +173,32 @@ class DatabaseExecutor(Executor):
     ) -> None:
         self.config = config
         self.factories = factories or {}
+        self._data_connections: dict[tuple[str, str], Any] = {}
+
+    def close(self) -> None:
+        errors: list[BaseException] = []
+        for connection in self._data_connections.values():
+            try:
+                connection.close()
+            except BaseException as exc:
+                errors.append(exc)
+        self._data_connections.clear()
+        if errors:
+            raise errors[0]
+
+    def reset_context(self, context: RunContext) -> None:
+        """End leftover transactions before the next row reuses its connection."""
+        for key, connection in list(self._data_connections.items()):
+            if key[0] != context.case.id:
+                continue
+            try:
+                connection.rollback()
+            except Exception:
+                self._data_connections.pop(key, None)
+                try:
+                    connection.close()
+                except Exception:
+                    pass
 
     def _sqlite_target(self, settings: dict[str, Any]) -> tuple[str, Path | None]:
         database = str(settings.get("database", ":memory:"))
@@ -290,14 +316,16 @@ class DatabaseExecutor(Executor):
         write: bool,
         execute_many: bool,
         read_only: bool,
+        connection: Any | None = None,
     ) -> dict[str, Any]:
-        connection = self._connect(
-            driver,
-            dict(connection_settings),
-            write=write,
-            read_only=read_only,
-        )
-        try:
+        owned = connection is None
+        if connection is None:
+            connection = self._connect(
+                driver,
+                dict(connection_settings),
+                write=write,
+                read_only=read_only,
+            )
             if driver == "sqlite":
                 authorizer = _SqliteReadOnlyAuthorizer() if read_only else None
                 if authorizer is not None:
@@ -309,6 +337,7 @@ class DatabaseExecutor(Executor):
                 )
                 if authorizer is not None:
                     authorizer.configuring = False
+        try:
             with closing(connection.cursor()) as cursor:
                 if execute_many:
                     if not isinstance(parameters, list):
@@ -322,13 +351,19 @@ class DatabaseExecutor(Executor):
                 rowcount = cursor.rowcount if write else len(rows)
             if write:
                 connection.commit()
+            elif not owned:
+                connection.rollback()
             return {"rows": rows, "rowcount": rowcount, "write": write}
         except Exception:
-            if write:
-                connection.rollback()
+            if write or not owned:
+                try:
+                    connection.rollback()
+                except Exception:
+                    pass
             raise
         finally:
-            connection.close()
+            if owned:
+                connection.close()
 
     def execute(
         self,
@@ -393,6 +428,39 @@ class DatabaseExecutor(Executor):
         attempts = retries + 1 if driver == "mysql" and not actual_write else 1
         with lock:
             for attempt in range(1, attempts + 1):
+                pool_key = (
+                    (context.case.id, connection_name)
+                    if context.case.data_id is not None and driver not in self.factories
+                    else None
+                )
+                pooled = (
+                    self._data_connections.get(pool_key)
+                    if pool_key is not None
+                    else None
+                )
+                if pool_key is not None and pooled is None:
+                    pooled = self._connect(
+                        driver,
+                        dict(settings),
+                        write=actual_write,
+                        read_only=sqlite_read_only,
+                    )
+                    if driver == "sqlite":
+                        authorizer = (
+                            _SqliteReadOnlyAuthorizer()
+                            if sqlite_read_only
+                            else None
+                        )
+                        if authorizer is not None:
+                            pooled.set_authorizer(authorizer)
+                        self._configure_sqlite(
+                            pooled,
+                            settings,
+                            read_only=sqlite_read_only,
+                        )
+                        if authorizer is not None:
+                            authorizer.configuring = False
+                    self._data_connections[pool_key] = pooled
                 try:
                     output = self._execute_once(
                         driver=driver,
@@ -402,6 +470,7 @@ class DatabaseExecutor(Executor):
                         write=actual_write,
                         execute_many=execute_many,
                         read_only=sqlite_read_only,
+                        connection=pooled,
                     )
                     output.update({"sql_type": kind, "attempts": attempt})
                     return ExecutionResult(
@@ -410,6 +479,13 @@ class DatabaseExecutor(Executor):
                         output=output,
                     )
                 except Exception as exc:
+                    if pool_key is not None:
+                        connection = self._data_connections.pop(pool_key, None)
+                        if connection is not None:
+                            try:
+                                connection.close()
+                            except Exception:
+                                pass
                     if attempt >= attempts or not _is_retryable_mysql_error(exc):
                         raise
                     time.sleep(retry_delay * attempt)

@@ -31,7 +31,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --locked --extra notebook --extra examples
+      - run: uv sync --locked --extra browser-auth --extra notebook --extra examples
       - run: uv run ruff check .
       - name: Check committed XLSX compilation
         run: |

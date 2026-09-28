@@ -20,7 +20,7 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
 .filters{display:flex;gap:10px;align-items:end;margin:18px 0 14px;flex-wrap:wrap}.filters label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px}.filters input,.filters select{padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);min-height:40px}.search{flex:1;min-width:190px}.match-count{color:var(--muted);font-size:12px;margin:10px 0}.active-group{display:none;background:#edf5f4;border-radius:7px;padding:6px 10px;color:var(--teal)}
 .case{border:1px solid var(--line);border-radius:9px;margin:8px 0;overflow:hidden}.case>summary{display:grid;grid-template-columns:18px 65px minmax(100px,1fr) 90px 75px;gap:12px;padding:14px 15px;align-items:center;cursor:pointer;list-style:none}.case>summary::-webkit-details-marker{display:none}.case>summary::before{content:"›";font-size:22px;line-height:1;color:var(--muted)}.case[open]>summary::before{transform:rotate(90deg)}.case[open]>summary{background:#f8fafb;border-bottom:1px solid var(--line)}.case-name{font-weight:600;overflow-wrap:anywhere}.case-id{display:block;color:var(--muted);font-size:11px;font-weight:400}.num{font-variant-numeric:tabular-nums;text-align:right;color:var(--muted);font-size:12px}
 .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px;white-space:nowrap;background:#eef1f3;color:#60727e;width:fit-content}.badge.passed{background:#e2f2eb;color:var(--teal)}.badge.failed,.badge.interrupted{background:#fbeae8;color:var(--red)}.badge.skipped{background:#faf1d8;color:var(--amber)}
-.case-body{padding:16px}.metadata{color:var(--muted);font-size:12px;overflow-wrap:anywhere;margin-bottom:12px}.error{border-left:3px solid var(--red);background:#fff4f2;padding:9px 12px;margin:8px 0;font-size:12px;overflow-wrap:anywhere}.step{margin-top:10px;border:1px solid var(--line);border-radius:7px}.step>summary{padding:10px 12px;cursor:pointer;font-size:12px}.step>summary .badge{margin:0 8px}.step-body{padding:12px}.payloads,.diff-values{display:grid;grid-template-columns:1fr 1fr;gap:12px}.value-label{color:var(--muted);font-size:11px;margin:0 0 5px}pre{margin:0;padding:12px;background:#f2f5f7;border:1px solid #e8edef;border-radius:6px;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
+.case-body{padding:16px}.metadata{color:var(--muted);font-size:12px;overflow-wrap:anywhere;margin-bottom:12px}.error{border-left:3px solid var(--red);background:#fff4f2;padding:9px 12px;margin:8px 0;font-size:12px;overflow-wrap:anywhere}.step{margin-top:10px;border:1px solid var(--line);border-radius:7px}.step>summary{padding:10px 12px;cursor:pointer;font-size:12px}.step>summary .badge{margin:0 8px}.step-body{padding:12px}.payloads,.diff-values{display:grid;grid-template-columns:1fr 1fr;gap:12px}.data-payload{grid-template-columns:1fr;margin-bottom:12px}.value-label{color:var(--muted);font-size:11px;margin:0 0 5px}pre{margin:0;padding:12px;background:#f2f5f7;border:1px solid #e8edef;border-radius:6px;font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
 .diff{margin-top:13px;border-top:1px solid var(--line);padding-top:12px}.diff-title{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:9px;font-size:12px}.diff-title code{overflow-wrap:anywhere}.expected pre{background:#fff3f1;border-color:#f4dcd7}.actual pre{background:#eef8f2;border-color:#d6ecdf}.empty{padding:28px 10px;text-align:center;color:var(--muted);font-size:13px}.footer{color:var(--muted);font-size:11px;text-align:center;margin:18px 0}.hint{font-size:11px;color:var(--muted);margin:12px 0 0}
 @media(max-width:800px){header{padding:22px;align-items:start;flex-direction:column}.metrics{grid-template-columns:repeat(2,1fr)}.analysis{grid-template-columns:1fr;gap:0}.case>summary{grid-template-columns:15px 55px minmax(90px,1fr);gap:8px}.case>summary>.num{display:none}.payloads,.diff-values{grid-template-columns:1fr}.panel{padding:16px}main{padding:16px 12px}}
 </style>
@@ -131,7 +131,8 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
   }
   function caseNode(record) {
     const details = el("details",undefined,"case"), summary = el("summary");
-    const name = el("span",record.name || record.id,"case-name"); name.append(el("span",record.id,"case-id"));
+    const executionId = record.execution_id || record.id;
+    const name = el("span",record.name || record.id,"case-name"); name.append(el("span",executionId,"case-id"));
     const count = record.steps.reduce((n,step) => n + step.differences.length,0);
     summary.append(badge(record.status), name,el("span",`${count} 处差异`,"num"),el("span",ms(record.duration_ms),"num")); details.append(summary);
     let built = false;
@@ -139,6 +140,10 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
       if (!details.open || built) return; built = true;
       const content = el("div",undefined,"case-body");
       content.append(el("div",`来源：${record.source || "—"} · Profile ${record.profile || "—"} · ${record.run_mode || "—"}`,"metadata"));
+      if (record.data_id !== null && record.data_id !== undefined) {
+        content.append(el("div",`数据集：${record.data_set} · 数据行：${record.data_id}${record.data_source_row === null ? "" : ` · data 第 ${record.data_source_row} 行`}`,"metadata"));
+        const dataPayload = el("div",undefined,"payloads data-payload"); values(dataPayload,"本次数据",record.data); content.append(dataPayload);
+      }
       errors(content,record.errors); record.steps.forEach(step => content.append(stepNode(step)));
       if (!record.steps.length) content.append(el("div","此记录没有框架步骤","metadata"));
       details.append(content);

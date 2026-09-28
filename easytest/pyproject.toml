@@ -1,6 +1,6 @@
 [project]
 name = "easytest"
-version = "0.3.1"
+version = "0.4.0"
 description = "XLSX-first test scaffold with deterministic JSON artifacts for scenario, HTTP, RPC, database, and UI workflows"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -17,7 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 browser-auth = [
-    "browser-cookie3>=0.20.1",
+    "keyring>=25.7.0; sys_platform == 'darwin'",
+    "pycryptodome>=3.23.0",
+    "pywin32>=312; sys_platform == 'win32'",
 ]
 examples = [
     "pillow>=10.4.0",

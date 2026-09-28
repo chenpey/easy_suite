@@ -124,16 +124,23 @@ class NotebookSession:
         return compile_workbook(source)
 
     def cases(self, source: str | Path = "cases") -> list[dict[str, Any]]:
-        return [
-            {
+        values = []
+        for case in self._load(source):
+            value = {
                 "id": case.id,
                 "name": case.name,
                 "type": case.case_type,
                 "tags": list(case.tags),
                 "steps": len(case.steps),
             }
-            for case in self._load(source)
-        ]
+            if case.data_id is not None:
+                value.update(
+                    execution_id=case.execution_id,
+                    data_set=case.data_set,
+                    data_id=case.data_id,
+                )
+            values.append(value)
+        return values
 
     def operations(self, executor: str | None = None) -> list[dict[str, str]]:
         values = [
@@ -219,7 +226,15 @@ class NotebookSession:
                     f"case_id is required because source contains: {ids}"
                 )
             return cases[0]
-        for case in cases:
-            if case.id == case_id:
-                return case
+        exact = [case for case in cases if case.execution_id == case_id]
+        if len(exact) == 1:
+            return exact[0]
+        matching = [case for case in cases if case.id == case_id]
+        if len(matching) == 1:
+            return matching[0]
+        if matching:
+            ids = ", ".join(case.execution_id for case in matching)
+            raise ConfigurationError(
+                f"case_id {case_id!r} has multiple data rows; use one of: {ids}"
+            )
         raise ConfigurationError(f"case not found: {case_id}")

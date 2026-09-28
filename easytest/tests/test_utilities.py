@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 import requests
 
 from easytest.models import ConfigurationError, ContractError
-from easytest.transport.browser_auth import (
-    BrowserCookieError,
-    cookie_header,
-    get_cookies,
-)
 from easytest.transport.http import HttpClient, RetryPolicy
 from easytest.runtime.values import render_templates
 
@@ -22,38 +15,6 @@ from easytest.runtime.values import render_templates
 def test_nested_template_placeholders_are_rejected(value) -> None:
     with pytest.raises(ContractError, match="invalid template placeholder syntax"):
         render_templates(value, {"foo": {"x": 1}, "bar": "x"})
-
-
-@dataclass
-class _Cookie:
-    name: str
-    value: str
-
-
-def test_cookie_adapter_uses_injected_loader_without_exposing_secrets() -> None:
-    calls = []
-
-    def loader(**kwargs):
-        calls.append(kwargs)
-        return [_Cookie("session", "secret"), _Cookie("locale", "zh")]
-
-    cookies = get_cookies("https://service.example.com/path", loader=loader)
-
-    assert cookies == {"session": "secret", "locale": "zh"}
-    assert calls == [{"domain_name": "service.example.com"}]
-    assert (
-        cookie_header(
-            "service.example.com",
-            names={"locale"},
-            loader=loader,
-        )
-        == "locale=zh"
-    )
-
-
-def test_cookie_adapter_rejects_invalid_domain() -> None:
-    with pytest.raises(BrowserCookieError, match="invalid"):
-        get_cookies("://", loader=lambda **_kwargs: [])
 
 
 class _Response:

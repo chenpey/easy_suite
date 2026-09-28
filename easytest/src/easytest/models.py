@@ -70,6 +70,15 @@ class Step:
 
 
 @dataclass(frozen=True)
+class DataRow:
+    data_set: str
+    id: str
+    values: dict[str, Any]
+    enabled: bool = True
+    source_row: int | None = None
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     name: str = ""
@@ -81,10 +90,19 @@ class Case:
     snapshot_profile: str = "default"
     steps: tuple[Step, ...] = ()
     source: str = ""
+    data_set: str | None = None
+    data_id: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+    data_source_row: int | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
             object.__setattr__(self, "name", self.id)
+
+    @property
+    def execution_id(self) -> str:
+        """Return the storage/test identity for one data-row execution."""
+        return f"{self.id}.{self.data_id}" if self.data_id is not None else self.id
 
 
 @dataclass
@@ -114,6 +132,7 @@ class RunContext:
     def template_scope(self) -> dict[str, Any]:
         return {
             "variables": self.variables,
+            "data": self.case.data,
             "generate": self.generated,
             "steps": self.step_outputs,
             "state": self.state,

@@ -36,9 +36,12 @@ easytest run
 pytest
 ```
 
-Excel 的 cases 页维护用例名称，steps 页维护 operation、request、expect。
+Excel 的 cases 页维护用例名称，steps 页维护 operation、request、expect；
+data 页集中维护可复用的多组业务数据。`sample.login` 是默认禁用的数据驱动样例，
+启用后会按 data 页中 `login_cases` 的每个启用行独立执行。
 技术列已预填并隐藏；新增用例/步骤时取消隐藏，复制行并更新唯一 ID 与 order。
 `expect` 常用格式：`{"$.status_code": 200, "$.body.ok": true}`。
+步骤可通过 `${data.username}` 引用当前数据行，完整占位符保留数字、布尔和 null 类型。
 生成的同名 JSON 必须纳入版本控制；修改用例只编辑 Excel，再执行
 `easytest compile cases/demo.xlsx`。提交前或 CI 使用
 `easytest compile cases --check` 只读确认 JSON 与 XLSX 完全同步。
@@ -92,6 +95,8 @@ _AI_GUIDE = """
 AI 分析和执行的确定性编译产物；两者一起提交，但只编辑 XLSX。
 重命名/删除 XLSX 同步处理旧 JSON，否则会报孤立产物错误。
 按 Case/Step ID 修改，隐藏列同样要维护唯一 ID 和 order。配置不要覆盖无关条目。
+重复业务流程优先在 data 页增加数据行，并由 cases.data_set 引用；
+步骤通过 `${data.字段名}` 读取当前行，不复制整套 Case/Step。
 优先使用 `easytest edit cases/demo.xlsx --patch edit.json --validate --root .`
 执行结构化增删改名；落盘前按项目配置预检工作簿，失败保留原文件，成功更新同名 JSON。
 不加 --validate 仅检查工作簿契约；跨文件关系仍用 validate cases 检查。
@@ -159,6 +164,7 @@ def init_project(directory: str | Path) -> Path:
     documents = {
         "operations": {"operations": {
             "http.ping": {"executor": "http", "method": "GET", "url": "https://example.invalid/ping"},
+            "http.login": {"executor": "http", "method": "POST", "url": "https://example.invalid/login"},
         }},
         "runtime": {"default_profile": "offline-strict", "allow_db_write": False},
         "profiles": {"profiles": {
@@ -193,15 +199,72 @@ def init_project(directory: str | Path) -> Path:
     workbook = Workbook()
     cases = workbook.active
     cases.title = "cases"
-    cases.append(["case_id", "case_name", "case_type", "enabled"])
-    cases.append(["http.demo", "检查接口返回成功", "http", True])
+    cases.append(["case_id", "case_name", "case_type", "enabled", "data_set"])
+    cases.append(["http.demo", "检查接口返回成功", "http", True, None])
+    cases.append([
+        "sample.login",
+        "登录数据驱动示例（启用后运行）",
+        "http",
+        False,
+        "login_cases",
+    ])
     steps = workbook.create_sheet("steps")
-    steps.append(["case_id", "step_id", "order", "executor", "operation", "request", "expect"])
+    steps.append([
+        "case_id",
+        "step_id",
+        "order",
+        "executor",
+        "operation",
+        "request",
+        "mock",
+        "expect",
+    ])
     steps.append([
         "http.demo", "ping", 1, "http", "http.ping", "{}",
+        None,
         '{"$.status_code": 200, "$.body.ok": true}',
     ])
-    for sheet, hidden in ((cases, ("A", "C")), (steps, ("A", "B", "C", "D"))):
+    steps.append([
+        "sample.login",
+        "login",
+        1,
+        "http",
+        "http.login",
+        '{"json":{"username":"${data.username}",'
+        '"password":"${data.password}","phone":"${data.phone}"}}',
+        '{"response":{"status_code":"${data.expected_status}",'
+        '"body":{"message":"${data.expected_message}"}}}',
+        '{"$.status_code":"${data.expected_status}",'
+        '"$.body.message":"${data.expected_message}"}',
+    ])
+    data = workbook.create_sheet("data")
+    data.append([
+        "data_set",
+        "data_id",
+        "enabled",
+        "username",
+        "password",
+        "phone",
+        "expected_status",
+        "expected_message",
+    ])
+    data.append([
+        "login_cases", "valid", True, "demo-user", "correct-demo-only",
+        "13800000000", 200, "login succeeded",
+    ])
+    data.append([
+        "login_cases", "wrong_password", True, "demo-user", "wrong-demo-only",
+        "13800000000", 401, "invalid credentials",
+    ])
+    data.append([
+        "login_cases", "empty_phone", True, "demo-user", "correct-demo-only",
+        None, 400, "phone is required",
+    ])
+    for sheet, hidden in (
+        (cases, ("A", "C")),
+        (steps, ("A", "B", "C", "D")),
+        (data, ("A",)),
+    ):
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
         for cell in sheet[1]:
@@ -211,9 +274,10 @@ def init_project(directory: str | Path) -> Path:
             sheet.column_dimensions[cell.column_letter].width = 36
         for column in hidden:
             sheet.column_dimensions[column].hidden = True
-        for cell in sheet[2]:
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-        sheet.row_dimensions[2].height = 45
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+            sheet.row_dimensions[cell.row].height = 45
     source = root / "cases" / "demo.xlsx"
     source.parent.mkdir()
     try:

@@ -111,11 +111,23 @@ def render_pdf(data: dict[str, Any]) -> bytes:
         add("暂无用例记录。")
     for index, case in enumerate(data["cases"], 1):
         add(f"{index}. [{status[case['status']]}] {case['name'] or case['id']}", "heading")
-        add(f"Case：{case['id']} · 耗时：{case['duration_ms']} ms", "muted")
+        execution_id = case.get("execution_id") or case["id"]
+        add(f"Case：{execution_id} · 耗时：{case['duration_ms']} ms", "muted")
         add(
             f"来源：{case['source'] or '—'} · Profile：{case['profile'] or '—'}"
             f" · 模式：{case['run_mode'] or '—'}", "muted",
         )
+        if case.get("data_id") is not None:
+            row = (
+                f" · data 第 {case['data_source_row']} 行"
+                if case.get("data_source_row") is not None
+                else ""
+            )
+            add(
+                f"数据集：{case['data_set']} · 数据行：{case['data_id']}{row}",
+                "muted",
+            )
+            payload("本次数据", case.get("data"))
         errors(case["errors"])
         for step in case["steps"]:
             add(f"[{status[step['status']]}] {step['id']} · {step['operation']}", "step")
