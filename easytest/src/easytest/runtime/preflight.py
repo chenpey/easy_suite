@@ -20,6 +20,7 @@ from easytest.cases.schema import parse_document
 from easytest.config import ProjectConfig, resolve_env
 from easytest.executors.database import WRITE_SQL_TYPES, sql_type
 from easytest.executors.http import request_settings
+from easytest.validation import http_secret_sources
 from easytest.models import Case, ConfigurationError, ContractError, MockMissError, RunContext
 from easytest.runtime.assertions import expectation_checks
 from easytest.runtime.mocks import MockEngine
@@ -144,6 +145,13 @@ def _http(
         else merge_nested(template_shape(operation), request)
     )
     http_settings(settings, operation=True, required=True)
+    if not isinstance(settings.get("max_response_bytes"), Deferred) and (
+        settings["max_response_bytes"] > operation["max_response_bytes"]
+    ):
+        raise ConfigurationError(
+            "HTTP request max_response_bytes exceeds operation limit",
+            code="INVALID_VALUE", field="max_response_bytes",
+        )
     return settings
 
 
@@ -339,11 +347,18 @@ def preflight(
                         custom_executor=custom_executor,
                     )
                 field_name = "request"
+                if step.executor == "http" and not custom_executor:
+                    http_secret_sources(step.request, runtime_templates=True)
                 request = render_templates(step.request, scope)
                 field_name = "mock"
                 raw_mock = mocks.resolve(
                     step_mock=step.mock, profile_name=mock_profile, operation_name=step.operation,
                 )
+                if (
+                    step.executor == "http" and not custom_executor
+                    and isinstance(raw_mock, dict) and raw_mock.get("kind") == "inject"
+                ):
+                    http_secret_sources(raw_mock.get("request"), runtime_templates=True)
                 mock = render_templates(raw_mock, scope)
                 mock_settings(mock)
                 field_name = "expect"

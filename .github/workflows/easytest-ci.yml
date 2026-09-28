@@ -1,0 +1,46 @@
+name: EasyTest CI
+
+on:
+  push:
+    paths:
+      - "easytest/**"
+      - ".github/workflows/easytest-ci.yml"
+  pull_request:
+    paths:
+      - "easytest/**"
+      - ".github/workflows/easytest-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    defaults:
+      run:
+        working-directory: easytest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --extra notebook --extra examples
+      - run: uv run ruff check .
+      - name: Check committed XLSX compilation
+        run: |
+          uv run easytest compile examples --check
+          uv run easytest compile tests/fixtures/project/cases --check
+      - run: uv run pytest -q
+      - name: Offline demos
+        run: |
+          uv run easytest run --root examples/jsonplaceholder
+          uv run easytest run mock_cases --root examples/jsonplaceholder
+      - run: uv build --wheel
+      - run: uv run python scripts/verify_wheel.py

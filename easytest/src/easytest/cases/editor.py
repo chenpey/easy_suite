@@ -22,6 +22,10 @@ from easytest.cases.compiler import (
     workbook_document,
 )
 from easytest.models import ContractError
+from easytest.cases.schema import parse_document
+from easytest.config import ProjectConfig
+from easytest.runtime.policy import load_execution_policy
+from easytest.runtime.preflight import preflight
 
 
 _OPERATION_FIELDS = {
@@ -237,7 +241,14 @@ def _apply_step(workbook, operation: dict[str, Any]) -> None:
 def edit_workbook(
     path: str | Path,
     operations: list[dict[str, Any]],
+    *,
+    validate: bool = False,
+    root: str | Path = ".",
+    profile: str | None = None,
+    execution_policy: str | Path | None = None,
 ) -> dict[str, Any]:
+    if not validate and (profile is not None or execution_policy is not None):
+        raise _error("profile/execution_policy require validate=True", "validate")
     source = Path(path).resolve()
     if source.suffix.lower() != ".xlsx":
         raise _error("structured editing only supports XLSX sources", "source")
@@ -267,11 +278,25 @@ def edit_workbook(
         for worksheet in (workbook["cases"], workbook["steps"]):
             worksheet.auto_filter.ref = worksheet.dimensions
         workbook.save(temporary)
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
     finally:
         workbook.close()
 
     try:
-        workbook_document(temporary)
+        document = workbook_document(temporary)
+        if validate:
+            config = ProjectConfig(root)
+            settings = config.resolve_run(profile=profile)
+            cases = [case for case in parse_document(document, source=str(source)) if case.enabled]
+            if not cases:
+                raise _error("edited workbook has no enabled cases", "enabled")
+            preflight(
+                cases, config, settings,
+                execution_policy=load_execution_policy(root, execution_policy),
+            )
         if source.read_bytes() != original:
             raise ContractError(
                 f"workbook changed while editing: {source}",
@@ -295,4 +320,5 @@ def edit_workbook(
         "compiled": str(compiled),
         "operation_count": len(validated),
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "validated": validate,
     }

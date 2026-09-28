@@ -92,6 +92,11 @@ class _Response:
     def json(self):
         return self.body
 
+    def iter_content(self, chunk_size):
+        import json
+
+        yield json.dumps(self.body).encode()
+
     def close(self) -> None:
         self.closed = True
 

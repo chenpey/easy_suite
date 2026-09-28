@@ -14,7 +14,8 @@ from dotenv import dotenv_values
 from dotenv.variables import parse_variables
 
 from easytest.models import ConfigurationError
-from easytest.validation import mock_settings, snapshot_settings, template_shape, text
+from easytest.validation import http_secret_sources, mock_settings, snapshot_settings, template_shape, text
+from easytest.transport.http import DEFAULT_MAX_RESPONSE_BYTES, response_limit
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)}")
 
@@ -167,7 +168,18 @@ class ProjectConfig:
         _known_fields(self.runtime, {
             "run_mode", "allow_db_write", "default_profile", "database", "observability",
             "snapshot_backend", "snapshot_database", "snapshot_dir", "snapshot_history_keep",
+            "http", "redaction",
         }, "runtime")
+        http = _object(self.runtime.get("http", {}), "runtime.http")
+        _known_fields(http, {"max_response_bytes"}, "runtime.http")
+        limit = response_limit(http.get("max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES))
+        redaction = _object(self.runtime.get("redaction", {}), "runtime.redaction")
+        _known_fields(redaction, {"secret_keys", "pii_keys"}, "runtime.redaction")
+        for key, values in redaction.items():
+            if not isinstance(values, list) or any(
+                not isinstance(item, str) or not item.strip() for item in values
+            ):
+                raise ConfigurationError(f"runtime.redaction.{key} must be a list of non-empty strings")
         _run_mode(self.runtime.get("run_mode", "read"))
         if "allow_db_write" in self.runtime:
             _boolean(self.runtime["allow_db_write"], "runtime.allow_db_write")
@@ -253,6 +265,13 @@ class ProjectConfig:
                         f"database operation {name!r} must use bound parameters, "
                         "not environment interpolation in SQL"
                     )
+            if operation.get("executor") == "http":
+                http_secret_sources(operation)
+                if response_limit(operation.get("max_response_bytes", limit)) > limit:
+                    raise ConfigurationError(
+                        "HTTP operation max_response_bytes exceeds runtime.http limit",
+                        code="INVALID_VALUE", field=f"operations.{name}.max_response_bytes",
+                    )
             if operation.get("executor") == "rpc":
                 auth = operation.get("auth", {})
                 if not isinstance(auth, dict):
@@ -334,7 +353,13 @@ class ProjectConfig:
                 f"but step requested {executor!r}",
                 code="EXECUTOR_MISMATCH", field="executor",
             )
-        return dict(operation)
+        result = dict(operation)
+        if executor == "http":
+            result.setdefault(
+                "max_response_bytes",
+                self.runtime.get("http", {}).get("max_response_bytes", DEFAULT_MAX_RESPONSE_BYTES),
+            )
+        return result
 
     def connection(self, name: str) -> dict[str, Any]:
         connections = self.runtime.get("database", {}).get("connections", {})

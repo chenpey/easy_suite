@@ -81,8 +81,35 @@ def number(value: Any, label: str, *, minimum: float = 0, integer: bool = False)
 HTTP_FIELDS = {
     "method", "url", "path", "headers", "params", "data", "json", "retry",
     "expected_status", "raise_for_status", "timeout", "trust_env", "verify",
-    "cookies", "files", "allow_redirects", "cert", "stream",
+    "cookies", "files", "allow_redirects", "cert", "stream", "max_response_bytes",
 }
+
+
+def http_secret_sources(value: Any, *, runtime_templates: bool = False) -> None:
+    """Check source text before environment/template resolution; never echo values."""
+    if not isinstance(value, dict):
+        return
+    headers = value.get("headers")
+    if not isinstance(headers, dict):
+        return
+    reference = r"\$\{[A-Z][A-Z0-9_]*}"
+    if runtime_templates:
+        reference = r"\$\{(?:variables|steps|state)\.[^{}]+}"
+    for name, item in headers.items():
+        key = re.sub(r"[^a-z0-9]", "", str(name).lower())
+        sensitive = (
+            key in {"authorization", "proxyauthorization", "cookie", "apikey"}
+            or any(word in key for word in ("token", "secret", "password", "apikey"))
+        )
+        if sensitive and item is not None and (
+            not isinstance(item, str)
+            or not re.fullmatch(r"(?:Bearer |Basic )?" + reference, item, re.IGNORECASE if runtime_templates else 0)
+        ):
+            raise ConfigurationError(
+                "sensitive HTTP headers require an environment reference in operations "
+                "or a runtime reference in step requests",
+                code="HTTP_SECRET_SOURCE", field=f"HTTP headers.{name}",
+            )
 
 
 def http_settings(value: Any, *, operation: bool = False, required: bool = False) -> None:
@@ -90,6 +117,10 @@ def http_settings(value: Any, *, operation: bool = False, required: bool = False
     fields(value, HTTP_FIELDS | ({"executor"} if operation else set()), label)
     if isinstance(value, Deferred):
         return
+    if "max_response_bytes" in value and not isinstance(value["max_response_bytes"], Deferred):
+        from easytest.transport.http import response_limit
+
+        response_limit(value["max_response_bytes"])
     if required and "url" not in value:
         raise ConfigurationError(
             "HTTP operation/request must define url", code="MISSING_FIELD", field="HTTP url",

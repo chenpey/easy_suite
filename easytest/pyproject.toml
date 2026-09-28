@@ -1,6 +1,6 @@
 [project]
 name = "easytest"
-version = "0.2.0"
+version = "0.3.0"
 description = "XLSX-first test scaffold with deterministic JSON artifacts for scenario, HTTP, RPC, database, and UI workflows"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

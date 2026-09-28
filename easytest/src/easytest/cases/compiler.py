@@ -22,6 +22,19 @@ STEP_OPTIONAL_COLUMNS = {"request", "save_as", "mock", "snapshot", "expect"}
 JSON_COLUMNS = {"variables", "request", "mock", "snapshot", "expect"}
 
 
+def _location(error: ContractError, path: Path, sheet: str, row: int,
+              column: str, value: Any = None, expected: str = "") -> ContractError:
+    error.easytest_location = {
+        "source": str(path), "sheet": sheet, "source_row": row, "column": column,
+        "actual_type": type(value).__name__, "expected_type": expected,
+    }
+    error.add_note(
+        f"Source={path}, sheet={sheet}, row={row}, column={column}, "
+        f"actual_type={type(value).__name__}, expected_type={expected}"
+    )
+    return error
+
+
 def _atomic_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
@@ -113,12 +126,38 @@ def _sheet_rows(workbook_path: Path, worksheet) -> list[dict[str, Any]]:
                     f"{workbook_path.name}:{worksheet.title}!{cell.coordinate} "
                     "contains a formula; use a literal value"
                 )
+            if header in {
+                "case_id", "case_name", "case_type", "step_id", "executor",
+                "operation", "save_as", "mock_profile", "snapshot_profile", "tags",
+            } and cell.value is not None and not isinstance(cell.value, str):
+                raise _location(
+                    ContractError(f"{header} must be a string; automatic Excel type conversion is not supported",
+                                  code="INVALID_TYPE", field=header),
+                    workbook_path, worksheet.title, row_index, header, cell.value, "str",
+                )
             value = _cell_value(cell.value)
             if header in JSON_COLUMNS:
-                value = _parse_json_cell(
-                    value,
-                    field=f"{workbook_path.name}:{worksheet.title}!{cell.coordinate}",
+                try:
+                    value = _parse_json_cell(
+                        value,
+                        field=f"{workbook_path.name}:{worksheet.title}!{cell.coordinate}",
+                    )
+                    if header in {"variables", "request"} and value is not None and not isinstance(value, dict):
+                        raise ContractError(f"{header} must be a JSON object", code="INVALID_TYPE", field=header)
+                except ContractError as error:
+                    raise _location(error, workbook_path, worksheet.title, row_index,
+                                    header, value, "JSON object" if header in {"variables", "request"} else "JSON")
+            if header == "case_type" and (not isinstance(value, str) or value.lower() not in {"scenario", "http", "rpc"}):
+                raise _location(
+                    ContractError("case type must be one of scenario/http/rpc", field="case_type"),
+                    workbook_path, worksheet.title, row_index, header, cell.value, "scenario/http/rpc",
                 )
+            if header == "enabled":
+                try:
+                    value = _parse_bool(value)
+                except ContractError as error:
+                    raise _location(error, workbook_path, worksheet.title, row_index,
+                                    header, cell.value, "boolean")
             record[header] = value
         record["_row"] = row_index
         rows.append(record)
@@ -178,7 +217,10 @@ def workbook_document(path: str | Path) -> dict[str, Any]:
     for row in case_rows:
         case_id = str(row.get("case_id") or "").strip()
         if case_id in seen_case_ids:
-            raise ContractError(f"duplicate case_id {case_id!r} in cases sheet")
+            raise _location(
+                ContractError(f"duplicate case_id {case_id!r} in cases sheet", field="case_id"),
+                workbook_path, "cases", row["_row"], "case_id", row.get("case_id"), "unique string",
+            )
         seen_case_ids.add(case_id)
         cases.append(
             {
@@ -206,7 +248,18 @@ def workbook_document(path: str | Path) -> dict[str, Any]:
         "compiler_version": __version__,
         "cases": sorted(cases, key=lambda item: item["id"]),
     }
-    parse_document(document, source=str(workbook_path))
+    try:
+        parse_document(document, source=str(workbook_path))
+    except ContractError as error:
+        location = getattr(error, "easytest_location", {})
+        if location.get("source_row") is None:
+            case_id = location.get("case_id")
+            row = next((item for item in case_rows if item.get("case_id") == case_id), None)
+            if row is not None:
+                column = {"case.id": "case_id", "case.name": "case_name"}.get(error.field, error.field)
+                _location(error, workbook_path, "cases", row["_row"], column, row.get(column), "case contract")
+                error.easytest_location["case_id"] = case_id
+        raise
     for case in document["cases"]:
         case["steps"].sort(key=lambda item: int(item["order"]))
     return document

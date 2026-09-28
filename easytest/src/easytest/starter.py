@@ -16,7 +16,8 @@ _README = """# 我的测试项目
 两个入口都会自动编译 Excel。项目默认离线运行，无需配置账号或启动服务。
 AI 操作先读 `AI_GUIDE.md`，其中提供当前安装包的契约读取方法。
 使用 `easytest list` 发现用例，`easytest run --case-id http.demo` 精确运行。
-脚本化修改使用 `easytest edit cases/demo.xlsx --patch edit.json`，不要改生成的 JSON。
+脚本化修改使用 `easytest edit cases/demo.xlsx --patch edit.json --validate --root .`，
+落盘前预检工作簿；不要改生成的 JSON。跨文件校验使用 `easytest validate cases`。
 
 如果在 EasyTest 框架目录创建了本项目，可以直接在那个环境执行：
 
@@ -65,6 +66,10 @@ live 运行会真实访问所配置的服务。
 受控自动化可由宿主设置绝对路径的 `EASYTEST_EXECUTION_POLICY`，限制 Profile、
 Case、operation、executor 及 HTTP method/origin，命令行不能覆盖该策略。
 敏感配置使用环境变量，例如 `"Authorization": "Bearer ${HTTP_TOKEN}"`。
+敏感 HTTP header 不接受配置字面量。HTTP 默认限制解压后响应体为 10 MiB，
+超限显式失败，stream 不能绕过；详见安装包 CONTRACT.md。
+项目可在 runtime.redaction 添加 secret_keys/pii_keys，但不能识别任意业务密钥。
+`easytest run --fail-fast` 首个失败 Case 后停止，剩余项标为 not_run；不回滚业务写入。
 项目根目录 .env 保存在独立映射中，进程环境优先；修改后重建 Runner / NotebookSession。
 
 只有 `config/operations.json` 是必需文件。其余配置用于此项目的离线示例：
@@ -85,8 +90,9 @@ _AI_GUIDE = """
 AI 分析和执行的确定性编译产物；两者一起提交，但只编辑 XLSX。
 重命名/删除 XLSX 同步处理旧 JSON，否则会报孤立产物错误。
 按 Case/Step ID 修改，隐藏列同样要维护唯一 ID 和 order。配置不要覆盖无关条目。
-优先使用 `easytest edit cases/demo.xlsx --patch edit.json` 执行结构化增删改名；
-它会校验完整工作簿并自动更新同名 JSON。
+优先使用 `easytest edit cases/demo.xlsx --patch edit.json --validate --root .`
+执行结构化增删改名；落盘前按项目配置预检工作簿，失败保留原文件，成功更新同名 JSON。
+不加 --validate 仅检查工作簿契约；跨文件关系仍用 validate cases 检查。
 
 ```bash
 easytest list --root .                      # 只读发现，无凭据解析或业务调用
@@ -114,6 +120,9 @@ validate.data.input_hash 与 run.data.input_hash 可核对所选 Case、配置�
 
 live 允许真实执行但不会清除显式 Mock；read 只控制快照，不能阻止 HTTP/RPC 写入。
 数据库写权限单独控制。失败后的业务状态可能未知，不要盲目重跑写操作。
+CLI 可使用 --fail-fast 或 --max-failures N，后续未执行 Case 为 not_run。
+HTTP_RESPONSE_TOO_LARGE 的响应哈希仅覆盖已读取前缀，不代表完整响应；
+该步骤未执行断言或快照，也不自动重试。先核对接口与副作用再处理。
 真实自动化应由可信宿主设置 `EASYTEST_EXECUTION_POLICY`；它是应用层 allowlist，
 不是操作系统网络沙箱。受保护的 HTTP operation 需设置 `allow_redirects=false`；
 获准的自定义 handler 仍属于受信任代码。

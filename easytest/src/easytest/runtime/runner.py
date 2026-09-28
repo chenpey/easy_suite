@@ -21,7 +21,8 @@ from easytest.models import (
 from easytest.reports.results import CaseReport, error_info, safe_value
 from easytest.runtime.assertions import assert_expectations
 from easytest.runtime.mocks import MockEngine
-from easytest.runtime.observability import EventRecorder, redact
+from easytest.runtime.observability import EventRecorder, redact, redaction_scope
+from easytest.transport.http import ResponseTooLarge
 from easytest.runtime.policy import ExecutionPolicy, load_execution_policy
 from easytest.runtime.preflight import PreflightResult, preflight
 from easytest.runtime.values import render_templates
@@ -142,7 +143,8 @@ class CaseRunner:
         else:
             checked = self.preflight([case])
             input_hash = checked.input_hash
-        return self._execute(case, input_hash=input_hash)
+        with redaction_scope(self.config.runtime.get("redaction", {})):
+            return self._execute(case, input_hash=input_hash)
 
     def _execute(
         self,
@@ -294,6 +296,8 @@ class CaseRunner:
                     step_report.status = "passed"
                     step_report.phase = "done"
                 except BaseException as exc:
+                    if isinstance(exc, ResponseTooLarge):
+                        step_report.response = safe_value(exc.response_metadata)
                     exc.easytest_location = {
                         "case_id": case.id, "step_id": step.id, "operation": step.operation,
                         "source": case.source, "source_row": step.source_row,

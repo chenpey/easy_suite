@@ -95,7 +95,8 @@ def error_info(error: BaseException, phase: str) -> dict[str, Any]:
             expected=safe_value(error.expected, path=error.path),
             actual=safe_value(error.actual, path=error.path),
         )
-    for name in ("case_id", "step_id", "source", "source_row", "operation"):
+    for name in ("case_id", "step_id", "source", "source_row", "operation",
+                 "sheet", "column", "actual_type", "expected_type"):
         value = getattr(error, "easytest_location", {}).get(
             name, getattr(error, f"preflight_{name}", None),
         )
