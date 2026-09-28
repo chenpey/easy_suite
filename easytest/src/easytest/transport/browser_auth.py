@@ -68,16 +68,6 @@ def get_cookies(
     return result
 
 
-def get_cookie_value(
-    domain: str,
-    name: str,
-    browser: str = "chrome",
-    *,
-    loader: CookieLoader | None = None,
-) -> str | None:
-    return get_cookies(domain, browser, loader=loader).get(name)
-
-
 def cookie_header(
     url: str,
     browser: str = "chrome",

@@ -31,7 +31,6 @@ _RUNNERS = pytest.StashKey[list[tuple[CaseRunner, int]]]()
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("easytest")
     group.addoption(
-        "--case-json",
         "--case-source",
         action="append",
         default=[],
@@ -41,7 +40,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--run-mode",
         choices=("read", "write", "baseline"),
         default=None,
-        help="Snapshot mode (legacy database permission follows mode if unspecified).",
+        help="Snapshot mode; database write permission is configured separately.",
     )
     group.addoption("--profile", default=None, help="Run profile from config/profiles.json.")
     group.addoption("--easytest-root", default=None, help="Test project root.")
@@ -74,7 +73,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if "table_case" not in metafunc.fixturenames:
         return
     metafunc.config.stash[_STATE].enabled = True
-    case_files = metafunc.config.getoption("--case-json")
+    case_files = metafunc.config.getoption("--case-source")
     cases = load_project_cases(case_files or "cases", root=_root(metafunc.config))
     metafunc.parametrize("table_case", cases, ids=[case.id for case in cases])
 

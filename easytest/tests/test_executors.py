@@ -20,7 +20,12 @@ from easytest.transport.http import HttpClient
 ROOT = Path(__file__).resolve().parent / "fixtures" / "project"
 
 
-def _context(root: Path, run_mode: str = "read") -> RunContext:
+def _context(
+    root: Path,
+    run_mode: str = "read",
+    *,
+    allow_db_write: bool = False,
+) -> RunContext:
     case = Case(
         id="executor.case",
         name="Executor case",
@@ -32,7 +37,13 @@ def _context(root: Path, run_mode: str = "read") -> RunContext:
         snapshot_profile="default",
         steps=(),
     )
-    return RunContext(case=case, root=root, run_mode=run_mode, variables={})
+    return RunContext(
+        case=case,
+        root=root,
+        run_mode=run_mode,
+        variables={},
+        allow_db_write=allow_db_write,
+    )
 
 
 class _Response:
@@ -186,8 +197,8 @@ def test_database_executor_runs_bound_query(
     update = DatabaseExecutor(config).execute(
         "database.update_account",
         config.operation("database.update_account", "database"),
-        {"id": "account-001", "status": "CLOSED"},
-        _context(ROOT, run_mode="write"),
+        {"parameters": {"id": "account-001", "status": "CLOSED"}},
+        _context(ROOT, run_mode="write", allow_db_write=True),
     )
     assert update.output == {
         "attempts": 1,
@@ -215,13 +226,27 @@ def test_database_executor_rejects_write_flag_mismatch() -> None:
                 "write": False,
             },
             {"status": "CLOSED"},
-            _context(ROOT, run_mode="write"),
+            _context(ROOT, run_mode="write", allow_db_write=True),
         )
 
 
 def test_database_executor_rejects_multiple_statements() -> None:
     with pytest.raises(ConfigurationError, match="exactly one SQL statement"):
         sql_type("SELECT 1; DELETE FROM accounts")
+
+
+def test_database_executor_requires_parameters_field() -> None:
+    with pytest.raises(ConfigurationError, match="unknown fields"):
+        DatabaseExecutor(ProjectConfig(ROOT)).execute(
+            "database.query",
+            {
+                "connection": "default",
+                "statement": "SELECT :id AS id",
+                "write": False,
+            },
+            {"id": "flat"},
+            _context(ROOT),
+        )
 
 
 def test_database_executor_supports_sqlite_executemany(
@@ -245,7 +270,7 @@ def test_database_executor_supports_sqlite_executemany(
             "write": True,
         },
         {"parameters": [{"id": "one"}, {"id": "two"}]},
-        _context(ROOT, run_mode="write"),
+        _context(ROOT, run_mode="write", allow_db_write=True),
     )
 
     assert result.output["rowcount"] == 2
@@ -290,7 +315,7 @@ def test_database_executor_enforces_sqlite_read_only_connection(
                 "write": True,
             },
             {},
-        _context(ROOT, run_mode="write"),
+        _context(ROOT, run_mode="write", allow_db_write=True),
         )
 
 
@@ -415,7 +440,7 @@ def test_database_executor_retries_only_mysql_reads(monkeypatch) -> None:
 
 @pytest.mark.parametrize("mode,permission,allowed", [
     ("read", True, True), ("write", False, False), ("baseline", False, False),
-    ("read", None, False), ("write", None, True),
+    ("read", False, False), ("write", False, False),
 ])
 def test_database_write_permission_is_independent_of_snapshots(
     tmp_path, monkeypatch, mode, permission, allowed,
@@ -425,8 +450,7 @@ def test_database_write_permission_is_independent_of_snapshots(
         connection.execute("CREATE TABLE events (id INTEGER)")
     monkeypatch.setenv("DB_DRIVER", "sqlite")
     monkeypatch.setenv("DB_PATH", str(database))
-    context = _context(ROOT, mode)
-    context.allow_db_write = permission
+    context = _context(ROOT, mode, allow_db_write=permission)
     executor = DatabaseExecutor(ProjectConfig(ROOT))
     operation = {"statement": "INSERT INTO events VALUES (1)", "write": True}
     if allowed:

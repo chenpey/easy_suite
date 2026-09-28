@@ -195,9 +195,6 @@ def http_settings(value: Any, *, operation: bool = False, required: bool = False
     retry = value.get("retry")
     if retry is None or isinstance(retry, Deferred):
         return
-    if type(retry) is int:
-        number(retry, "HTTP retry", integer=True)
-        return
     fields(retry, {"retries", "backoff_seconds", "jitter_seconds", "methods", "status_codes"}, "HTTP retry")
     for key in ("retries", "backoff_seconds", "jitter_seconds"):
         if key in retry:
@@ -264,7 +261,7 @@ def mock_settings(value: Any) -> None:
 SNAPSHOT_FIELDS = {
     "kind", "name", "select", "artifact", "ignore_paths", "ignore_keys",
     "ignore_key_suffixes", "ignore_key_exclusions", "null_strings", "ignore_empty",
-    "sort_lists_by", "unordered_lists", "normalizers", "replacements",
+    "unordered_lists", "normalizers", "replacements",
 }
 
 
@@ -277,7 +274,7 @@ def snapshot_settings(value: Any, *, spec: bool = False) -> None:
     kind = value.get("kind", "response")
     if not isinstance(kind, Deferred) and kind not in ("response", "database", "screenshot"):
         raise ConfigurationError("unsupported snapshot kind")
-    for key in ("rule", "name", "select", "artifact", "sort_lists_by"):
+    for key in ("rule", "name", "select", "artifact"):
         if key in value:
             text(value[key], f"snapshot.{key}")
     name = value.get("name")
@@ -294,7 +291,7 @@ def snapshot_settings(value: Any, *, spec: bool = False) -> None:
             for item in value[key]:
                 text(item, f"snapshot.{key}")
     for key, allowed in (
-        ("normalizers", {"path", "paths", "type", "utc_offset_hours"}),
+        ("normalizers", {"path", "type", "utc_offset_hours"}),
         ("unordered_lists", {"path", "keys"}),
     ):
         rules = value.get(key, [])
@@ -305,10 +302,9 @@ def snapshot_settings(value: Any, *, spec: bool = False) -> None:
             fields(rule, allowed, f"snapshot.{key}")
             if isinstance(rule, Deferred):
                 continue
-            paths = rule.get("paths", rule.get("path"))
-            if not isinstance(paths, Deferred):
-                for path in paths if isinstance(paths, list) else [paths]:
-                    text(path, f"snapshot.{key}.path")
+            path = rule.get("path")
+            if not isinstance(path, Deferred):
+                text(path, f"snapshot.{key}.path")
             if key == "normalizers":
                 normalizer = rule.get("type")
                 if not isinstance(normalizer, Deferred) and normalizer not in ("decimal", "date", "datetime"):

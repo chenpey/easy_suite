@@ -185,10 +185,8 @@ def _normalizer_for(
     rules: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
     for rule in rules:
-        patterns = rule.get("paths", [rule.get("path", "")])
-        if isinstance(patterns, str):
-            patterns = [patterns]
-        if _matches_path(path, [str(pattern) for pattern in patterns if pattern]):
+        pattern = str(rule.get("path", ""))
+        if pattern and _matches_path(path, [pattern]):
             return rule
     return None
 
@@ -271,11 +269,6 @@ def _normalize_value(
             if isinstance(keys, str):
                 keys = [keys]
             result.sort(key=lambda item: _list_sort_key(item, list(keys)))
-        elif rule.get("sort_lists_by") and all(
-            isinstance(item, dict) for item in result
-        ):
-            key = str(rule["sort_lists_by"])
-            result.sort(key=lambda item: _list_sort_key(item, [key]))
         return result
 
     if (

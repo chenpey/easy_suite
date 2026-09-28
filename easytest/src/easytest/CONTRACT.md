@@ -1,4 +1,4 @@
-# EasyTest 0.3.0 安装包契约
+# EasyTest 0.3.1 安装包契约
 
 本文是随 wheel 分发的最小稳定契约，不承担教程职责。业务项目未必拥有源码仓库
 文档，`easytest init` 生成的 AI 指南因此引用本文件。运行时解析器和预检是最终
@@ -12,18 +12,21 @@ easytest validate cases --root /业务目录 --case-id user.get --profile live
 easytest run cases --root /业务目录 --case-id user.get --profile live
 easytest edit cases/demo.xlsx --patch edit.json --validate --root .
 easytest compile cases --check
+easytest snapshot check --root /业务目录
+easytest snapshot maintain --root /业务目录 --keep-failed 1
 ```
 
 `list/validate` 只读；`run` 在执行前编译 XLSX 并整批预检。`--case-id` 精确、
 区分大小写且可重复，未知、禁用或空选择失败。
 
-`list/validate/run/edit` 的 stdout 使用统一封装：
+`list/validate/run/edit/snapshot` 的 stdout 使用统一封装：
 
 ```text
 schema_version, command, status, data, errors, artifacts
 ```
 
-成功状态为 `listed/valid/passed/edited`，失败或中断为 `failed/interrupted` 并返回
+成功状态为 `listed/valid/passed/edited/healthy/maintained`，失败或中断为
+`failed/interrupted` 并返回
 非零退出码。`run --result` 将同一 JSON 原子写入文件；日志和原始异常在 stderr。
 `init/compile` 输出普通文本。CLI `run` 默认继续执行失败 Case 后的 Case；
 `--fail-fast` 等价于 `--max-failures 1`，两个选项互斥，后者必须为正整数。
@@ -112,7 +115,8 @@ raise_for_status, timeout, trust_env, verify, cookies, files,
 allow_redirects, cert, stream, max_response_bytes
 ```
 
-`data` 是表单或原始体，`json` 是 JSON 请求体。POST 默认不重试。
+`data` 是表单或原始体，`json` 是 JSON 请求体。`retry` 只接受配置对象，
+不接受整数简写；POST 默认不重试。
 
 `runtime.http.max_response_bytes` 默认 10485760（10 MiB），必须为正整数且不超过
 67108864（64 MiB）；operation 可以降低上限，request 可以继续降低。无论 `stream`
@@ -144,8 +148,10 @@ URL 用户信息、敏感 query（含百分号编码的键）及 fragment 会脱
 原始 ExecutionResult、Notebook 交互输出、业务日志、快照基线及 artifact 文件仍可能
 携带原始数据，需业务方管理；脱敏不能识别任意未知业务字段。
 
-数据库 SQL 固定在 operation 中，用例只提供绑定参数。内置数据库写入同时受
-operation `write`、连接 `read_only` 和 `allow_db_write` 控制。
+数据库 SQL 固定在 operation 中，request 只允许 `parameters` 字段；无参数 SQL
+使用空 request。内置数据库写入同时受 operation `write`、连接 `read_only` 和
+`allow_db_write` 控制。
+`allow_db_write` 未配置时严格为 `false`，不会根据快照 `run_mode` 推断。
 
 RPC handler 签名为 `(*, request, endpoint, auth, context)`；
 Scenario/UI handler 为 `(*, request, context)`。普通返回值完整保留，需要
@@ -190,8 +196,38 @@ Mock 优先级为 Step > Case Mock Profile > 运行 Profile。支持 `response`�
 - `write`：创建缺失快照，已有内容不同则失败。
 - `baseline`：替换快照，必须设置 `CONFIRM_BASELINE=1`。
 
-文件后端在 Case 成功后统一提交；SQLite 只将成功运行作为基线。两者都不回滚业务
-副作用，强制终止时不保证跨文件事务。
+文件后端在 Case 成功后统一提交。SQLite 只将成功运行作为基线，启用 WAL、
+30 秒 busy timeout 和跨进程写锁；不同 Case 可以并发执行。同一 Case 如果在运行
+期间已有其他进程提交新基线，完成时返回 `SNAPSHOT_CONFLICT`，冲突内容不会成为基线。
+
+SQLite 的 response/database payload 自适应使用 zlib level 6：压缩后更小时才压缩，
+并限制解码后大小。截图不写入 SQLite BLOB，而是按 SHA-256 去重存放在
+`runtime.snapshot_artifact_dir`（默认 `.easytest/snapshot-artifacts`）；数据库只存
+相对路径、大小和哈希。截图 BLOB、无 codec 标记 payload 和其他 schema 版本均
+直接拒绝，不做兼容转换。压缩和哈希不等于加密，快照目录仍按敏感业务数据保护。
+
+相关 `runtime.json` 字段：
+
+```json
+{
+  "snapshot_backend": "sqlite",
+  "snapshot_database": ".easytest/snapshots.db",
+  "snapshot_artifact_dir": ".easytest/snapshot-artifacts",
+  "snapshot_history_keep": 10,
+  "snapshot_max_bytes": 268435456
+}
+```
+
+`snapshot_max_bytes` 默认 256 MiB，必须为正整数且最多 1 GiB，同时约束写入、
+BLOB 解压和外部图片读取。`snapshot check` 校验 SQLite、codec、schema 和图片
+大小/哈希。`snapshot maintain` 默认删除超过 24 小时的 `running`、每个 Case 只保留
+最近一条 `failed/conflict`，删除孤立图片并 checkpoint WAL。可用
+`--stale-after-hours/--keep-failed` 调整；`--compact` 额外执行 `VACUUM`，会申请
+独占数据库访问，不能与测试任务同时运行。schema 必须与当前版本精确匹配；不匹配时
+删除数据库及图片目录后重新建立基线。
+
+两种后端都不回滚业务副作用。外部图片和 SQLite 元数据不是跨文件事务；进程在二者
+之间被强制终止可能留下孤立图片，维护命令会回收，未完成运行不会成为可读基线。
 
 ## 错误契约
 
@@ -205,7 +241,8 @@ EMPTY_SELECTION, UNKNOWN_CASE_ID, ORPHAN_COMPILED_JSON,
 COMPILED_JSON_MISSING, COMPILED_JSON_OUT_OF_DATE,
 INVALID_EDIT, EDIT_CONFLICT, EXECUTION_POLICY_VIOLATION,
 HTTP_SECRET_SOURCE, HTTP_RESPONSE_TOO_LARGE,
-ASSERTION_FAILED, ASSERTION_PATH_MISSING, SNAPSHOT_MISMATCH,
+ASSERTION_FAILED, ASSERTION_PATH_MISSING, SNAPSHOT_MISMATCH, SNAPSHOT_CONFLICT,
+SNAPSHOT_TOO_LARGE,
 CLEANUP_FAILED, INTERRUPTED
 ```
 

@@ -20,6 +20,7 @@ from easytest.snapshots.comparison import (
     format_differences,
     normalize,
 )
+from easytest.snapshots.codec import DEFAULT_MAX_SNAPSHOT_BYTES, read_bounded_file
 from easytest.snapshots.store import SnapshotRecord, SqliteSnapshotStore
 from easytest.validation import snapshot_settings
 
@@ -74,6 +75,10 @@ class SnapshotManager:
         self.config = config
         snapshot_dir = config.runtime.get("snapshot_dir", "snapshots")
         self.snapshot_dir = config.root / str(snapshot_dir)
+        self.max_snapshot_bytes = config.runtime.get(
+            "snapshot_max_bytes",
+            DEFAULT_MAX_SNAPSHOT_BYTES,
+        )
         self.backend = str(config.runtime.get("snapshot_backend", "file")).lower()
         if self.backend not in {"file", "sqlite"}:
             raise ConfigurationError(
@@ -86,9 +91,15 @@ class SnapshotManager:
                 "snapshot_database",
                 ".easytest/snapshots.db",
             )
+            artifact_dir = config.runtime.get(
+                "snapshot_artifact_dir",
+                ".easytest/snapshot-artifacts",
+            )
             self.store = SqliteSnapshotStore(
                 config.root / str(database),
+                artifact_dir=config.root / str(artifact_dir),
                 history_keep=config.runtime.get("snapshot_history_keep"),
+                max_snapshot_bytes=self.max_snapshot_bytes,
             )
 
     def begin_case(self, context: RunContext) -> None:
@@ -157,9 +168,20 @@ class SnapshotManager:
                     f"unsupported screenshot snapshot extension: {extension}"
                 )
             payload = None
-            content = source.read_bytes()
+            content = read_bounded_file(
+                source,
+                max_bytes=self.max_snapshot_bytes,
+                label="snapshot content",
+            )
         else:
             raise ConfigurationError(f"unsupported snapshot kind: {kind}")
+        if len(content) > self.max_snapshot_bytes:
+            raise ConfigurationError(
+                "snapshot content exceeds snapshot_max_bytes "
+                f"({self.max_snapshot_bytes})",
+                code="SNAPSHOT_TOO_LARGE",
+                field="snapshot_max_bytes",
+            )
 
         if self.store is not None:
             self._process_sqlite(
@@ -169,12 +191,19 @@ class SnapshotManager:
                 payload=payload,
                 rule=merged,
                 context=context,
+                extension=extension,
             )
             return self.store.path
 
         target = snapshot_target(self.snapshot_dir, context.case.id, name, extension)
         if kind in {"response", "database"} and context.run_mode == "read" and target.is_file():
-            expected = json.loads(target.read_text(encoding="utf-8"))
+            expected = json.loads(
+                read_bounded_file(
+                    target,
+                    max_bytes=self.max_snapshot_bytes,
+                    label="snapshot baseline",
+                )
+            )
             comparison = compare(expected, payload, merged)
             if not comparison.equal:
                 raise SnapshotMismatchError(
@@ -183,7 +212,13 @@ class SnapshotManager:
                 )
             return target
         if context.run_mode == "read":
-            self._assert_or_write(target, content, context.run_mode, self.config.environment)
+            self._assert_or_write(
+                target,
+                content,
+                context.run_mode,
+                self.config.environment,
+                max_bytes=self.max_snapshot_bytes,
+            )
         else:
             self._stage_file(target, content, context)
         return target
@@ -199,7 +234,11 @@ class SnapshotManager:
         if context.run_mode == "write":
             current = pending.get(target)
             if current is None and target.exists():
-                current = target.read_bytes()
+                current = read_bounded_file(
+                    target,
+                    max_bytes=self.max_snapshot_bytes,
+                    label="snapshot baseline",
+                )
             if current is not None:
                 if current != content:
                     raise SnapshotMismatchError(
@@ -283,6 +322,7 @@ class SnapshotManager:
         payload: Any,
         rule: dict[str, Any],
         context: RunContext,
+        extension: str,
     ) -> None:
         if self.store is None:
             raise RuntimeError("SQLite snapshot store is not configured")
@@ -292,15 +332,17 @@ class SnapshotManager:
             exclude_run_id=context.run_id,
         )
         if context.run_mode != "read":
-            self.store.put(
-                SnapshotRecord(
-                    run_id=context.run_id,
-                    case_id=context.case.id,
-                    name=name,
-                    kind=kind,
-                    content=content,
-                )
+            record = SnapshotRecord(
+                run_id=context.run_id,
+                case_id=context.case.id,
+                name=name,
+                kind=kind,
+                content=content,
             )
+            if kind == "screenshot":
+                self.store.put_artifact(record, extension)
+            else:
+                self.store.put(record)
         if context.run_mode == "baseline":
             return
         if baseline is None:
@@ -350,6 +392,8 @@ class SnapshotManager:
     def _assert_or_write(
         target: Path, content: bytes, run_mode: str,
         environment: Mapping[str, str | None] | None = None,
+        *,
+        max_bytes: int = DEFAULT_MAX_SNAPSHOT_BYTES,
     ) -> None:
         if run_mode not in {"read", "write", "baseline"}:
             raise ConfigurationError(f"invalid run mode: {run_mode}")
@@ -358,7 +402,11 @@ class SnapshotManager:
         if run_mode in {"write", "baseline"}:
             target.parent.mkdir(parents=True, exist_ok=True)
             if run_mode == "write" and target.exists():
-                current = target.read_bytes()
+                current = read_bounded_file(
+                    target,
+                    max_bytes=max_bytes,
+                    label="snapshot baseline",
+                )
                 if current != content:
                     raise SnapshotMismatchError(
                         f"snapshot already exists and differs: {target}; "
@@ -383,7 +431,11 @@ class SnapshotManager:
                     "baseline_missing",
                 ),),
             )
-        expected = target.read_bytes()
+        expected = read_bounded_file(
+            target,
+            max_bytes=max_bytes,
+            label="snapshot baseline",
+        )
         if expected != content:
             expected_hash = hashlib.sha256(expected).hexdigest()[:12]
             actual_hash = hashlib.sha256(content).hexdigest()[:12]

@@ -6,6 +6,7 @@ import re
 from io import BytesIO
 from uuid import UUID
 
+import pytest
 from pypdf import PdfReader
 
 from easytest.reports.html import write_html
@@ -38,11 +39,11 @@ def test_html_json_and_pdf_share_the_report_id_across_exports(tmp_path):
         assert report.input_hash in pdf.pages[0].extract_text()
 
 
-def test_saved_report_id_is_preserved_and_legacy_data_can_render():
+def test_saved_report_id_is_preserved_and_required_for_rendering():
     report = RunReport()
     restored = RunReport(report_id=report.as_dict()["report_id"])
     assert restored.as_dict()["report_id"] == report.report_id
-    legacy = report.as_dict()
-    legacy.pop("report_id")
-    pdf = PdfReader(BytesIO(render_pdf(legacy)))
-    assert "暂无用例记录" in pdf.pages[0].extract_text()
+    incomplete = report.as_dict()
+    incomplete.pop("report_id")
+    with pytest.raises(KeyError, match="report_id"):
+        render_pdf(incomplete)

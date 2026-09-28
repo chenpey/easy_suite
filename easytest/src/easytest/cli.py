@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import tempfile
@@ -18,6 +19,8 @@ from easytest.reports.results import CaseReport, RunReport, error_info, safe_val
 from easytest.runtime.policy import load_execution_policy
 from easytest.runtime.preflight import preflight
 from easytest.runtime.runner import CaseRunner
+from easytest.snapshots.codec import DEFAULT_MAX_SNAPSHOT_BYTES
+from easytest.snapshots.store import SqliteSnapshotStore
 from easytest.starter import init_project
 
 
@@ -101,6 +104,30 @@ def _parser() -> argparse.ArgumentParser:
     )
     list_command.add_argument("source", nargs="?", default="cases")
     list_command.add_argument("--root", default=".")
+    snapshot_command = subcommands.add_parser(
+        "snapshot", help="Check or maintain the configured SQLite snapshot store",
+    )
+    snapshot_actions = snapshot_command.add_subparsers(
+        dest="snapshot_action", required=True,
+    )
+    snapshot_check = snapshot_actions.add_parser(
+        "check", help="Verify SQLite integrity, schema, codecs and external artifacts",
+    )
+    snapshot_check.add_argument("--root", default=".")
+    snapshot_maintain = snapshot_actions.add_parser(
+        "maintain", help="Clean stale history and optionally compact SQLite",
+    )
+    snapshot_maintain.add_argument("--root", default=".")
+    snapshot_maintain.add_argument(
+        "--stale-after-hours", type=_non_negative_float, default=24.0,
+    )
+    snapshot_maintain.add_argument(
+        "--keep-failed", type=_non_negative_integer, default=1,
+    )
+    snapshot_maintain.add_argument(
+        "--compact", action="store_true",
+        help="Run VACUUM after cleanup; requires exclusive access and can take time.",
+    )
     for command in (run_command, validate_command, list_command):
         command.add_argument(
             "--case-id", action="append",
@@ -119,6 +146,26 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
+def _non_negative_integer(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be a non-negative integer") from None
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return parsed
+
+
+def _non_negative_float(value: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be non-negative") from None
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     if args.command == "init":
@@ -131,7 +178,11 @@ def main(argv: list[str] | None = None) -> None:
     # Handler prints and enabled event streams belong to stderr in the CLI.
     with redirect_stdout(sys.stderr):
         result, error, traceback = {
-            "edit": _edit, "validate": _validate, "list": _list, "run": _run,
+            "edit": _edit,
+            "validate": _validate,
+            "list": _list,
+            "run": _run,
+            "snapshot": _snapshot,
         }[args.command](args)
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     if error is not None:
@@ -253,6 +304,63 @@ def _list(args):
         status = "failed" if isinstance(error, Exception) else "interrupted"
         return _envelope("list", status, None, [error_info(error, phase)]), error, error.__traceback__
     return _envelope("list", "listed", data, []), None, None
+
+
+def _snapshot_store(config: ProjectConfig) -> SqliteSnapshotStore:
+    if str(config.runtime.get("snapshot_backend", "file")).lower() != "sqlite":
+        raise ConfigurationError(
+            "snapshot maintenance requires runtime.snapshot_backend='sqlite'"
+        )
+    database = config.root / str(
+        config.runtime.get("snapshot_database", ".easytest/snapshots.db")
+    )
+    if not database.is_file():
+        raise ConfigurationError(f"SQLite snapshot database does not exist: {database}")
+    artifact_dir = config.root / str(
+        config.runtime.get("snapshot_artifact_dir", ".easytest/snapshot-artifacts")
+    )
+    return SqliteSnapshotStore(
+        database,
+        artifact_dir=artifact_dir,
+        history_keep=config.runtime.get("snapshot_history_keep"),
+        max_snapshot_bytes=config.runtime.get(
+            "snapshot_max_bytes",
+            DEFAULT_MAX_SNAPSHOT_BYTES,
+        ),
+    )
+
+
+def _snapshot(args):
+    phase = "snapshot_check" if args.snapshot_action == "check" else "snapshot_maintain"
+    try:
+        config = ProjectConfig(args.root)
+        store = _snapshot_store(config)
+        if args.snapshot_action == "check":
+            store.assert_healthy()
+            data = {"action": "check", **store.statistics(), "issues": []}
+            status = "healthy"
+        else:
+            maintenance = store.maintain(
+                stale_after_seconds=args.stale_after_hours * 60 * 60,
+                keep_failed=args.keep_failed,
+                compact=args.compact,
+            )
+            store.assert_healthy()
+            data = {
+                "action": "maintain",
+                "maintenance": maintenance,
+                **store.statistics(),
+                "issues": [],
+            }
+            status = "maintained"
+    except BaseException as error:
+        failed = "failed" if isinstance(error, Exception) else "interrupted"
+        return (
+            _envelope("snapshot", failed, None, [error_info(error, phase)]),
+            error,
+            error.__traceback__,
+        )
+    return _envelope("snapshot", status, data, []), None, None
 
 
 def _write_result(path: Path, result: dict) -> None:

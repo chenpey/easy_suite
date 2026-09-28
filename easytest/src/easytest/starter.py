@@ -78,6 +78,8 @@ mock_profiles 提供离线响应。没有开启快照，所以不需要快照配
 
 数据库写入默认关闭。确需造数时，显式使用 `--allow-db-write`；
 快照 `--run-mode read/write/baseline` 独立控制比对、补齐和更新基线。
+SQLite 快照的截图保存在 `snapshot_artifact_dir`，归档时必须与数据库一起处理。
+使用 `easytest snapshot check --root .` 检查，维护前先停止其他快照写入。
 Notebook 可以使用 `NotebookSession(".", profile="offline-strict")` 运行相同用例。
 """
 
@@ -123,6 +125,8 @@ live 允许真实执行但不会清除显式 Mock；read 只控制快照，不�
 CLI 可使用 --fail-fast 或 --max-failures N，后续未执行 Case 为 not_run。
 HTTP_RESPONSE_TOO_LARGE 的响应哈希仅覆盖已读取前缀，不代表完整响应；
 该步骤未执行断言或快照，也不自动重试。先核对接口与副作用再处理。
+SNAPSHOT_CONFLICT 表示同一 Case 已被其他进程更新；重新读取基线，不直接覆盖。
+SQLite 图片目录和数据库共同组成快照，维护使用 `easytest snapshot check/maintain`。
 真实自动化应由可信宿主设置 `EASYTEST_EXECUTION_POLICY`；它是应用层 allowlist，
 不是操作系统网络沙箱。受保护的 HTTP operation 需设置 `allow_redirects=false`；
 获准的自定义 handler 仍属于受信任代码。

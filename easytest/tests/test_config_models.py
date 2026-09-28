@@ -75,10 +75,10 @@ def _minimal_config(root, **files):
     return ProjectConfig(root)
 
 
-def test_only_operations_configuration_is_required(tmp_path, monkeypatch):
-    monkeypatch.delenv("RUN_MODE", raising=False)
+def test_only_operations_configuration_is_required(tmp_path):
     config = _minimal_config(tmp_path)
     assert config.resolve_run()["run_mode"] == "read"
+    assert config.resolve_run()["allow_db_write"] is False
     assert config.resolve_run()["fail_on_mock_miss"] is False
     assert config.mock_profile(None) == {}
     with pytest.raises(ConfigurationError, match="unknown profile"):
@@ -89,8 +89,7 @@ def test_only_operations_configuration_is_required(tmp_path, monkeypatch):
         config.mock_profile("missing")
 
 
-def test_profile_priority_false_override_and_base_not_mutated(tmp_path, monkeypatch):
-    monkeypatch.setenv("RUN_MODE", "write")
+def test_profile_priority_false_override_and_base_not_mutated(tmp_path):
     config = _minimal_config(
         tmp_path,
         runtime={"run_mode": "read", "allow_db_write": True, "observability": {
@@ -113,8 +112,15 @@ def test_profile_priority_false_override_and_base_not_mutated(tmp_path, monkeypa
     assert config.runtime["observability"]["emit_stdout"] is True
     assert config.resolve_run(profile="offline", run_mode="read")["run_mode"] == "read"
     assert config.resolve_run(profile="offline", allow_db_write=True)["allow_db_write"] is True
-    assert config.resolve_run()["run_mode"] == "write"
-    monkeypatch.delenv("RUN_MODE")
+    assert config.resolve_run()["run_mode"] == "read"
+
+
+def test_run_mode_environment_variable_is_not_a_configuration_source(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("RUN_MODE", "baseline")
+    config = _minimal_config(tmp_path, runtime={"run_mode": "read"})
     assert config.resolve_run()["run_mode"] == "read"
 
 
@@ -163,3 +169,48 @@ def test_snapshot_history_keep_accepts_positive_integer_or_unlimited(tmp_path, k
 def test_snapshot_history_keep_rejects_invalid_values(tmp_path, keep):
     with pytest.raises(ConfigurationError, match="snapshot_history_keep"):
         _minimal_config(tmp_path, runtime={"snapshot_history_keep": keep})
+
+
+def test_snapshot_external_storage_settings_are_validated(tmp_path):
+    config = _minimal_config(tmp_path, runtime={
+        "snapshot_artifact_dir": ".easytest/images",
+        "snapshot_max_bytes": 1024,
+    })
+    assert config.runtime["snapshot_artifact_dir"] == ".easytest/images"
+    assert config.runtime["snapshot_max_bytes"] == 1024
+
+
+@pytest.mark.parametrize("runtime", [
+    {"snapshot_artifact_dir": None},
+    {"snapshot_max_bytes": 0},
+    {"snapshot_max_bytes": True},
+    {"snapshot_max_bytes": 1024 * 1024 * 1024 + 1},
+])
+def test_invalid_snapshot_external_storage_settings_fail(tmp_path, runtime):
+    with pytest.raises(ConfigurationError):
+        _minimal_config(tmp_path, runtime=runtime)
+
+
+def test_snapshot_rules_reject_removed_list_sort_shortcut(tmp_path):
+    with pytest.raises(ConfigurationError, match="unknown fields"):
+        _minimal_config(tmp_path, snapshots={"profiles": {
+            "default": {
+                "database_rows": {
+                    "kind": "database",
+                    "sort_lists_by": "id",
+                },
+            },
+        }})
+
+
+def test_snapshot_rules_reject_multi_path_normalizer_alias(tmp_path):
+    with pytest.raises(ConfigurationError, match="unknown fields"):
+        _minimal_config(tmp_path, snapshots={"profiles": {
+            "default": {
+                "response": {
+                    "normalizers": [
+                        {"paths": ["$.first", "$.second"], "type": "decimal"},
+                    ],
+                },
+            },
+        }})

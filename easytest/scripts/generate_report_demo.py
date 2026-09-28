@@ -24,13 +24,13 @@ def main() -> None:
         template = load_cases(root / "cases/demo.json")[0]
         body = {
             "ok": True, "price": 128, "name": "基础套餐",
-            "items": ["A", "B", "B"], "legacy_code": "v1",
+            "items": ["A", "B", "B"], "removed_code": "v1",
         }
 
         def make_case(case_id, name, response, *, snapshot=True, expect=200):
             step = replace(
                 template.steps[0], id="query_product", source_row=None,
-                request={"sku": "SKU-1001"},
+                request={"params": {"sku": "SKU-1001"}},
                 mock={"response": {"status_code": 200, "body": response}},
                 snapshot={"select": "$.body"} if snapshot else None,
                 expect={"$.status_code": expect},
@@ -50,12 +50,11 @@ def main() -> None:
                 runner.run(case)
         changed = copy.deepcopy(body)
         changed.update(ok="true", price=149, name="升级套餐", items=["B", "A", "B"], currency="CNY")
-        changed.pop("legacy_code")
+        changed.pop("removed_code")
         cases = [
             seeds[0],
             make_case("demo.product", seeds[1].name, changed),
             make_case("demo.price", seeds[2].name, {**body, "price": 159}),
-            make_case("demo.baseline", "新增接口 · 尚无基线", body),
             make_case("demo.assertion", "状态断言 · 预期不符", body, snapshot=False, expect=201),
         ]
         with CaseRunner(root, run_mode="read") as runner:

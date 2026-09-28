@@ -23,18 +23,11 @@ def _document_origin(document: object, source: Path) -> Path:
             )
         return source
     if mode != "xlsx":
-        if mode is None and "source" in document:
-            message = (
-                f"legacy compiled JSON lacks source metadata: {source}; "
-                "recompile its XLSX source"
-            )
-            code = "COMPILED_JSON_OUT_OF_DATE"
-        else:
-            message = (
-                f"JSON-only cases must explicitly set source_mode to 'json': {source}"
-            )
-            code = "JSON_SOURCE_MODE_REQUIRED"
-        raise ContractError(message, code=code, field="source_mode")
+        raise ContractError(
+            f"JSON-only cases must explicitly set source_mode to 'json': {source}",
+            code="JSON_SOURCE_MODE_REQUIRED",
+            field="source_mode",
+        )
 
     name = document.get("source")
     if (
@@ -85,21 +78,6 @@ def load_cases(path: str | Path) -> list[Case]:
         raise ContractError(f"invalid compiled JSON {source}: {exc}") from exc
     origin = _document_origin(document, source)
     return parse_document(document, source=str(origin))
-
-
-def discover_cases(paths: list[str | Path]) -> list[Case]:
-    cases: list[Case] = []
-    seen_ids: dict[str, str] = {}
-    for path in paths:
-        for case in load_cases(path):
-            if case.id in seen_ids:
-                raise ContractError(
-                    f"duplicate case id {case.id!r}: {seen_ids[case.id]} and {case.source}"
-                )
-            seen_ids[case.id] = case.source
-            if case.enabled:
-                cases.append(case)
-    return cases
 
 
 def load_project_cases(

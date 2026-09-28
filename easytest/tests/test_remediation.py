@@ -22,8 +22,7 @@ from easytest.transport.http import HttpClient
 
 
 @pytest.fixture
-def project(tmp_path, monkeypatch):
-    monkeypatch.delenv("RUN_MODE", raising=False)
+def project(tmp_path):
     root = init_project(tmp_path / "project")
     (root / "config/snapshots.json").write_text(json.dumps({
         "profiles": {"default": {"response_default": {}}},
@@ -155,7 +154,7 @@ def test_redaction_handles_dataclasses_depth_and_large_encoded_json():
 
 
 def test_project_environment_isolation_reaches_http_rpc_and_database(tmp_path, monkeypatch):
-    for name in ("EASYTEST_SITE", "EASYTEST_KEY", "RUN_MODE", "CONFIRM_BASELINE"):
+    for name in ("EASYTEST_SITE", "EASYTEST_KEY", "CONFIRM_BASELINE"):
         monkeypatch.delenv(name, raising=False)
     runners = []
     clients = []
@@ -164,7 +163,7 @@ def test_project_environment_isolation_reaches_http_rpc_and_database(tmp_path, m
             root = init_project(tmp_path / suffix)
             (root / ".env").write_text(
                 f"EASYTEST_SITE=https://{suffix}.invalid\nEASYTEST_KEY={suffix}-secret\n"
-                "RUN_MODE=write\nCONFIRM_BASELINE=1\n"
+                "CONFIRM_BASELINE=1\n"
             )
             (root / "config/runtime.json").write_text(json.dumps({
                 "database": {"connections": {"default": {
@@ -185,11 +184,10 @@ def test_project_environment_isolation_reaches_http_rpc_and_database(tmp_path, m
                 rpc_handlers={"rpc.ping": lambda **kw: [kw["endpoint"], kw["auth"]]},
             ))
         assert "EASYTEST_SITE" not in os.environ
-        assert "RUN_MODE" not in os.environ
         for suffix, runner, client in zip(("a", "b"), runners, clients, strict=True):
             assert runner.config.connection("default")["password"] == f"{suffix}-secret"
             assert runner.config.connection("default")["host"] == f"https://{suffix}.invalid"
-            assert runner.run_mode == "write"
+            assert runner.run_mode == "read"
             SnapshotManager._require_baseline_confirmation("baseline", runner.config.environment)
             case = load_cases(runner.root / "cases/demo.json")[0]
             rpc = replace(case.steps[0], id="rpc", order=2, executor="rpc", operation="rpc.ping",

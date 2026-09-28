@@ -154,7 +154,7 @@ def test_generated_and_json_only_modes_are_explicit(tmp_path):
     output.write_text(json.dumps(document))
     with pytest.raises(ContractError) as caught:
         load_cases(output)
-    assert caught.value.code == "COMPILED_JSON_OUT_OF_DATE"
+    assert caught.value.code == "JSON_SOURCE_MODE_REQUIRED"
 
     document["source_mode"] = "json"
     output.write_text(json.dumps(document))

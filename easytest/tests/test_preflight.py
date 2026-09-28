@@ -20,6 +20,7 @@ from easytest.notebook import NotebookSession
 from easytest.runtime.assertions import assert_expectations
 from easytest.runtime.preflight import preflight
 from easytest.runtime.runner import CaseRunner
+from easytest.snapshots.store import SqliteSnapshotStore
 from easytest.starter import init_project
 
 
@@ -378,6 +379,33 @@ def test_sqlite_existing_baseline_validation_does_not_touch_files(tmp_path):
     config = ProjectConfig(root)
     assert preflight([case], config, config.resolve_run(run_mode="read")).step_count == 1
     assert _tree(root) == before
+
+
+def test_sqlite_preflight_defers_while_snapshot_store_is_locked(tmp_path):
+    root = init_project(tmp_path / "project")
+    (root / "config/runtime.json").write_text(json.dumps({
+        "default_profile": "offline-strict",
+        "snapshot_backend": "sqlite",
+    }))
+    (root / "config/snapshots.json").write_text(json.dumps({
+        "profiles": {"default": {"response_default": {}}},
+    }))
+    case = load_cases(root / "cases/demo.json")[0]
+    case = replace(case, steps=(replace(case.steps[0], snapshot={}),))
+    with CaseRunner(root, run_mode="write") as runner:
+        runner.run(case)
+    store = SqliteSnapshotStore(root / ".easytest/snapshots.db")
+    config = ProjectConfig(root)
+
+    with store.lock:
+        checked = preflight(
+            [case],
+            config,
+            config.resolve_run(run_mode="read"),
+        )
+
+    assert checked.deferred
+    assert "pending SQLite WAL" in checked.deferred[0]["reason"]
 
 
 @pytest.mark.parametrize("field", ["document", "case"])

@@ -53,7 +53,7 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
   "use strict";
   const data = JSON.parse(document.getElementById("report-data").textContent);
   const $ = id => document.getElementById(id);
-  const reportId = String(data.report_id || "").slice(0,12) || "—";
+  const reportId = String(data.report_id).slice(0,12);
   const inputHash = String(data.input_hash || "").replace(/^sha256:/,"").slice(0,12) || "—";
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
   const statusColors = {passed:"#188775", failed:"#cb6259", skipped:"#d5ae5b", interrupted:"#845299", not_run:"#aab8c0"};
@@ -66,7 +66,7 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
   $("title").textContent = data.title;
   document.title = data.title;
   $("run-meta").textContent = `${new Date(data.started_at).toLocaleString()} · 累计用例耗时 ${ms(data.summary.duration_ms)} · 输入 ${inputHash} · 报告 ${reportId}`;
-  $("run-meta").title = `输入哈希：${data.input_hash || "—"}\n报告 ID：${data.report_id || "—"}`;
+  $("run-meta").title = `输入哈希：${data.input_hash || "—"}\n报告 ID：${data.report_id}`;
   const summary = data.summary;
   const metrics = [
     ["总用例",summary.total,"本次运行记录",""],

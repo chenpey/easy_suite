@@ -5,7 +5,7 @@ from urllib.parse import parse_qs
 import pytest
 import requests
 
-from easytest.transport.http import HttpClient, send_http
+from easytest.transport.http import HttpClient
 
 
 @pytest.fixture
@@ -50,15 +50,3 @@ def test_http_multipart_keeps_regular_fields_and_file(captured):
     assert b'name="name"\r\n\r\ndemo\r\n' in request.body
     assert b'name="upload"; filename="demo.txt"' in request.body
     assert b"FILE_CONTENT" in request.body
-
-
-def test_send_http_data_is_form(captured):
-    assert send_http("POST", "https://example.invalid", data={"name": "demo"},
-                     trust_env=False)["body"] == {"ok": True}
-    assert parse_qs(captured[0].body) == {"name": ["demo"]}
-
-
-def test_send_http_explicit_json_body(captured):
-    send_http("POST", "https://example.invalid", json_body={"active": True}, trust_env=False)
-    assert captured[0].headers["Content-Type"] == "application/json"
-    assert json.loads(captured[0].body) == {"active": True}
