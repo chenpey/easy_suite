@@ -1,6 +1,6 @@
 # AI 接入与执行指南
 
-适用版本：EasyTest `0.3.1`。本指南只规定 AI 的操作流程、安全边界和交付标准。
+适用版本：EasyTest `0.4.0`。本指南只规定 AI 的操作流程、安全边界和交付标准。
 安装及业务示例见 [新业务接入指南](新业务接入指南.md)，精确字段和错误契约见
 安装包内的 `easytest/CONTRACT.md`。
 
@@ -57,6 +57,8 @@ easytest list cases --root .
 ## 4. 修改规则
 
 - 普通项目只编辑 `cases/*.xlsx`；同名 JSON 是编译产物，不独立修改。
+- 同一流程的多组输入写入 `data` 页，由 `cases.data_set` 引用；步骤使用
+  `${data.字段名}`，不要为每组输入复制整套 Case/Step。
 - 配置采用局部合并，不覆盖无关 operation、Profile、Mock 或快照规则。
 - 凭据只放 `.env` 或 CI 密钥，不写入 Excel、JSON、补丁和报告。
 - 不通过放宽断言、改 Mock、删除失败用例或更新基线掩盖问题。
@@ -93,7 +95,9 @@ easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile of
 不加该参数时仅检查工作簿契约。跨文件关系和最终运行选择仍须执行下一节的完整预检。
 Live 编辑预检需要对应环境变量；不能把离线预检通过当成 Live 鉴权可用。
 
-完整 XLSX 字段、模板和断言规则只在 `CONTRACT.md` 维护。
+`data_id` 在所属数据集内必须唯一；禁用的数据行不执行。逻辑 Case ID 会选择全部
+启用数据行，`<case_id>.<data_id>` 可精确选择单行。完整 XLSX 字段、模板和断言
+规则只在 `CONTRACT.md` 维护。
 
 ## 5. 预检
 

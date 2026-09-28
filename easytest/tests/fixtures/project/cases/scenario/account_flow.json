@@ -118,7 +118,7 @@
       }
     }
   ],
-  "compiler_version": "0.3.1",
+  "compiler_version": "0.4.0",
   "schema_version": 1,
   "source": "account_flow.xlsx",
   "source_mode": "xlsx",

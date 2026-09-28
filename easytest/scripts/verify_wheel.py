@@ -48,11 +48,13 @@ def main() -> None:
         run("uv", "pip", "install", "--python", str(python), str(wheel),
             str(root / "examples/business_handler"))
         run(str(python), "-c",
-            "import easytest; from importlib.resources import files; "
+            "import easytest; from easytest.util.get_config import get_config; "
+            "from importlib.resources import files; "
             f"assert easytest.__version__ == {version!r}; "
             "contract = files('easytest').joinpath('CONTRACT.md').read_text(); "
             "assert 'max_response_bytes' in contract; "
             "assert 'snapshot maintain' in contract; "
+            "assert get_config('common', 'browser') == 'chrome'; "
             "assert not hasattr(easytest, 'send_http'); "
             "assert not hasattr(easytest, 'DictObject')")
         project = work / "project"

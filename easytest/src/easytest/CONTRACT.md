@@ -1,4 +1,4 @@
-# EasyTest 0.3.1 安装包契约
+# EasyTest 0.4.0 安装包契约
 
 本文是随 wheel 分发的最小稳定契约，不承担教程职责。业务项目未必拥有源码仓库
 文档，`easytest init` 生成的 AI 指南因此引用本文件。运行时解析器和预检是最终
@@ -49,17 +49,49 @@ pytest 使用自己的 `-x/--maxfail`；Notebook 每次独立调用，失败会�
 直接加载 JSON 时会核对 XLSX、哈希和编译器版本。JSON-only 项目必须设置
 `source_mode: "json"`，且不能包含上述生成元数据。
 
-XLSX 必须包含 `cases` 和 `steps` 两张 sheet，不允许公式。
+XLSX 必须包含 `cases` 和 `steps` 两张 sheet，可选 `data` sheet；所有 sheet
+都不允许公式。
 
 | Sheet | 必填列 | 可选列 |
 | --- | --- | --- |
-| `cases` | `case_id/case_name/case_type` | `enabled/tags/variables/mock_profile/snapshot_profile` |
+| `cases` | `case_id/case_name/case_type` | `enabled/tags/variables/mock_profile/snapshot_profile/data_set` |
 | `steps` | `case_id/step_id/order/executor/operation` | `request/save_as/mock/snapshot/expect` |
+| `data` | `data_set/data_id` | `enabled` 及任意业务列 |
 
 `variables/request` 必须是 JSON object；其他 JSON 列允许对象、数组或标量。
 Case type 为 `scenario/http/rpc`，executor 为
 `scenario/http/rpc/database/ui`。ID 仅允许字母、数字及 `._-`，且不能为
 `.` 或 `..`。Case ID 全局唯一；Step ID、正整数 order 和输出名在 Case 内唯一。
+
+### 共享数据集
+
+`cases.data_set` 引用同一工作簿 `data` 页中的数据集。`data_id` 在数据集内唯一，
+`enabled` 省略时默认为 true；业务列名必须是 Python 风格标识符
+（字母或下划线开头，后续可含数字）。编译 JSON 使用以下结构：
+
+```json
+{
+  "data_sets": {
+    "login_cases": [
+      {
+        "id": "wrong_password",
+        "enabled": true,
+        "values": {
+          "username": "alice",
+          "password": "wrong",
+          "expected_status": 401
+        },
+        "source_row": 3
+      }
+    ]
+  }
+}
+```
+
+启用的 Case 会按其数据集中的启用行展开。逻辑 Case ID 保持不变，单行执行 ID
+为 `<case_id>.<data_id>`。`--case-id <case_id>` 选择全部数据行，
+`--case-id <case_id>.<data_id>` 只选择一行。引用不存在的数据集、重复
+`data_id`、无启用行或非法业务列都会在编译/加载阶段失败。
 
 结构化编辑补丁：
 
@@ -98,12 +130,15 @@ Case 单元格错误附 sheet、行号、列头和原始/期望类型；文本 I
 | 写法 | 来源 |
 | --- | --- |
 | `${variables.id}` | 当前 Case 变量 |
+| `${data.username}` | 当前数据行字段 |
 | `${steps.created.body.id}` | 前序步骤输出 |
 | `${state.value}` | 当前 Case 状态 |
 | `${BASE_URL}` | operation 中的环境变量 |
 | `{id}` | HTTP URL 的 `request.path.id` |
 
-完整模板保留原类型；结构值只能占据整个单元格。
+完整模板保留原类型；结构值只能占据整个单元格。数据行之间分别创建
+variables、steps、state、generate 和 run ID；任一行失败不会复用另一行的上下文。
+报告会记录 `data_set/data_id/data_source_row` 以及脱敏后的 `data`。
 
 ## HTTP、数据库和 handler
 
@@ -237,7 +272,8 @@ BLOB 解压和外部图片读取。`snapshot check` 校验 SQLite、codec、sche
 ```text
 UNKNOWN_FIELD, INVALID_TYPE, INVALID_VALUE, INVALID_IDENTIFIER,
 UNKNOWN_OPERATION, EXECUTOR_MISMATCH, UNKNOWN_PROFILE, MOCK_MISS,
-EMPTY_SELECTION, UNKNOWN_CASE_ID, ORPHAN_COMPILED_JSON,
+EMPTY_SELECTION, UNKNOWN_CASE_ID, UNKNOWN_DATA_SET, EMPTY_DATA_SET,
+DUPLICATE_DATA_ID, ORPHAN_COMPILED_JSON,
 COMPILED_JSON_MISSING, COMPILED_JSON_OUT_OF_DATE,
 INVALID_EDIT, EDIT_CONFLICT, EXECUTION_POLICY_VIOLATION,
 HTTP_SECRET_SOURCE, HTTP_RESPONSE_TOO_LARGE,
@@ -255,6 +291,7 @@ stderr。敏感字段、长值和异常序列化失败会脱敏或截断。
 from easytest import (
     Case,
     CaseRunner,
+    DataRow,
     ExecutionPolicy,
     ExecutionResult,
     NotebookSession,
@@ -269,5 +306,7 @@ from easytest import (
 不同数据场景应显式设置稳定 ID。
 
 Runner 顺序使用且不保证并发安全；pytest-xdist 不合并 EasyTest HTML 报告。
-数据库每步独立连接提交，HTTP `stream=true` 仍在上限内读取完整响应。框架不提供业务事务
-回滚、全局取消、恢复执行、浏览器自动化、OpenAPI 导入或分布式调度。
+同一逻辑 Case 的数据行可复用 Runner 内部的 HTTP 连接池和数据库连接，行间会清理
+HTTP Cookie 并结束未完成的数据库事务；不同 Case 或 Runner 不共享这些连接。
+HTTP `stream=true` 仍在上限内读取完整响应。框架不提供业务事务回滚、全局取消、
+恢复执行、浏览器自动化、OpenAPI 导入或分布式调度。

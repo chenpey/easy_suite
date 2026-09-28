@@ -119,11 +119,13 @@ def load_project_cases(
         else:
             loaded = load_cases(source)
         for case in loaded:
-            if case.id in seen_ids:
+            execution_id = case.execution_id
+            if execution_id in seen_ids:
                 raise ContractError(
-                    f"duplicate case id {case.id!r}: {seen_ids[case.id]} and {case.source}"
+                    f"duplicate case id or data execution id {execution_id!r}: "
+                    f"{seen_ids[execution_id]} and {case.source}"
                 )
-            seen_ids[case.id] = case.source
+            seen_ids[execution_id] = case.source
             if case.enabled:
                 cases.append(case)
     if not cases:
@@ -136,11 +138,20 @@ def load_project_cases(
     if not case_ids or any(not isinstance(item, str) or not item.strip() for item in case_ids):
         raise ContractError("case ID selection cannot be empty", code="EMPTY_SELECTION", field="case_id")
     wanted = set(case_ids)
-    unknown = wanted - {case.id for case in cases}
+    available = {
+        identifier
+        for case in cases
+        for identifier in (case.id, case.execution_id)
+    }
+    unknown = wanted - available
     if unknown:
         raise ContractError(
             f"unknown or disabled case IDs: {sorted(unknown)}",
             code="UNKNOWN_CASE_ID", field="case_id",
         )
     # Repeated flags do not execute a case twice; preserve source order.
-    return [case for case in cases if case.id in wanted]
+    return [
+        case
+        for case in cases
+        if case.id in wanted or case.execution_id in wanted
+    ]

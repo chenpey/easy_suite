@@ -169,8 +169,14 @@ class ExecutionPolicy:
             raise _violation(f"profile is not allowed: {profile!r}", "allowed_profiles")
 
     def check_case(self, case: Case) -> None:
-        if not self._permits(self.allowed_case_ids, case.id):
-            raise _violation(f"Case is not allowed: {case.id}", "allowed_case_ids")
+        if not (
+            self._permits(self.allowed_case_ids, case.id)
+            or self._permits(self.allowed_case_ids, case.execution_id)
+        ):
+            raise _violation(
+                f"Case is not allowed: {case.execution_id}",
+                "allowed_case_ids",
+            )
 
     def check_step(
         self,
@@ -276,6 +282,7 @@ def execution_input_hash(
     for case in cases:
         value = asdict(case)
         value.pop("source", None)
+        value.pop("data_source_row", None)
         for step in value["steps"]:
             step.pop("source_row", None)
         case_values.append(value)

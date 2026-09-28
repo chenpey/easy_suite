@@ -83,7 +83,11 @@ def test_editor_adds_related_case_and_step_in_one_validated_batch(tmp_path):
     ])
 
     cases = load_cases(source.with_suffix(".json"))
-    assert [case.id for case in cases] == ["http.demo", "http.second"]
+    assert [case.id for case in cases] == [
+        "http.demo",
+        "http.second",
+        "sample.login",
+    ]
     assert cases[1].steps[0].expect == {"$.status_code": 200}
 
 

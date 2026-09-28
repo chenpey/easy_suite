@@ -75,7 +75,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     metafunc.config.stash[_STATE].enabled = True
     case_files = metafunc.config.getoption("--case-source")
     cases = load_project_cases(case_files or "cases", root=_root(metafunc.config))
-    metafunc.parametrize("table_case", cases, ids=[case.id for case in cases])
+    metafunc.parametrize(
+        "table_case",
+        cases,
+        ids=[case.execution_id for case in cases],
+    )
 
 
 @pytest.fixture
@@ -125,9 +129,12 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         callspec = getattr(item, "callspec", None)
         case = callspec.params.get("table_case") if callspec is not None else None
         if isinstance(case, Case):
-            if case.id in selected and selected[case.id] != case:
+            if (
+                case.execution_id in selected
+                and selected[case.execution_id] != case
+            ):
                 conflicting.append(case)
-            selected.setdefault(case.id, case)
+            selected.setdefault(case.execution_id, case)
     if selected:
         config = session.config
         try:
@@ -153,7 +160,12 @@ def pytest_collection_finish(session: pytest.Session) -> None:
             recorded = False
             for record in state.report.cases:
                 if any(
-                    step.case_id == getattr(error, "preflight_case_id", None)
+                    step.case_id
+                    == getattr(
+                        error,
+                        "preflight_execution_id",
+                        getattr(error, "preflight_case_id", None),
+                    )
                     for step in record.steps
                 ):
                     record.fail(error, "preflight")

@@ -95,8 +95,21 @@ def error_info(error: BaseException, phase: str) -> dict[str, Any]:
             expected=safe_value(error.expected, path=error.path),
             actual=safe_value(error.actual, path=error.path),
         )
-    for name in ("case_id", "step_id", "source", "source_row", "operation",
-                 "sheet", "column", "actual_type", "expected_type"):
+    for name in (
+        "case_id",
+        "execution_id",
+        "data_set",
+        "data_id",
+        "data_source_row",
+        "step_id",
+        "source",
+        "source_row",
+        "operation",
+        "sheet",
+        "column",
+        "actual_type",
+        "expected_type",
+    ):
         value = getattr(error, "easytest_location", {}).get(
             name, getattr(error, f"preflight_{name}", None),
         )
@@ -134,12 +147,17 @@ class StepReport:
 @dataclass
 class CaseReport:
     id: str
+    execution_id: str = ""
     name: str = ""
     source: str = ""
     profile: str = ""
     run_mode: str = ""
     run_id: str = ""
     input_hash: str = ""
+    data_set: str | None = None
+    data_id: str | None = None
+    data_source_row: int | None = None
+    data: Any = None
     tags: list[str] = field(default_factory=list)
     status: str = "not_run"
     started_at: str = field(default_factory=timestamp)
@@ -158,14 +176,22 @@ class CaseReport:
         input_hash: str = "",
     ) -> CaseReport:
         return cls(
-            id=str(safe_value(case.id)), name=str(safe_value(case.name)),
+            id=str(safe_value(case.id)),
+            execution_id=str(safe_value(case.execution_id)),
+            name=str(safe_value(case.name)),
             source=str(safe_value(case.source)), profile=profile,
             run_mode=run_mode, run_id=run_id, input_hash=input_hash,
+            data_set=case.data_set,
+            data_id=case.data_id,
+            data_source_row=case.data_source_row,
+            data=safe_value(case.data) if case.data_id is not None else None,
             tags=list(case.tags),
             steps=[
                 StepReport(
                     id=str(safe_value(step.id)), operation=str(safe_value(step.operation)),
-                    executor=step.executor, source_row=step.source_row, case_id=case.id,
+                    executor=step.executor,
+                    source_row=step.source_row,
+                    case_id=case.execution_id,
                 )
                 for step in case.steps
             ],

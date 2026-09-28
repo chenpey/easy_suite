@@ -12,7 +12,7 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 | [EasyDrop](easydrop/) | `1.3.0` |
 | [EasyNote](easynote/) | `0.8.6` |
 | [EasyMac](easymac/) | `0.4.4` |
-| [EasyTest](easytest/) | `0.3.1` |
+| [EasyTest](easytest/) | `0.4.0` |
 <!-- versions:end -->
 
 ## 项目目录
@@ -57,7 +57,7 @@ EasyMac 是一款在旧 Mac 上运行的迁移清单工具。它帮助用户整�
 
 EasyTest 是一个面向接口和业务流程测试的 Python 工具。测试人员在 Excel 中编写用例，框架将其编译为确定性 JSON，并通过命令行、pytest 或 Notebook 执行。
 
-主要能力包括 HTTP、RPC、数据库、UI 和业务场景编排，整批静态预检、离线 Mock、文件与 SQLite 快照、外置截图、并发基线保护，以及自包含 HTML/PDF 报告。
+主要能力包括 HTTP、RPC、数据库、UI 和业务场景编排，Excel 共享数据驱动、整批静态预检、离线 Mock、文件与 SQLite 快照、外置截图、并发基线保护，以及自包含 HTML/PDF 报告。
 
 技术栈：Python 3.12/3.13、pytest、openpyxl、SQLite。
 

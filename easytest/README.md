@@ -3,7 +3,7 @@
 EasyTest 是面向场景、HTTP、RPC、数据库和封装 UI 请求的 XLSX 表格驱动测试框架。
 人工维护 XLSX，框架生成确定性 JSON，用于执行、Git diff、代码审查和 AI 分析。
 
-当前版本：`0.3.1`，支持 Python 3.12 和 3.13。
+当前版本：`0.4.0`，支持 Python 3.12 和 3.13。
 
 ## 文档入口
 
@@ -61,6 +61,26 @@ easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile of
 中的启用 Case，失败时保留原 XLSX/JSON；默认只校验工作簿契约。
 跨文件重复 ID 及完整运行选择仍需执行 `validate cases`。
 格式见 [安装包契约](src/easytest/CONTRACT.md#来源与字段)。
+
+## 数据驱动
+
+同一流程需要覆盖多组输入时，在工作簿增加 `data` 页，并在 `cases.data_set`
+引用数据集。`data` 页固定列为 `data_set/data_id/enabled`，其余列均为业务字段：
+
+| data_set | data_id | enabled | username | password | expected_status |
+| --- | --- | --- | --- | --- | --- |
+| login_cases | valid | true | alice | correct | 200 |
+| login_cases | wrong_password | true | alice | wrong | 401 |
+| login_cases | empty_phone | true | bob | correct | 400 |
+
+步骤的 `request/mock/expect/snapshot` 都可使用 `${data.username}`、
+`${data.expected_status}` 等引用。完整单元格引用保留数字、布尔和空值类型。
+框架会把每个启用数据行作为独立执行实例，分别初始化变量、步骤输出和状态；
+报告显示数据集、`data_id`、Excel 行号及脱敏后的本次数据。
+
+`--case-id login.case` 选择该 Case 的全部启用数据行；
+`--case-id login.case.wrong_password` 只选择一个执行实例。`easytest init`
+生成的 `sample.login` 是默认禁用的完整示例，启用后可直接观察三行展开结果。
 
 ## 报告与机器结果
 
@@ -128,6 +148,28 @@ def call_business(*, request, context):
 
 普通返回值完整保留；需要 artifact 或 metadata 时返回 `ExecutionResult`。
 
+### 浏览器 Cookie
+
+需要读取本机 Chrome 或 Edge Cookie 时安装可选依赖：
+
+```bash
+uv sync --extra browser-auth
+```
+
+```python
+from easytest.transport.browser_auth import get_cookies, list_browser_profiles
+
+profiles = list_browser_profiles("chrome")
+cookies = get_cookies(
+    "https://service.example.com/private",
+    browser="chrome",
+    profile=profiles[0],
+)
+```
+
+读取会按目标 URL 过滤 domain、path、Secure、有效期和 partitioned Cookie，并从
+浏览器数据库的一致性快照中解密。省略 `browser` 时使用随包配置的 `chrome`。
+
 ## Mock
 
 Mock 优先级为 Step > Case Mock Profile > 运行 Profile 默认 Mock Profile。
@@ -184,7 +226,7 @@ with NotebookSession("examples/jsonplaceholder", profile="offline-strict") as se
 ## 开发验证
 
 ```bash
-uv sync
+uv sync --extra browser-auth --extra notebook --extra examples
 uv run pytest
 uv run ruff check src tests scripts
 uv run easytest compile examples --check
