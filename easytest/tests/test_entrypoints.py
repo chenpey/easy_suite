@@ -168,7 +168,7 @@ def test_cli_rejects_colliding_artifacts_before_importing_handler(tmp_path, alia
     result = json.loads(completed.stdout)
     assert completed.returncode != 0
     assert result["status"] == "failed"
-    assert result["artifacts"] == {"html": None, "result": None}
+    assert result["artifacts"] == {"html": None, "pdf": None, "result": None}
     assert result["errors"][0]["phase"] == "output_paths"
     assert "--report and --result" in completed.stderr
     assert not (root / "handler-imported").exists()

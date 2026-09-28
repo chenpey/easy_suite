@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
@@ -164,3 +167,26 @@ def render_pdf(data: dict[str, Any]) -> bytes:
     )
     document.build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
+
+
+def write_pdf(report: Any, path: str | Path) -> Path:
+    """Write a complete PDF report atomically."""
+    target = Path(path).resolve()
+    data = report.as_dict()
+    content = render_pdf(data)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=target.parent,
+            prefix=".report-",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return target

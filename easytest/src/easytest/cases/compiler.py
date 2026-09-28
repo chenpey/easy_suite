@@ -7,6 +7,7 @@ import re
 import stat
 import tempfile
 from datetime import date, datetime
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,37 @@ CASE_OPTIONAL_COLUMNS = {
 STEP_OPTIONAL_COLUMNS = {"request", "save_as", "mock", "snapshot", "expect"}
 JSON_COLUMNS = {"variables", "request", "mock", "snapshot", "expect"}
 _DATA_FIELD_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def compiled_document_sha256(document: dict[str, Any]) -> str:
+    """Hash generated content while excluding the checksum field itself."""
+    payload = {
+        key: value
+        for key, value in document.items()
+        if key != "compiled_sha256"
+    }
+    content = json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(content).hexdigest()
+
+
+def _spelling_hint(value: str, choices: set[str]) -> str:
+    matches = get_close_matches(value, sorted(choices), n=1, cutoff=0.6)
+    return f"; did you mean {matches[0]!r}?" if matches else ""
+
+
+def _text_cell_hint(field: str) -> str:
+    if field in {"case_id", "step_id", "data_set", "data_id"}:
+        return (
+            " Format the Excel cell as Text before entering the value; "
+            "this also preserves leading zeroes."
+        )
+    return " Format the Excel cell as Text and re-enter the value."
 
 
 def _location(error: ContractError, path: Path, sheet: str, row: int,
@@ -122,8 +154,10 @@ def _sheet_rows(workbook_path: Path, worksheet) -> list[dict[str, Any]]:
     )
     unknown = set(headers) - allowed
     if unknown:
+        first = sorted(unknown)[0]
         raise ContractError(
-            f"{workbook_path.name}:{worksheet.title} row=1 has unknown columns: {sorted(unknown)}"
+            f"{workbook_path.name}:{worksheet.title} row=1 has unknown columns: "
+            f"{sorted(unknown)}{_spelling_hint(first, allowed)}"
         )
 
     rows: list[dict[str, Any]] = []
@@ -151,8 +185,12 @@ def _sheet_rows(workbook_path: Path, worksheet) -> list[dict[str, Any]]:
                 "data_set",
             } and cell.value is not None and not isinstance(cell.value, str):
                 raise _location(
-                    ContractError(f"{header} must be a string; automatic Excel type conversion is not supported",
-                                  code="INVALID_TYPE", field=header),
+                    ContractError(
+                        f"{header} must be a string; automatic Excel type conversion "
+                        f"is not supported.{_text_cell_hint(header)}",
+                        code="INVALID_TYPE",
+                        field=header,
+                    ),
                     workbook_path, worksheet.title, row_index, header, cell.value, "str",
                 )
             value = _cell_value(cell.value)
@@ -168,8 +206,16 @@ def _sheet_rows(workbook_path: Path, worksheet) -> list[dict[str, Any]]:
                     raise _location(error, workbook_path, worksheet.title, row_index,
                                     header, value, "JSON object" if header in {"variables", "request"} else "JSON")
             if header == "case_type" and (not isinstance(value, str) or value.lower() not in {"scenario", "http", "rpc"}):
+                hint = (
+                    _spelling_hint(value.lower(), {"scenario", "http", "rpc"})
+                    if isinstance(value, str)
+                    else ""
+                )
                 raise _location(
-                    ContractError("case type must be one of scenario/http/rpc", field="case_type"),
+                    ContractError(
+                        f"case type must be one of scenario/http/rpc{hint}",
+                        field="case_type",
+                    ),
                     workbook_path, worksheet.title, row_index, header, cell.value, "scenario/http/rpc",
                 )
             if header == "enabled":
@@ -257,7 +303,7 @@ def _data_sheet_rows(
                 raise _location(
                     ContractError(
                         f"{header} must be a string; automatic Excel type "
-                        "conversion is not supported",
+                        f"conversion is not supported.{_text_cell_hint(header)}",
                         code="INVALID_TYPE",
                         field=header,
                     ),
@@ -421,6 +467,7 @@ def workbook_document(path: str | Path) -> dict[str, Any]:
         raise
     for case in document["cases"]:
         case["steps"].sort(key=lambda item: int(item["order"]))
+    document["compiled_sha256"] = compiled_document_sha256(document)
     return document
 
 

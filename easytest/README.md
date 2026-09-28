@@ -3,7 +3,7 @@
 EasyTest 是面向场景、HTTP、RPC、数据库和封装 UI 请求的 XLSX 表格驱动测试框架。
 人工维护 XLSX，框架生成确定性 JSON，用于执行、Git diff、代码审查和 AI 分析。
 
-当前版本：`0.4.0`，支持 Python 3.12 和 3.13。
+当前版本：`0.4.1`，支持 Python 3.12 和 3.13。
 
 ## 文档入口
 
@@ -30,6 +30,7 @@ easytest list
 easytest validate --case-id http.demo
 easytest run --case-id http.demo
 easytest run --result artifacts/result.json
+easytest run --pdf-report artifacts/report.pdf
 easytest edit cases/demo.xlsx --patch edit.json --validate --root .
 easytest run --fail-fast --result artifacts/result.json
 easytest compile cases --check
@@ -44,8 +45,8 @@ TRAE CN、VS Code/Cursor、PyCharm 和 Notebook 的解释器选择方法见
 
 普通项目只维护 XLSX，并提交框架生成的同名 JSON：
 
-- `run` 自动编译 XLSX。
-- `list`、`validate` 只读，不生成 JSON、报告或快照。
+- `run` 优先复用来源哈希、正文校验和与编译器版本均匹配的同名 JSON，否则自动编译 XLSX。
+- `list`、`validate` 同样复用有效 JSON；失效时只在内存解析 XLSX，不写入文件。
 - `compile --check` 检查 JSON 是否缺失、手改或过期。
 - JSON-only 仅用于无人工表格维护需求的项目，必须显式声明 `source_mode: "json"`。
 
@@ -58,9 +59,10 @@ AI 和脚本修改用例时使用结构化补丁：
 easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile offline-strict
 ```
 
-补丁支持 `case/step` 的 `add/update/rename/delete`，按 ID 严格查找，最终工作簿
-有效后才替换 XLSX 并更新 JSON。`--validate` 额外使用项目配置与策略预检该工作簿
-中的启用 Case，失败时保留原 XLSX/JSON；默认只校验工作簿契约。
+补丁支持 `case/step/data` 的 `add/update/rename/delete`。数据行使用
+`data_set + data_id` 严格定位；`rename` 修改 `data_id`。最终工作簿有效后才替换
+XLSX 并更新 JSON。`--validate` 额外使用项目配置与策略预检该工作簿中的启用 Case，
+失败时保留原 XLSX/JSON；默认只校验工作簿契约。
 跨文件重复 ID 及完整运行选择仍需执行 `validate cases`。
 格式见 [安装包契约](src/easytest/CONTRACT.md#来源与字段)。
 
@@ -86,7 +88,9 @@ easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile of
 
 ## 报告与机器结果
 
-`run` 和 pytest 默认生成自包含的 `artifacts/report.html`，内嵌 PDF 和脱敏 JSON。
+`run` 和 pytest 默认生成包含脱敏 JSON 的自包含 `artifacts/report.html`，不调用
+PDF 渲染。需要 PDF 时显式使用 `run --pdf-report artifacts/report.pdf`；
+Notebook 使用 `session.write_pdf_report()`。
 CLI 的 `list/validate/run/edit/snapshot` 使用统一封装：
 
 ```text
@@ -170,7 +174,8 @@ cookies = get_cookies(
 ```
 
 读取会按目标 URL 过滤 domain、path、Secure、有效期和 partitioned Cookie，并从
-浏览器数据库的一致性快照中解密。省略 `browser` 时使用随包配置的 `chrome`。
+浏览器数据库的一致性快照中解密。省略 `browser` 时使用随包配置的 `chrome`；
+不会从当前目录或父目录隐式读取 `config/common.json`。
 
 ## Mock
 

@@ -1,6 +1,6 @@
 # AI 接入与执行指南
 
-适用版本：EasyTest `0.4.0`。本指南只规定 AI 的操作流程、安全边界和交付标准。
+适用版本：EasyTest `0.4.1`。本指南只规定 AI 的操作流程、安全边界和交付标准。
 安装及业务示例见 [新业务接入指南](新业务接入指南.md)，精确字段和错误契约见
 安装包内的 `easytest/CONTRACT.md`。
 
@@ -89,7 +89,8 @@ easytest edit cases/demo.xlsx --patch edit.json --validate --root . --profile of
 }
 ```
 
-支持 `case/step` 的 `add/update/rename/delete`。更新不存在的 ID、增加已有 ID、
+支持 `case/step/data` 的 `add/update/rename/delete`。数据行使用
+`data_set + data_id` 定位，`rename` 修改 `data_id`。更新不存在的 ID、增加已有 ID、
 字段拼写错误或最终工作簿无效都会失败；成功后自动更新同名 JSON。
 `--validate` 在落盘前按所选 Profile 预检该工作簿内启用的 Case；配置错误保留原文件。
 不加该参数时仅检查工作簿契约。跨文件关系和最终运行选择仍须执行下一节的完整预检。
@@ -172,10 +173,11 @@ easytest run cases/demo.xlsx \
 | `data.summary` | 总数、通过、失败、中断和差异 |
 | `data.cases[].steps[]` | 步骤状态、阶段、Mock 标记、请求、响应和差异 |
 | `errors[]` | 安全错误码、字段及来源位置 |
-| `artifacts` | HTML 和 JSON 结果路径 |
+| `artifacts` | HTML、显式请求的 PDF 和 JSON 结果路径 |
 
 只有 `status=passed` 的步骤才能用 `mocked` 判断 Mock 或真实执行。HTML 已生成不代表
-测试通过；失败运行也会生成报告。任意业务异常原文和 traceback 只在本地 stderr。
+测试通过；失败运行也会生成报告。默认 HTML 不执行 PDF 排版，需要时显式增加
+`--pdf-report artifacts/report.pdf`。任意业务异常原文和 traceback 只在本地 stderr。
 
 ## 8. 失败与重试
 

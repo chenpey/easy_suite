@@ -9,7 +9,11 @@ import pytest
 from openpyxl import Workbook, load_workbook
 
 from easytest import __version__
-from easytest.cases.compiler import compile_path, compile_workbook
+from easytest.cases.compiler import (
+    compile_path,
+    compile_workbook,
+    compiled_document_sha256,
+)
 from easytest.cases.loader import load_cases
 from easytest.cli import main
 from easytest.models import ContractError
@@ -70,6 +74,7 @@ def test_compile_workbook_is_deterministic(tmp_path: Path) -> None:
     assert document["source"] == "cases.xlsx"
     assert document["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
     assert document["compiler_version"] == __version__
+    assert document["compiled_sha256"] == compiled_document_sha256(document)
     assert load_cases(output)[0].id == "case.one"
     assert load_cases(output)[0].source == str(source)
     assert load_cases(output)[0].steps[0].source_row == 2
@@ -173,7 +178,7 @@ def test_directory_check_rejects_orphans_and_accepts_explicit_json_only(tmp_path
     assert caught.value.code == "ORPHAN_COMPILED_JSON"
 
     document = json.loads(output.read_text())
-    for field in ("source", "source_sha256", "compiler_version"):
+    for field in ("source", "source_sha256", "compiler_version", "compiled_sha256"):
         document.pop(field)
     document["source_mode"] = "json"
     output.write_text(json.dumps(document))

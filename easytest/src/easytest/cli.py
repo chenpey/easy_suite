@@ -72,6 +72,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     report_options.add_argument("--no-report", action="store_true", help="Disable HTML output.")
     run_command.add_argument(
+        "--pdf-report",
+        help="Optional PDF report path, relative to --root.",
+    )
+    run_command.add_argument(
         "--result", help="Write the same JSON result as stdout, relative to --root.",
     )
     run_command.add_argument(
@@ -385,27 +389,35 @@ def _write_result(path: Path, result: dict) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def _output_paths(args) -> tuple[Path | None, Path | None]:
+def _output_paths(args) -> tuple[Path | None, Path | None, Path | None]:
     root = Path(args.root)
     html = None if args.no_report else (root / args.report).resolve()
     result = (root / args.result).resolve() if args.result else None
-    if html is not None and result is not None and (
-        html == result or (html.exists() and result.exists() and html.samefile(result))
-    ):
-        raise ConfigurationError("--report and --result must resolve to different files")
-    return html, result
+    pdf = (root / args.pdf_report).resolve() if args.pdf_report else None
+    outputs = [
+        (name, path)
+        for name, path in (("--report", html), ("--pdf-report", pdf), ("--result", result))
+        if path is not None
+    ]
+    for index, (left_name, left) in enumerate(outputs):
+        for right_name, right in outputs[index + 1:]:
+            if left == right or (left.exists() and right.exists() and left.samefile(right)):
+                raise ConfigurationError(
+                    f"{left_name} and {right_name} must resolve to different files"
+                )
+    return html, pdf, result
 
 
 def _run(args):
     report = RunReport()
-    artifacts = {"html": None, "result": None}
+    artifacts = {"html": None, "pdf": None, "result": None}
     runner = None
     error: BaseException | None = None
     traceback = None
-    html_target = result_target = None
+    html_target = pdf_target = result_target = None
     phase = "output_paths"
     try:
-        html_target, result_target = _output_paths(args)
+        html_target, pdf_target, result_target = _output_paths(args)
         phase = "initialization"
         runner = CaseRunner(
             Path(args.root), run_mode=args.run_mode, profile=args.profile,
@@ -474,6 +486,19 @@ def _run(args):
                 error, traceback = exc, exc.__traceback__
             else:
                 error.add_note(f"HTML report could not be written: {type(exc).__name__}")
+    if pdf_target is not None:
+        try:
+            from easytest.reports.pdf import write_pdf
+
+            target = write_pdf(report, pdf_target)
+            artifacts["pdf"] = str(target)
+            print(f"EasyTest PDF report: {target}", file=sys.stderr)
+        except BaseException as exc:
+            report.add_error(exc, "pdf_report")
+            if error is None:
+                error, traceback = exc, exc.__traceback__
+            else:
+                error.add_note(f"PDF report could not be written: {type(exc).__name__}")
 
     def result():
         status = "passed" if error is None else (

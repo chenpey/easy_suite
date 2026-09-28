@@ -12,7 +12,7 @@ Easy Suite is a multi-project repository containing four independent tools for f
 | [EasyDrop](easydrop/) | `1.3.0` |
 | [EasyNote](easynote/) | `0.8.6` |
 | [EasyMac](easymac/) | `0.4.4` |
-| [EasyTest](easytest/) | `0.4.0` |
+| [EasyTest](easytest/) | `0.4.1` |
 <!-- versions:end -->
 
 ## Projects

@@ -8,7 +8,6 @@ from threading import RLock
 from typing import Any
 
 from easytest.util.dict_obj import dict_to_obj
-from easytest.util.get_path import get_path
 
 NOTE_KEY_PREFIX = "__note_"
 NOTE_KEY_SUFFIX = "__"
@@ -87,14 +86,23 @@ def _ensure_not_note_key(layer_name: str, key: str | None) -> None:
         raise ValueError(f"{layer_name} cannot be a note key: {key}")
 
 
-def _resolve_config_file(config_name: str) -> Path:
-    try:
-        return Path(get_path("config", f"{config_name}.json"))
-    except FileNotFoundError:
-        package_default = _PACKAGE_CONFIG_DIR / f"{config_name}.json"
-        if package_default.is_file():
-            return package_default
-        raise
+def _resolve_config_file(config_name: str, root: str | Path | None = None) -> Path:
+    if (
+        not isinstance(config_name, str)
+        or not config_name
+        or Path(config_name).name != config_name
+    ):
+        raise ValueError("config_name must be a non-empty file stem")
+    file_name = f"{config_name}.json"
+    if root is not None:
+        project_file = Path(root).resolve() / "config" / file_name
+        if project_file.is_file():
+            return project_file
+    package_default = _PACKAGE_CONFIG_DIR / file_name
+    if package_default.is_file():
+        return package_default
+    location = Path(root).resolve() / "config" if root is not None else _PACKAGE_CONFIG_DIR
+    raise FileNotFoundError(f"Cannot find config file '{file_name}' in '{location}'")
 
 
 def get_config(
@@ -102,6 +110,8 @@ def get_config(
     first_layer: str | None = None,
     second_layer: str | None = None,
     third_layer: str | None = None,
+    *,
+    root: str | Path | None = None,
 ) -> Any:
     """读取配置文件或最多三级的配置项。
 
@@ -112,7 +122,7 @@ def get_config(
     _ensure_not_note_key("second_layer", second_layer)
     _ensure_not_note_key("third_layer", third_layer)
 
-    config_file_path = _resolve_config_file(config_name)
+    config_file_path = _resolve_config_file(config_name, root)
     config = _load_config(config_file_path)
 
     if first_layer is None:

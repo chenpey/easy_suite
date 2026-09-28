@@ -118,7 +118,8 @@
       }
     }
   ],
-  "compiler_version": "0.4.0",
+  "compiled_sha256": "4b1a06ff629a7e8662941ab33573945debf248eb424848acd2572df4f46731d1",
+  "compiler_version": "0.4.1",
   "schema_version": 1,
   "source": "account_flow.xlsx",
   "source_mode": "xlsx",

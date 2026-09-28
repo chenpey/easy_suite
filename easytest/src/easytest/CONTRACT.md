@@ -1,4 +1,4 @@
-# EasyTest 0.4.0 安装包契约
+# EasyTest 0.4.1 安装包契约
 
 本文是随 wheel 分发的最小稳定契约，不承担教程职责。业务项目未必拥有源码仓库
 文档，`easytest init` 生成的 AI 指南因此引用本文件。运行时解析器和预检是最终
@@ -10,6 +10,7 @@
 easytest list cases --root /业务目录
 easytest validate cases --root /业务目录 --case-id user.get --profile live
 easytest run cases --root /业务目录 --case-id user.get --profile live
+easytest run cases --root /业务目录 --pdf-report artifacts/report.pdf
 easytest edit cases/demo.xlsx --patch edit.json --validate --root .
 easytest compile cases --check
 easytest snapshot check --root /业务目录
@@ -37,6 +38,9 @@ pytest 使用自己的 `-x/--maxfail`；Notebook 每次独立调用，失败会�
 `run.data` 包含 `summary/cases/input_hash`。哈希覆盖 Case、配置、运行设置和策略，
 不覆盖环境变量值、handler 源码或外部状态。
 
+`run` 默认生成独立 HTML，不执行 PDF 排版。`--pdf-report PATH` 显式生成 PDF，
+`artifacts.pdf` 返回其路径；HTML、PDF 和 JSON 结果路径不能指向同一文件。
+
 ## 来源与字段
 
 普通项目只维护 XLSX，并提交同名 JSON。生成 JSON 固定包含：
@@ -45,9 +49,14 @@ pytest 使用自己的 `-x/--maxfail`；Notebook 每次独立调用，失败会�
 - 同目录 XLSX 文件名 `source`
 - `source_sha256`
 - `compiler_version`
+- `compiled_sha256`
 
-直接加载 JSON 时会核对 XLSX、哈希和编译器版本。JSON-only 项目必须设置
+直接加载 JSON 时会核对 XLSX、来源哈希和编译器版本。JSON-only 项目必须设置
 `source_mode: "json"`，且不能包含上述生成元数据。
+发现 XLSX 时，`run/list/validate/pytest` 优先复用来源哈希、编译器版本和
+`compiled_sha256` 正文校验均通过的同名 JSON；
+缺失、损坏或过期时才解析 XLSX。`run/pytest` 可更新生成 JSON，`list/validate`
+只在内存解析。生成 JSON 不允许独立编辑，完整一致性由 `compile --check` 检查。
 
 XLSX 必须包含 `cases` 和 `steps` 两张 sheet，可选 `data` sheet；所有 sheet
 都不允许公式。
@@ -100,19 +109,25 @@ Case type 为 `scenario/http/rpc`，executor 为
   {"entity":"case","action":"update","case_id":"user.get",
    "values":{"variables":{"user_id":1001}}},
   {"entity":"step","action":"rename","case_id":"user.get",
-   "step_id":"get","new_id":"get_user"}
+   "step_id":"get","new_id":"get_user"},
+  {"entity":"data","action":"update","data_set":"users","data_id":"active",
+   "values":{"expected_status":200}}
 ]}
 ```
 
-`entity` 为 `case/step`，`action` 为 `add/update/rename/delete`。操作按 ID 严格
-匹配，最终工作簿通过契约校验后才替换并重新编译。`--validate --root ROOT`
+`entity` 为 `case/step/data`，`action` 为 `add/update/rename/delete`。数据行以
+`data_set + data_id` 定位，`rename` 修改 `data_id`；业务字段名必须是 Python
+标识符。操作按 ID 严格匹配，最终工作簿通过契约校验后才替换并重新编译。
+`--validate --root ROOT`
 使用项目配置对编辑后的工作簿内所有启用 Case 预检，可加 `--profile`、
 `--execution-policy`；未指定 `--validate` 时不能指定后二者。
 预检失败不替换 XLSX/JSON，不调用业务服务或 handler。整项目跨文件校验仍使用
 `validate cases`；原子替换不等于 XLSX/JSON 的跨文件崩溃事务。
 Python API 为 `edit_workbook(path, operations, *, validate=False, root=".",
 profile=None, execution_policy=None)`；API 的 path 相对工作目录，CLI path 相对 `--root`。
-Case 单元格错误附 sheet、行号、列头和原始/期望类型；文本 ID 不自动从数字或日期转换。
+Case 单元格错误附 sheet、行号、列头和原始/期望类型；近似列名和枚举值会给出拼写
+建议。文本 ID 不自动从数字或日期转换，错误会提示将 Excel 单元格设为文本格式，
+以避免前导零丢失。
 
 ## 断言和模板
 

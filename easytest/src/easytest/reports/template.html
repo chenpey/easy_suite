@@ -26,7 +26,7 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
 </style>
 </head>
 <body>
-<header><div><div class="brand">EASYTEST / RUN REPORT</div><h1 id="title">测试报告</h1><p id="run-meta"></p></div><div class="actions"><button id="download">下载报告数据</button><button id="export-pdf" title="下载完整报告，包含全部用例、步骤和差异">导出 PDF</button></div></header>
+<header><div><div class="brand">EASYTEST / RUN REPORT</div><h1 id="title">测试报告</h1><p id="run-meta"></p></div><div class="actions"><button id="download">下载报告数据</button></div></header>
 <main>
 <section class="metrics" aria-label="运行统计" id="metrics"></section>
 <section class="panel"><h2>运行概览</h2><div id="status-bar" class="bar" aria-label="用例状态分布"></div><div id="legend" class="legend"></div></section>
@@ -47,7 +47,6 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
 <noscript>请启用 JavaScript 查看统计和用例详情。</noscript>
 </main>
 <script type="application/json" id="report-data">__REPORT_DATA__</script>
-<script type="application/octet-stream" id="report-pdf">__REPORT_PDF__</script>
 <script>
 (() => {
   "use strict";
@@ -179,10 +178,6 @@ main{max-width:1268px;margin:auto;padding:26px 24px 50px}.metrics{display:grid;g
     const link = el("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url),1000);
   }
   $("download").addEventListener("click",() => downloadFile(JSON.stringify(data,null,2),"application/json",exportFilename("json")));
-  $("export-pdf").addEventListener("click",() => {
-    const bytes = Uint8Array.from(atob($("report-pdf").textContent.trim()),character => character.charCodeAt(0));
-    downloadFile(bytes,"application/pdf",exportFilename("pdf"));
-  });
   render();
 })();
 </script>

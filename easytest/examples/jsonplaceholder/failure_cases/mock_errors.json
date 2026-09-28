@@ -65,7 +65,8 @@
       }
     }
   ],
-  "compiler_version": "0.4.0",
+  "compiled_sha256": "3beff5dbceb40cc60be2aadb8fd09e6de3c9d1d015b24e7465ed1f11cf46f583",
+  "compiler_version": "0.4.1",
   "schema_version": 1,
   "source": "mock_errors.xlsx",
   "source_mode": "xlsx",

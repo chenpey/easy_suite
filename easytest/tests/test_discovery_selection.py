@@ -1,7 +1,9 @@
 import json
 
 import pytest
+from openpyxl import load_workbook
 
+import easytest.cases.loader as loader_module
 from easytest import Case, CaseRunner, ExecutionResult, Step, load_project_cases
 from easytest.cli import main
 from easytest.models import ContractError
@@ -13,6 +15,43 @@ def tree(root):
         str(path.relative_to(root)): (path.read_bytes(), path.stat().st_mtime_ns)
         for path in root.rglob("*") if path.is_file()
     }
+
+
+@pytest.mark.parametrize("write_compiled", [False, True])
+def test_project_loader_reuses_current_compiled_json(
+    tmp_path, monkeypatch, write_compiled,
+):
+    root = init_project(tmp_path / "project")
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("current compiled JSON must skip workbook parsing")
+
+    monkeypatch.setattr(loader_module, "compile_workbook", forbidden)
+    monkeypatch.setattr(loader_module, "workbook_document", forbidden)
+
+    cases = load_project_cases(
+        root / "cases/demo.xlsx",
+        root=root,
+        write_compiled=write_compiled,
+    )
+
+    assert [case.id for case in cases] == ["http.demo"]
+
+
+def test_read_only_loader_falls_back_to_changed_workbook_without_writing(tmp_path):
+    root = init_project(tmp_path / "project")
+    source = root / "cases/demo.xlsx"
+    compiled = source.with_suffix(".json")
+    before = compiled.read_bytes()
+    workbook = load_workbook(source)
+    workbook["cases"]["B2"] = "Changed in workbook"
+    workbook.save(source)
+    workbook.close()
+
+    cases = load_project_cases(source, root=root, write_compiled=False)
+
+    assert cases[0].name == "Changed in workbook"
+    assert compiled.read_bytes() == before
 
 
 def test_list_reads_workbook_without_importing_resolving_or_writing(tmp_path, capsys, monkeypatch):
@@ -91,7 +130,13 @@ def test_json_only_and_orphan_source_rules(tmp_path):
         load_project_cases(root / "cases", write_compiled=False)
     path = root / "cases/demo.json"
     document = json.loads(path.read_text())
-    for field in ("source_mode", "source", "source_sha256", "compiler_version"):
+    for field in (
+        "source_mode",
+        "source",
+        "source_sha256",
+        "compiler_version",
+        "compiled_sha256",
+    ):
         document.pop(field)
     path.write_text(json.dumps(document))
     with pytest.raises(ContractError) as caught:

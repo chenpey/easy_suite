@@ -45,7 +45,8 @@
       }
     }
   ],
-  "compiler_version": "0.4.0",
+  "compiled_sha256": "a74377ddc893d578f26a84b4eb0129c293dea71f75f2daf4500c4871598e2b15",
+  "compiler_version": "0.4.1",
   "schema_version": 1,
   "source": "profile_api.xlsx",
   "source_mode": "xlsx",
