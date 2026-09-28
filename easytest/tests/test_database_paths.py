@@ -72,6 +72,17 @@ def test_database_paths_preserve_explicit_uri_and_query(tmp_path, monkeypatch, r
     _seed(database, "URI")
     uri = "file:uri%20%23%25.db?cache=shared" if relative else database.as_uri() + "?cache=shared"
     root = _project(tmp_path, uri, uri=True)
+    opened = []
+    connect = sqlite3.connect
+
+    def tracked_connect(target, *args, **kwargs):
+        opened.append((target, kwargs))
+        return connect(target, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", tracked_connect)
     monkeypatch.chdir(external)
     with NotebookSession(root, allow_db_write=False) as session:
         assert session.run_step(executor="database", operation="read").output["rows"] == [{"value": "URI"}]
+    assert opened == [
+        (f"{database.as_uri()}?cache=shared&mode=ro", {"uri": True}),
+    ]
