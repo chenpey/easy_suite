@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing, nullcontext
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit
 
 import pymysql
 import sqlparse
@@ -209,8 +209,18 @@ class DatabaseExecutor(Executor):
             if read_only and file_path is not None:
                 if connection.get("uri") and database.startswith("file:"):
                     parsed = urlsplit(database)
-                    query = [(k, v) for k, v in parse_qsl(parsed.query) if k != "mode"]
-                    database = urlunsplit(parsed._replace(query=urlencode([*query, ("mode", "ro")])))
+                    query = [
+                        (key, value)
+                        for key, value in parse_qsl(
+                            parsed.query,
+                            keep_blank_values=True,
+                        )
+                        if key != "mode"
+                    ]
+                    database = (
+                        f"{file_path.as_uri()}?"
+                        f"{urlencode([*query, ('mode', 'ro')])}"
+                    )
                 else:
                     database = f"{file_path.as_uri()}?mode=ro"
                 connection["uri"] = True
