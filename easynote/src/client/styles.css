@@ -78,6 +78,8 @@
 }
 * { box-sizing: border-box; letter-spacing: 0; }
 html, body, #root { height: 100%; }
+/* Contain browser overscroll navigation while retaining horizontal code/table scrolling. */
+html, body { overscroll-behavior-x: none; }
 body {
   margin: 0;
   overflow: hidden;
