@@ -1069,7 +1069,7 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   await expect(page.locator('.note-row-meta time').first()).toBeVisible();
   await page.getByRole('button').filter({ hasText: title }).click();
   let actions = await openMobileNoteActions(page);
-  const syncVersion = actions.getByRole('button', { name: '同步并保存版本', exact: true });
+  const syncVersion = actions.getByRole('button', { name: '同步并更新历史版本', exact: true });
   await expect(syncVersion).toBeVisible();
   expect(await syncVersion.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
   await actions.screenshot({ path: 'test-results/mobile-note-actions.png' });
@@ -1084,11 +1084,11 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   await expect(page.getByRole('button').filter({ hasText: title })).toBeHidden();
   let navigation = await openMobileNavigation(page);
   expect(await navigation.getByRole('navigation', { name: '移动端笔记分类' }).getByRole('button').allTextContents())
-    .toEqual(['全部笔记', '任务中心', '归档笔记', '分享管理', '回收站']);
+    .toEqual(['全部笔记', '任务中心', '归档', '分享', '回收站']);
   await expect(navigation.getByRole('button', { name: '同步全部', exact: true })).toBeVisible();
-  await expect(navigation.getByRole('button', { name: '同步并保存版本', exact: true })).toHaveCount(0);
+  await expect(navigation.getByRole('button', { name: '同步并更新历史版本', exact: true })).toHaveCount(0);
   await navigation.screenshot({ path: 'test-results/mobile-navigation.png' });
-  await navigation.getByRole('button', { name: '归档笔记', exact: true }).click();
+  await navigation.getByRole('button', { name: '归档', exact: true }).click();
   await page.getByRole('button').filter({ hasText: title }).click();
   actions = await openMobileNoteActions(page);
   await actions.getByRole('button', { name: '取消归档', exact: true }).click();
@@ -1589,7 +1589,6 @@ test('a second tab cannot overwrite this browser profile local drafts', async ({
   await other.goto('/');
   await expect(other.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
   await page.close();
-  await other.getByRole('button', { name: '重新打开' }).click();
   await expect(other.getByRole('heading', { name: '全部笔记' })).toBeVisible();
   await other.close();
 });
@@ -1607,6 +1606,51 @@ test('a second tab can take over the editor lock when clicking reopen', async ({
   await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
   await expect(other.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
   await other.close();
+});
+
+test('a foreground installed PWA takes over from a browser tab', async ({ page, context }) => {
+  await page.goto('/');
+  await newNote(page, `接管-${randomUUID().slice(0, 6)}`, '接管前保存的内容');
+  const app = await context.newPage();
+  await app.addInitScript(() => {
+    const original = window.matchMedia.bind(window);
+    window.matchMedia = (query) => {
+      const result = original(query);
+      if (query === '(display-mode: standalone)') Object.defineProperty(result, 'matches', { value: true });
+      return result;
+    };
+  });
+  await app.goto('/');
+  await expect(app.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await expect(page.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '重新打开' }).click();
+  await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await expect(app.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await app.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(app.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await expect(page.getByText('另一个标签页正在编辑', { exact: true })).toBeVisible();
+  await app.close();
+});
+
+test('mobile browser back returns to the list and forward restores the note', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const title = `返回手势-${randomUUID().slice(0, 6)}`;
+  await newNote(page, title, '返回列表后保留的正文');
+  const initialLength = await page.evaluate(() => history.length);
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('返回列表后保留的正文');
+  await page.getByRole('button', { name: '返回笔记列表' }).click();
+  await expect.poll(() => page.evaluate(() => history.state?.easynoteMobileNote ?? null)).toBeNull();
+  await page.locator('.note-row').filter({ hasText: title }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toBeVisible();
+  expect(await page.evaluate(() => history.length)).toBe(initialLength);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorX)).toBe('none');
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
 });
 
 test('dark theme persists and the narrow mobile layout has no horizontal overflow', async ({ page }) => {

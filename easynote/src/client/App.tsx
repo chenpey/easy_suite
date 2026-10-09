@@ -445,6 +445,12 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
     let release: (() => void) | undefined;
     let hasLock = false;
     let channel: BroadcastChannel | undefined;
+    const waiting = new AbortController();
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches;
+    const claimForeground = () => {
+      if (standalone && !document.hidden && !hasLock) channel?.postMessage({ type: 'claim' });
+    };
 
     if (!navigator.locks) { setOwnsLock(false); return; }
 
@@ -460,18 +466,32 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
       };
     }
 
+    const holdLock = async (lock: Lock | null) => {
+      if (cancelled || !lock) return;
+      hasLock = true;
+      setOwnsLock(true);
+      await new Promise<void>((resolve) => { release = resolve; });
+      hasLock = false;
+    };
+    // Queue behind the current owner so closing it or explicitly yielding wakes us
+    // without a reload. Abort the queued request when this workspace is replaced.
     void navigator.locks.request(`easynote-editor:${session.user!.id}`, { ifAvailable: true }, async (lock) => {
       if (cancelled) return;
-      setOwnsLock(!!lock);
-      if (lock) {
-        hasLock = true;
-        await new Promise<void>((resolve) => { release = resolve; });
-        hasLock = false;
-      }
+      if (lock) return holdLock(lock);
+      setOwnsLock(false);
+      claimForeground();
+      void navigator.locks.request(`easynote-editor:${session.user!.id}`, { signal: waiting.signal }, holdLock)
+        .catch(() => { if (!cancelled) setOwnsLock(false); });
     }).catch(() => { if (!cancelled) setOwnsLock(false); });
+    const onVisibility = () => {
+      if (standalone && !document.hidden && !hasLock) setAttempt((value) => value + 1);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       cancelled = true;
+      waiting.abort();
+      document.removeEventListener('visibilitychange', onVisibility);
       channel?.close();
       release?.();
     };
@@ -510,7 +530,33 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const book = useNotebook(session);
   const [visibleNoteLimit, setVisibleNoteLimit] = useState(50);
   const [layout, setLayout] = useState<'edit' | 'preview'>('edit');
-  const [mobileNote, setMobileNote] = useState(false);
+  const [mobileNote, updateMobileNote] = useState(false);
+  const mobileHistoryKey = 'easynoteMobileNote';
+  const mobileHistoryId = useRef(crypto.randomUUID());
+  const setMobileNote = (open: boolean) => {
+    if (!open && history.state?.[mobileHistoryKey] === mobileHistoryId.current) {
+      // Wait for popstate before showing the list, so a quick reopen cannot be
+      // overwritten by the previous asynchronous history traversal.
+      history.back();
+    } else {
+      updateMobileNote(open);
+    }
+  };
+  useEffect(() => {
+    const onPopState = () => {
+      updateMobileNote(history.state?.[mobileHistoryKey] === mobileHistoryId.current);
+      setMobileNoteActions(false);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  useLayoutEffect(() => {
+    if (!window.matchMedia('(max-width: 640px)').matches) return;
+    const isNoteEntry = history.state?.[mobileHistoryKey] === mobileHistoryId.current;
+    if (mobileNote && !isNoteEntry) {
+      history.pushState({ ...history.state, [mobileHistoryKey]: mobileHistoryId.current }, '');
+    }
+  }, [mobileNote]);
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
   const [mobileNoteActions, setMobileNoteActions] = useState(false);

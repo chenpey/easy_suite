@@ -2,9 +2,16 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.8.6`
+Current Version: `0.8.7`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.8.7 Release Notes (2026-10-09)
+
+- Fix the editor-lock screen when switching from a browser tab to the installed PWA. A foreground PWA automatically takes over; waiting pages resume when the previous editor closes, while preserving one editor per account and browser profile.
+- Add an in-app history entry when opening a note on mobile. System Back returns to the note list, and Forward restores the note view. The Back button waits for history traversal before displaying the list to avoid races when reopening quickly.
+- Disable horizontal overscroll navigation while retaining horizontal scrolling in code blocks and tables.
+- Add regression coverage for PWA takeover, editor-lock recovery, and mobile Back/Forward; update existing mobile navigation tests to use the current button labels.
 
 ## Implemented Features
 
@@ -157,6 +164,10 @@ Follow the prompts to enter your API Token, select or confirm resources, and fin
 Autosave updates note content with `createVersion: false`. Explicit saves (`Cmd/Ctrl+S` or "Sync and Update Version") set `createVersion: true` to snapshot history. AI writes enforce version creation. Duplicate content does not create redundant history snapshots.
 
 Simultaneous edits on different devices are resolved using revision numbers. Conflicts return `409 Conflict`, preserving local drafts and allowing users to branch into conflict copies without overwriting remote data.
+
+Within one browser profile, Web Locks allow only one editor per account to protect local drafts. Waiting pages resume automatically when the editor closes. An installed PWA automatically takes over when it enters the foreground; browser tabs can request takeover with “Reopen”.
+
+On mobile, opening a note adds an in-app history entry. System Back returns to the note list before leaving the app, and Forward restores the note view.
 
 ### Shortcuts & Navigation
 
