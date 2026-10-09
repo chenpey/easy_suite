@@ -86,8 +86,6 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-.login-language { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 14px; color: var(--muted); font-size: 13px; }
-.login-language select { width: auto; min-width: 96px; padding: 6px 28px 6px 8px; }
 .language-setting { margin-bottom: 14px; }
 .language-setting .group-row { justify-content: space-between; }
 .language-setting .group-row > label { width: auto; color: var(--text); font-weight: 500; }
@@ -700,6 +698,54 @@ body[data-page="login"] {
 .login-layout button[type="submit"] {
   width: 100%;
   margin: 20px 0 14px;
+}
+
+.auth-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.login-language {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--label-secondary);
+}
+
+.login-language .lucide {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+.login-language .lucide:first-child { left: 10px; }
+.login-language .lucide:last-child { right: 10px; width: 12px; height: 12px; }
+
+.login-language select {
+  appearance: none;
+  width: auto;
+  min-height: 40px;
+  padding: 8px 30px 8px 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.login-language select:hover {
+  border-color: transparent;
+  background: var(--fill-hover);
+  color: var(--text);
+}
+
+.login-language select:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--focus);
 }
 
 .password-field {
