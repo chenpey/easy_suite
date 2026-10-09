@@ -1,8 +1,8 @@
-import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound } from "lucide";
+import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound, Globe, ChevronDown } from "lucide";
 import QRCode from "qrcode";
 import { t, uiLanguage, dateLocale, setLanguage, renderStaticI18n } from "./i18n.js";
 
-const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound };
+const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound, Globe, ChevronDown };
 const APP_VERSION = __EASYDROP_VERSION__;
 const renderIcons = () => createIcons({ icons });
 const $ = (id) => document.getElementById(id);
