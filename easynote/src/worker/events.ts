@@ -1,3 +1,4 @@
+import { waitUntil } from 'cloudflare:workers';
 import { idPattern } from '../shared/types';
 import { ApiError, json, requireOrigin, type Env } from './core';
 
@@ -46,14 +47,17 @@ export async function connectNoteEvents(request: Request, env: Env, userId: stri
   return env.NOTE_EVENTS.getByName(userId).fetch(new Request('https://events/connect', { headers }));
 }
 
-export async function publishNoteChanges(env: Env, userId: string, request: Request): Promise<void> {
+export function publishNoteChanges(env: Env, userId: string, request: Request): void {
   const source = sourceClient(request);
-  try {
-    await env.NOTE_EVENTS.getByName(userId).fetch('https://events/notify', {
-      method: 'POST',
-      headers: source ? { 'X-EasyNote-Client': source } : undefined,
-    });
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'note-change-notification-failed', userId, error: String(error) }));
-  }
+  // The note is committed; keep notification delivery alive without delaying the save response.
+  waitUntil((async () => {
+    try {
+      await env.NOTE_EVENTS.getByName(userId).fetch('https://events/notify', {
+        method: 'POST',
+        headers: source ? { 'X-EasyNote-Client': source } : undefined,
+      });
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'note-change-notification-failed', userId, error: String(error) }));
+    }
+  })());
 }

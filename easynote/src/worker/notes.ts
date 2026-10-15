@@ -207,7 +207,7 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
     if (latest) throw new ApiError(409, 'The note changed on another device.', { current: toNote(latest) });
     throw new ApiError(409, 'An image is unavailable, the note was purged, or the note limit was reached.');
   }
-  await publishNoteChanges(env, user.id, request);
+  publishNoteChanges(env, user.id, request);
   return json({ note: toNote(written) }, create ? 201 : 200);
 }
 
@@ -341,7 +341,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
       env.DB.prepare(`DELETE FROM note_changes WHERE user_id=? AND sequence NOT IN
         (SELECT MAX(sequence) FROM note_changes WHERE user_id=? GROUP BY note_id)`).bind(user.id, user.id),
     ]);
-    if (count?.count) await publishNoteChanges(env, user.id, request);
+    if (count?.count) publishNoteChanges(env, user.id, request);
     return json({ deleted: count?.count ?? 0 });
   }
   if (path === '/api/notes/blank' && request.method === 'GET') {
@@ -400,7 +400,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
         .bind(user.id, id, user.id, id),
     ]);
     if (!results[2].meta.changes) throw new ApiError(409, 'Only an unchanged note in trash can be permanently deleted.');
-    await publishNoteChanges(env, user.id, request);
+    publishNoteChanges(env, user.id, request);
     return json({ ok: true });
   }
   return null;

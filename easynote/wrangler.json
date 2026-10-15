@@ -39,7 +39,7 @@
     "VERSIONS_KEPT": "20",
     "IMAGE_GRACE_HOURS": "168",
     "SESSION_DAYS": "30",
-    "AUTOSAVE_MS": "1000",
+    "AUTOSAVE_MS": "500",
     "POLL_SECONDS": "30",
     "LOGIN_WINDOW_SECONDS": "900",
     "LOGIN_IP_LIMIT": "20",

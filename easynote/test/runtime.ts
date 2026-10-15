@@ -32,7 +32,7 @@ export async function createRuntime(port?: number, options: { seedOwner?: boolea
   const config = JSON.parse(await readFile(new URL('../wrangler.json', import.meta.url), 'utf8'));
   const bundle = await build({
     entryPoints: [new URL('../src/worker/index.ts', import.meta.url).pathname],
-    bundle: true, write: false, format: 'esm', platform: 'browser', external: ['node:*'],
+    bundle: true, write: false, format: 'esm', platform: 'browser', external: ['node:*', 'cloudflare:*'],
   });
   const verifier = await passwordVerifier(testPassword);
   const runtime = new Miniflare(convertV4MiniflareOptions({

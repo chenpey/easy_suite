@@ -219,6 +219,87 @@ for (const cancel of [false, true]) {
   });
 }
 
+test('offline resources become ready while a page resource is still loading', async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/slow-page-resource', async (route) => {
+    await gate;
+    await route.fulfill({ status: 204 });
+  });
+  await page.addInitScript(() => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const image = document.createElement('img');
+      image.src = '/slow-page-resource';
+      document.body.appendChild(image);
+    }, { once: true });
+  });
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await expect.poll(() => page.evaluate(async () => {
+      const cache = await caches.open('easynote-pdf-v1');
+      return (await cache.keys()).some((request) => request.url.endsWith('/fonts/NotoSansSC-Bold.otf'));
+    }), { timeout: 15_000 }).toBe(true);
+    expect(await page.evaluate(() => document.readyState)).toBe('interactive');
+    await expect(page.getByText('离线 PDF 资源准备失败。', { exact: false })).toBeHidden();
+  } finally { release(); }
+});
+
+test('PDF cache failures do not interrupt editing or enabling offline notes, but export reports missing resources', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    const original = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/fonts/NotoSansSC-')) return Promise.resolve(new Response('Unavailable', { status: 503 }));
+      return original(input, init);
+    }) as typeof fetch;
+  });
+  const warning = () => page.waitForEvent('console', {
+    predicate: (message) => message.text().includes('Offline PDF resources could not be cached.'),
+  });
+  const initialFailure = warning();
+  await page.goto('/');
+  await initialFailure;
+  await newNote(page, `PDF缓存失败-${randomUUID().slice(0, 6)}`, '缓存失败时仍能编辑保存');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await disableOfflineLibrary(page);
+  await page.locator('.account').click();
+  const offline = page.getByRole('switch', { name: '离线笔记库' });
+  const retried = warning();
+  await offline.click();
+  await expect(offline).toHaveAttribute('aria-checked', 'true');
+  await retried;
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('textbox', { name: '笔记正文' }).fill('重新开启离线笔记后继续保存');
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await context.setOffline(true);
+  await page.getByRole('button', { name: '导出当前笔记为 PDF' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.pdf-preview-error')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '导出 PDF', exact: true })).toBeDisabled();
+});
+
+test('delayed service worker control does not show a PDF timeout while editing', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.serviceWorker, 'controller', { configurable: true, get: () => null });
+  });
+  await page.goto('/');
+  await newNote(page, `后台等待-${randomUUID().slice(0, 6)}`, '正常编辑');
+  await page.clock.install();
+  await page.clock.runFor(21_000);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    Reflect.deleteProperty(navigator.serviceWorker, 'controller');
+    navigator.serviceWorker.dispatchEvent(new Event('controllerchange'));
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const cache = await caches.open('easynote-pdf-v1');
+    return !!await cache.match('/fonts/NotoSansSC-Regular.otf');
+  })).toBe(true);
+});
+
 test('PWA metadata, install action, app-shell cache and API exclusion work', async ({ page, context }) => {
   await page.goto('/');
   const manifestLink = page.locator('link[rel="manifest"]');
@@ -1490,33 +1571,43 @@ test('note list width is adjustable, persistent, and both footers align', async 
   await expect(separator).toHaveAttribute('aria-valuenow', '300');
 });
 
-test('typing while a save response is delayed preserves the newer draft', async ({ page }) => {
-  const title = `连续输入-${randomUUID().slice(0, 6)}`;
-  await page.goto('/');
-  await newNote(page, title, '初始正文');
-  let release: (() => void) | undefined;
-  let reportStarted: (() => void) | undefined;
-  const started = new Promise<void>((resolve) => { reportStarted = resolve; });
-  const delayed = new Promise<void>((resolve) => { release = resolve; });
-  let first = true;
-  await page.route('**/api/notes/*', async (route) => {
-    if (route.request().method() === 'PUT' && first) {
-      first = false;
-      const result = await route.fetch();
-      reportStarted!();
-      await delayed;
-      await route.fulfill({ response: result });
-    } else await route.continue();
+for (const expired of [false, true]) {
+  test(`typing during a save preserves the draft without restarting the ${expired ? 'expired' : 'pending'} debounce`, async ({ page }) => {
+    const title = `连续输入-${randomUUID().slice(0, 6)}`;
+    await page.goto('/');
+    await newNote(page, title, '初始正文');
+    const { config: { autosaveMs } } = await (await page.request.get('/api/session')).json();
+    await page.clock.install();
+    await page.clock.pauseAt(new Date());
+    let release: (() => void) | undefined;
+    let reportStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => { reportStarted = resolve; });
+    const delayed = new Promise<void>((resolve) => { release = resolve; });
+    let first = true;
+    await page.route('**/api/notes/*', async (route) => {
+      if (route.request().method() === 'PUT' && first) {
+        first = false;
+        const result = await route.fetch();
+        reportStarted!();
+        await delayed;
+        await route.fulfill({ response: result });
+      } else await route.continue();
+    });
+    await page.getByRole('textbox', { name: '笔记正文' }).fill('第一段修改');
+    await page.clock.runFor(autosaveMs);
+    await started;
+    await page.getByRole('textbox', { name: '笔记正文' }).fill('请求期间继续输入，完整保留第二段修改');
+    const elapsed = expired ? autosaveMs + 50 : autosaveMs / 2;
+    await page.clock.runFor(elapsed);
+    release!();
+    await expect(page.locator('.save-status')).toHaveText('本机草稿');
+    await page.clock.runFor(expired ? 1 : autosaveMs - elapsed);
+    await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole('button').filter({ hasText: title }).click();
+    await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('完整保留第二段修改');
   });
-  await page.getByRole('textbox', { name: '笔记正文' }).fill('第一段修改');
-  await started;
-  await page.getByRole('textbox', { name: '笔记正文' }).fill('请求期间继续输入，完整保留第二段修改');
-  release!();
-  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
-  await page.reload();
-  await page.getByRole('button').filter({ hasText: title }).click();
-  await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('完整保留第二段修改');
-});
+}
 
 test('a stalled save times out and remains retryable without reloading', async ({ page }) => {
   await page.goto('/');

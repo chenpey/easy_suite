@@ -70,7 +70,7 @@ const saveCustomTags = (userId: string, tags: string[]) => {
   }
 };
 
-async function prepareOfflineResources(): Promise<void> {
+async function waitForOfflineShell(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   let timeout = 0;
   let controlled: (() => void) | undefined;
@@ -89,7 +89,6 @@ async function prepareOfflineResources(): Promise<void> {
     window.clearTimeout(timeout);
     if (controlled) navigator.serviceWorker.removeEventListener('controllerchange', controlled);
   }
-  await preparePdfExport();
 }
 
 export function useNotebook(session: Session) {
@@ -333,13 +332,13 @@ export function useNotebook(session: Session) {
   refreshRef.current = refresh;
 
   const saveRef = useRef<(id: string, refreshAfter?: boolean, createVersion?: boolean) => Promise<boolean>>(async () => false);
-  const schedule = (id: string) => {
+  const schedule = (id: string, delay = session.config.autosaveMs) => {
     const previous = pendingTimers.current.get(id);
     if (previous) clearTimeout(previous);
     pendingTimers.current.set(id, setTimeout(() => {
       pendingTimers.current.delete(id);
       if (!blocked.current.has(id)) void saveRef.current(id);
-    }, session.config.autosaveMs));
+    }, delay));
   };
 
   const save = async (id: string, refreshAfter = true, createVersion = false): Promise<boolean> => {
@@ -448,7 +447,8 @@ export function useNotebook(session: Session) {
     } finally {
       running.current.delete(id);
       notify();
-      if ((ok || contentSaved) && drafts.current.has(id) && alive.current) schedule(id);
+      // A pending debounce timer already covers newer edits; otherwise save them immediately.
+      if ((ok || contentSaved) && drafts.current.has(id) && alive.current && !pendingTimers.current.has(id)) schedule(id, 0);
     }
     return ok;
   };
@@ -824,7 +824,7 @@ export function useNotebook(session: Session) {
   };
 
   const configureOffline = async (enabled: boolean): Promise<void> => {
-    if (enabled) await prepareOfflineResources();
+    if (enabled) await waitForOfflineShell();
     if (!enabled) fileCacheAbort.current?.abort();
     await setOfflineEnabled(userId, enabled, session);
     offlineLibraryRef.current = enabled;
@@ -897,10 +897,16 @@ export function useNotebook(session: Session) {
   }, [userId, show]);
 
   useEffect(() => {
-    if (!initialized || !offlineLibrary || session.offline) return;
-    void prepareOfflineResources().catch((e: unknown) => {
-      if (alive.current) setError(`离线 PDF 资源准备失败。\n${String(e)}`);
-    });
+    if (!initialized || !offlineLibrary || session.offline || !('serviceWorker' in navigator)) return;
+    const prepare = () => {
+      if (!navigator.serviceWorker.controller) return;
+      navigator.serviceWorker.removeEventListener('controllerchange', prepare);
+      // PDF caching is optional; only an explicit export should surface PDF errors in the UI.
+      void preparePdfExport().catch((error: unknown) => console.warn('Offline PDF resources could not be cached.', error));
+    };
+    if (navigator.serviceWorker.controller) prepare();
+    else navigator.serviceWorker.addEventListener('controllerchange', prepare);
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', prepare);
   }, [initialized, offlineLibrary, session.offline]);
 
   useEffect(() => {

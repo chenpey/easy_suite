@@ -12,6 +12,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'script-defer',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
         id: '/',
@@ -32,6 +33,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Explicit injection disables the plugin's autoUpdate defaults; preserve immediate takeover.
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: [
           '**/*.{html,css,svg}',
           'registerSW.js',

@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.10.1`
+Current Version: `0.10.2`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.10.2 Release Notes (2026-10-15)
+
+- Reduce the default autosave delay from 1000 ms to 500 ms. Edits made during a save keep their existing debounce deadline and save immediately once it has elapsed, without waiting another full interval. The saved status still requires server confirmation.
+- Deliver cross-device change notifications in the background so they no longer delay completed save responses; retain failure logging and polling recovery.
+- Register the offline worker before the full page finishes loading, using a deferred registration script while preserving immediate activation and control of the page.
+- Treat PDF resources as an optional background cache: preparation failures no longer interrupt editing, saving, or enabling offline notes. Export failures appear in the PDF dialog. Offline PDF export may remain unavailable if the resources were not cached successfully.
+- Add regression coverage for slow page resources, PDF cache failures, edits during saves, and background notifications. The database schema and migrations are unchanged.
 
 ## 0.10.1 Release Notes (2026-10-15)
 
@@ -327,7 +335,7 @@ Configured in `wrangler.json` under `vars`:
 | `VERSIONS_KEPT` | 20 | Maximum historical snapshots per note |
 | `IMAGE_GRACE_HOURS` | 168 | Retention grace period for unreferenced files |
 | `SESSION_DAYS` | 30 | Session expiration duration in days |
-| `AUTOSAVE_MS` | 1000 | Autosave delay after typing stops |
+| `AUTOSAVE_MS` | 500 | Autosave delay after typing stops, in milliseconds |
 | `POLL_SECONDS` | 30 | Foreground sync polling fallback interval |
 | `LOGIN_WINDOW_SECONDS` | 900 | Login attempt rate limit window |
 | `LOGIN_IP_LIMIT` | 20 | Login attempts per IP within window |
