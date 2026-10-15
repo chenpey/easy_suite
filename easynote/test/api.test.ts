@@ -269,7 +269,12 @@ test('idempotent create and update; operation IDs cannot be reused with changed 
   assert.equal((await save(id, 0, {}, operation)).status, 200);
   assert.equal((await save(id, 0, { title: 'different' }, operation)).status, 409);
   const updateOperation = randomUUID();
-  assert.equal((await save(id, 1, { title: 'new' }, updateOperation)).status, 200);
+  const updated = await save(id, 1, { title: 'new' }, updateOperation);
+  assert.equal(updated.status, 200);
+  // The save response comes from the write itself (RETURNING), so it must carry the new content.
+  const savedBody = await updated.json() as any;
+  assert.equal(savedBody.note.revision, 2);
+  assert.equal(savedBody.note.title, 'new');
   const retry = await save(id, 1, { title: 'new' }, updateOperation);
   assert.equal(retry.status, 200);
   assert.equal((await retry.json() as any).note.revision, 2);

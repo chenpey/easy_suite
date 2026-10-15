@@ -299,7 +299,12 @@ export function useNotebook(session: Session) {
       if (alive.current && generation === listGeneration.current) renderMirror();
       return;
     }
-    const result = await api.list({ q: query, view, tag, offset: append ? nextOffset ?? 0 : 0 }, signal);
+    // Tags do not depend on the list result, so fetch both in parallel.
+    const listRequest = api.list({ q: query, view, tag, offset: append ? nextOffset ?? 0 : 0 }, signal);
+    // Early returns below never await this, so mark it handled; the awaited copy still throws.
+    const tagsRequest = api.tags(view, signal);
+    tagsRequest.catch(() => undefined);
+    const result = await listRequest;
     if (!alive.current || generation !== listGeneration.current) return;
     const existingBlank = result.notes.find(blankSummary);
     if (existingBlank) {
@@ -318,7 +323,7 @@ export function useNotebook(session: Session) {
     setNotes((prev) => append ? [...prev, ...result.notes.filter((n) => !prev.some((old) => old.id === n.id))] : result.notes);
     setNextOffset(result.nextOffset);
     setOnline(true);
-    const data = await api.tags(view, signal);
+    const data = await tagsRequest;
     const custom = loadCustomTags(userId);
     if (alive.current && generation === listGeneration.current) {
       setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
@@ -396,7 +401,9 @@ export function useNotebook(session: Session) {
           }
           blocked.current.delete(id);
           ok = true;
-          if (refreshAfter) await refreshRef.current();
+          // Do not block the saved status on the list reload: the note is already on the server.
+          // A failed refresh only leaves the list stale until the next refresh.
+          if (refreshAfter) void refreshRef.current().catch((e: unknown) => { if (alive.current) setError(String(e)); });
           break;
         } catch (error) {
           const latest = drafts.current.get(id);

@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.10.0`
+Current Version: `0.10.1`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.10.1 Release Notes (2026-10-15)
+
+- Fewer database round trips when saving a note: the current revision and the purge tombstone are read in one batch, and the save response comes from the write itself via `RETURNING` instead of a follow-up read, so the response always matches the revision that was written.
+- Load the note list and the tag list in parallel, removing one serial round trip. A failed list refresh after a successful save is no longer treated as a save failure and no longer blocks further autosaves of that note (the content is already on the server); the list catches up on the next poll.
+- The database schema and migrations are unchanged: upgrading from 0.10.0 needs no extra migration or backup step.
 
 ## 0.10.0 Release Notes (2026-10-15)
 
