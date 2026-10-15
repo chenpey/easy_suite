@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.8.7`
+Current Version: `0.9.0`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.9.0 Release Notes (2026-10-15)
+
+- Add KaTeX inline and display math, including offline cold starts, shared and separate readers, PDF exports, and an importable example. PDF export rasterizes formulas and their containing paragraphs, headings, list items, or table cells; text inside those images cannot be selected or searched.
+- Browser connectivity hints no longer block sync or image requests. Network failures and HTTP errors update connectivity separately, including when the offline library is disabled. The task center uses mirrored notes and unsynced drafts when the offline library is enabled.
+- Retry temporary save failures up to twice with the same operation ID; prevent delayed reads from overwriting newer synchronized content or purge tombstones.
+- Fix PDF exports containing math and Mermaid in the same list item, preserve image dimensions, reuse decoded images when their sources become unreachable if the canvas can read them, and report other images as unwritable, and cover large images mixed with inline math.
+- Build current source before UI tests, update stale selectors, include client API and math parser tests in the regular test command, and remove unused translation keys.
 
 ## 0.8.7 Release Notes (2026-10-09)
 
@@ -21,11 +29,12 @@ A self-hosted Markdown note-taking application for individuals or small teams. R
 - Single blank note rule: Keeps at most one completely blank note per account; creating a new note reuses an existing blank note if present.
 - CodeMirror 6 editor, markdown-it parsing with DOMPurify sanitization, supporting footnotes, code highlighting, and safe HTML blocks.
 - Mermaid diagrams: Flowcharts, mindmaps, and other Mermaid charts rendered on-demand in preview mode.
+- KaTeX math: `$x^2$` inline and `$$…$$` display formulas, including offline previews, separate readers, shares, and PDF exports. Code and ordinary currency remain literal.
 - Image pasting, drag-and-drop, and file selection (JPEG, PNG, WebP); private attachments (PDF, Markdown, TXT, CSV, JSON); inserted at cursor position.
 - PDF export with authentic paginated preview, A4/Letter formats, portrait/landscape orientation, and scaling; direct download on desktop, system share sheet on iOS/Android.
 - Trash bin, restore, permanent deletion, and tombstone records preventing stale devices from resurrecting purged notes.
 - Revision-based concurrency control, 3-way merge from base revisions, manual conflict resolution with conflict copies, idempotent retries, manual snapshot history, and version restore.
-- Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting.
+- Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting. Browser connectivity hints do not block requests; temporary network or server save failures get up to two automatic retries before requiring manual sync.
 - Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
 - Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Notes can open in a regular separate reader window on desktop (omitted on mobile); system-level always-on-top is not supported.
 - Searchable command palette (`Cmd/Ctrl+K`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
@@ -245,7 +254,11 @@ See reference document: [[00000000-0000-0000-0000-000000000001|Project Specifica
 
 The sidebar outline panel scans active notes in real time to display "Backlinks" (all notes referencing the current note), establishing a two-way knowledge graph.
 
-### Diagrams & HTML
+### Diagrams, Math & HTML
+
+Math supports `$x^2$` inline and `$$…$$` display formulas. `\(` and `\[` are Markdown escapes and stay literal so existing notes do not change. Code and ordinary currency remain literal. Each formula is limited to 10,000 source characters; `trust: false` prevents untrusted links and external images, `maxExpand: 1000` bounds macro expansion, and `maxSize: 20` bounds user-specified sizes. Invalid formulas retain their source; oversized or unclosed formulas remain plain text.
+
+Import [`examples/math-demo.md`](examples/math-demo.md) to check formulas in lists and tables, including math mixed with Mermaid.
 
 Flowcharts and mindmaps use Mermaid fenced code blocks and render automatically in preview mode, with full light/dark mode auto-theming:
 
@@ -272,6 +285,10 @@ You can import [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-
   - Image/attachment URLs use stable internal routes (`/api/images/<id>`), with no public buckets or temporary signed URLs.
   - Every file request verifies login and tenant ownership with `private, no-store` headers.
   - Files referenced by active notes, trash, or retained version snapshots are protected from deletion; unreferenced files are safely cleaned up after a grace period.
+
+### PDF Export
+
+PDF export provides a paginated preview with A4/Letter paper, portrait/landscape orientation, and scaling. Ordinary text remains selectable and searchable. Formulas and Mermaid diagrams are embedded as images; an entire paragraph, heading, list item, or table cell containing inline math becomes an image, so its text cannot be selected or searched. Raster images are limited to 2400 pixels on their longest side, which can reduce clarity for large blocks. Keep the Markdown source when searchable or copyable formula content is required.
 
 ### AI Integration (MCP)
 

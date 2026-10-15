@@ -179,9 +179,15 @@ export async function loadMirroredNote(userId: string, id: string): Promise<Note
   finally { db.close(); }
 }
 
-export async function cacheMirroredNote(userId: string, note: Note): Promise<void> {
+export async function cacheMirroredNote(userId: string, note: Note, signal?: AbortSignal): Promise<void> {
   const db = await database();
-  try { await db.put('notes', note, accountKey(userId, note.id)); }
+  try {
+    const tx = db.transaction('notes', 'readwrite');
+    const key = accountKey(userId, note.id);
+    const existing = await tx.store.get(key) as Note | undefined;
+    if (!signal?.aborted && (!existing || existing.revision <= note.revision)) await tx.store.put(note, key);
+    await tx.done;
+  }
   finally { db.close(); }
 }
 

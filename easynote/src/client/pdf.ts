@@ -64,7 +64,9 @@ function canvasPng(image: HTMLImageElement): string {
   const context = canvas.getContext('2d');
   if (!context) throw new Error('图片转换失败。');
   context.drawImage(image, 0, 0);
-  return canvas.toDataURL('image/png');
+  // Cross-origin images without CORS taint the canvas; report them with the same message as other image failures.
+  try { return canvas.toDataURL('image/png'); }
+  catch { throw new Error(`图片无法写入 PDF：${image.alt || '未命名图片'}`); }
 }
 
 async function imageDataUrl(image: HTMLImageElement): Promise<string> {
@@ -73,8 +75,9 @@ async function imageDataUrl(image: HTMLImageElement): Promise<string> {
   }
   const source = image.currentSrc || image.src;
   if (!source) throw new Error(`图片无法写入 PDF：${image.alt || '未命名图片'}`);
-  const response = await fetch(source);
-  if (!response.ok) throw new Error(`图片无法写入 PDF：${image.alt || '未命名图片'}`);
+  // A decoded image can remain usable after its source becomes unreachable.
+  const response = await fetch(source).catch(() => null);
+  if (!response?.ok) return canvasPng(image);
   const blob = await response.blob();
   if (blob.type === 'image/png' || blob.type === 'image/jpeg') return blobDataUrl(blob);
   return canvasPng(image);
@@ -96,17 +99,17 @@ async function svgPngDataUrl(svg: SVGSVGElement): Promise<string> {
   source.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   const width = svg.viewBox.baseVal.width || svg.getBoundingClientRect().width;
   const height = svg.viewBox.baseVal.height || svg.getBoundingClientRect().height;
-  if (width <= 0 || height <= 0) throw new Error('Mermaid 图表尺寸无效。');
+  if (width <= 0 || height <= 0) throw new Error('图形尺寸无效。');
   const scale = Math.min(2.5, 2400 / width, 2400 / height);
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.ceil(width * scale));
   canvas.height = Math.max(1, Math.ceil(height * scale));
   const context = canvas.getContext('2d');
-  if (!context) throw new Error('Mermaid 图表转换失败。');
-  const url = URL.createObjectURL(new Blob(
-    [new XMLSerializer().serializeToString(source)],
-    { type: 'image/svg+xml;charset=utf-8' },
-  ));
+  if (!context) throw new Error('图形转换失败。');
+  const serialized = new XMLSerializer().serializeToString(source);
+  const url = source.querySelector('foreignObject')
+    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`
+    : URL.createObjectURL(new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' }));
   try {
     const image = new Image();
     image.src = url;
@@ -120,6 +123,46 @@ async function svgPngDataUrl(svg: SVGSVGElement): Promise<string> {
   }
 }
 
+async function replaceFormulas(source: HTMLElement, target: HTMLElement, printable: { width: number }) {
+  const originals = [...source.querySelectorAll<HTMLElement>('.math-formula')];
+  const copies = [...target.querySelectorAll<HTMLElement>('.math-formula')];
+  const groups = new Map<HTMLElement, HTMLElement>();
+  originals.forEach((original, index) => {
+    if (!original.querySelector('math')) return;
+    const selector = 'p, li, td, th, h1, h2, h3, h4, h5, h6';
+    const block = original.classList.contains('math-display');
+    groups.set(block ? copies[index] : copies[index].closest<HTMLElement>(selector) ?? copies[index],
+      block ? original : original.closest<HTMLElement>(selector) ?? original);
+  });
+  await Promise.all([...groups].map(async ([element, original]) => {
+    const bounds = original.getBoundingClientRect();
+    const width = Math.ceil(Math.max(bounds.width, original.scrollWidth) + 4);
+    const height = Math.ceil(Math.max(bounds.height, original.scrollHeight) + 4);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const foreign = document.createElementNS(svg.namespaceURI, 'foreignObject');
+    foreign.setAttribute('width', String(width));
+    foreign.setAttribute('height', String(height));
+    const holder = document.createElement('div');
+    const style = getComputedStyle(original);
+    holder.style.cssText = `padding:2px;color:#000;font:${style.font};line-height:${style.lineHeight}`;
+    // shortcut: Rasterize math paragraphs for pdfmake; use a math-aware PDF renderer when selectable formulas are needed.
+    const rendered = element.cloneNode(true) as HTMLElement;
+    rendered.style.cssText = 'display:block;margin:0;padding:0;font:inherit;line-height:inherit';
+    const sourceMath = [...original.querySelectorAll('math')];
+    rendered.querySelectorAll('math').forEach((math, index) => { math.style.fontSize = getComputedStyle(sourceMath[index]).fontSize; });
+    holder.appendChild(rendered);
+    foreign.appendChild(holder);
+    svg.appendChild(foreign);
+    const image = document.createElement('img');
+    image.src = await svgPngDataUrl(svg);
+    image.alt = original.textContent ?? 'Formula';
+    image.dataset.pdfmake = JSON.stringify({ width: Math.min(printable.width, width * 72 / 96) });
+    if (element.matches('li, td, th')) element.replaceChildren(image);
+    else element.replaceWith(image);
+  }));
+}
+
 async function replaceDiagrams(source: HTMLElement, target: HTMLElement, printable: { width: number; height: number }) {
   const sourceDiagrams = [...source.querySelectorAll<SVGSVGElement>('.mermaid-diagram svg')];
   const targetDiagrams = [...target.querySelectorAll<SVGSVGElement>('.mermaid-diagram svg')];
@@ -129,6 +172,9 @@ async function replaceDiagrams(source: HTMLElement, target: HTMLElement, printab
     const image = document.createElement('img');
     image.src = await svgPngDataUrl(original);
     image.alt = 'Mermaid 图表';
+    const size = original.getBoundingClientRect();
+    image.style.width = `${size.width}px`;
+    image.style.height = `${size.height}px`;
     image.dataset.pdfmake = JSON.stringify({
       fit: [
         Math.round(printable.width),
@@ -151,6 +197,9 @@ async function exportHtml(source: HTMLElement, options: PdfExportOptions): Promi
     const original = sourceImages[index];
     if (!original) throw new Error(`图片无法写入 PDF：${image.alt || '未命名图片'}`);
     image.src = await imageDataUrl(original);
+    const size = original.getBoundingClientRect();
+    image.style.width = `${size.width}px`;
+    image.style.height = `${size.height}px`;
     image.removeAttribute('loading');
     image.removeAttribute('width');
     image.removeAttribute('height');
@@ -180,6 +229,7 @@ async function exportHtml(source: HTMLElement, options: PdfExportOptions): Promi
     });
   });
   await replaceDiagrams(article, clone, printable);
+  await replaceFormulas(article, clone, printable);
   clone.querySelectorAll<HTMLElement>('pre').forEach((pre) => {
     pre.style.backgroundColor = '#f5f6f7';
     pre.style.border = '1px solid #d7d9dc';

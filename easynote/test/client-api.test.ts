@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { request } from '../src/client/api';
+import { ApiError, NetworkError, request } from '../src/client/api';
 
 const realSetTimeout = globalThis.setTimeout;
 const realClearTimeout = globalThis.clearTimeout;
@@ -44,7 +44,7 @@ test('request timeout aborts response body even with a caller signal', async (t)
 
   await assert.rejects(
     pending,
-    (error: unknown) => error instanceof Error &&
+    (error: unknown) => error instanceof NetworkError &&
       error.message === 'GET /api/slow\nRequest timed out after 30 seconds.',
   );
   assert.equal(caller.signal.aborted, false);
@@ -61,4 +61,12 @@ test('caller cancellation keeps its original error', async (t) => {
   caller.abort(reason);
 
   await assert.rejects(pending, (error: unknown) => error === reason);
+});
+
+
+test('non-JSON service errors retain their status for bounded retries', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = (() => Promise.resolve(new Response('<h1>Unavailable</h1>', { status: 503 }))) as typeof fetch;
+  await assert.rejects(request('/api/notes/test', 'PUT', {}), (error: unknown) => error instanceof ApiError && error.status === 503);
 });

@@ -1702,3 +1702,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   .word-count { display: none; }
   .mobile-action-list { grid-template-columns: 1fr; }
 }
+
+.math-display { display: block; max-width: 100%; overflow-x: auto; padding: .35em 0; }
+.math-formula math { font-size: 1.1em; }
+.math-error { color: #b42318; font-family: monospace; white-space: pre-wrap; }

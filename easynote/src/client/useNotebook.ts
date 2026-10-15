@@ -13,7 +13,7 @@ import {
   type SyncChange,
 } from '../shared/types';
 import { unfinishedTasks } from '../shared/tasks';
-import { api, ApiError, noteEventsUrl } from './api';
+import { api, ApiError, NetworkError, noteEventsUrl } from './api';
 import { mergeNoteChanges, type ConflictPreference, type NoteConflictField } from './merge';
 import { preparePdfExport } from './pdf';
 import {
@@ -100,6 +100,7 @@ export function useNotebook(session: Session) {
   const drafts = useRef(new Map<string, Draft>());
   const running = useRef(new Set<string>());
   const blocked = useRef(new Set<string>());
+  const retryable = useRef(new Map<string, { attempts: number; message: string }>());
   const pendingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const alive = useRef(true);
   const ready = useRef(false);
@@ -124,7 +125,7 @@ export function useNotebook(session: Session) {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const [online, setOnline] = useState(navigator.onLine && !session.offline);
+  const [online, setOnline] = useState(!session.offline);
   const [offlineLibrary, setOfflineLibrary] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
   const mirror = useRef(new Map<string, Note>());
@@ -144,6 +145,7 @@ export function useNotebook(session: Session) {
     pendingTimers.current.delete(id);
     drafts.current.delete(id);
     blocked.current.delete(id);
+    retryable.current.delete(id);
     await persist(id, null);
   };
   const show = useCallback((value: Note | null) => { current.current = value; setNote(value); }, []);
@@ -214,6 +216,8 @@ export function useNotebook(session: Session) {
       const page = await api.sync(cursor, signal);
       await applyMirrorChanges(userId, page.changes, page.cursor);
       for (const change of page.changes) {
+        if (current.current?.id === change.noteId &&
+            (!change.note || change.note.revision > current.current.revision)) selectionAbort.current?.abort();
         if (change.note) {
           mirror.current.set(change.noteId, change.note);
           if (current.current?.id === change.noteId && !drafts.current.has(change.noteId) &&
@@ -258,6 +262,7 @@ export function useNotebook(session: Session) {
 
     for (const change of changes) {
       if (current.current?.id !== change.noteId || drafts.current.has(change.noteId)) continue;
+      selectionAbort.current?.abort();
       if (!change.note) show(null);
       else if (change.note.revision > current.current.revision) show(change.note);
     }
@@ -290,7 +295,7 @@ export function useNotebook(session: Session) {
   const refresh = useCallback(async (append = false, signal?: AbortSignal) => {
     const generation = ++listGeneration.current;
     if (offlineLibraryRef.current) {
-      if (navigator.onLine && !session.offline) await syncOfflineMirror(signal);
+      if (!session.offline) await syncOfflineMirror(signal);
       if (alive.current && generation === listGeneration.current) renderMirror();
       return;
     }
@@ -312,6 +317,7 @@ export function useNotebook(session: Session) {
     }
     setNotes((prev) => append ? [...prev, ...result.notes.filter((n) => !prev.some((old) => old.id === n.id))] : result.notes);
     setNextOffset(result.nextOffset);
+    setOnline(true);
     const data = await api.tags(view, signal);
     const custom = loadCustomTags(userId);
     if (alive.current && generation === listGeneration.current) {
@@ -335,7 +341,7 @@ export function useNotebook(session: Session) {
     if (running.current.has(id)) return false;
     let target = drafts.current.get(id)?.note ?? (current.current?.id === id ? current.current : null);
     if (!target) return !createVersion;
-    if (!navigator.onLine || session.offline) { notify(); return false; }
+    if (session.offline) { notify(); return false; }
     const pendingTimer = pendingTimers.current.get(id);
     if (pendingTimer) clearTimeout(pendingTimer);
     pendingTimers.current.delete(id);
@@ -360,6 +366,10 @@ export function useNotebook(session: Session) {
             createVersion && !draft,
           );
           if (!alive.current) return true;
+          setOnline(true);
+          const previousFailure = retryable.current.get(id);
+          retryable.current.delete(id);
+          if (previousFailure) setError((value) => value === previousFailure.message ? '' : value);
           if (offlineLibraryRef.current) mirror.current.set(saved.id, saved);
           const latest = drafts.current.get(id);
           if (latest?.operationId === operationId) {
@@ -421,8 +431,12 @@ export function useNotebook(session: Session) {
       }
     } catch (e) {
       if (!alive.current) return false;
-      if (!(e instanceof ApiError) && offlineLibraryRef.current) setOnline(false);
+      if (e instanceof NetworkError) setOnline(false);
+      else if (e instanceof ApiError) setOnline(true);
       blocked.current.add(id);
+      if ((e instanceof NetworkError || e instanceof ApiError && e.status >= 500) && drafts.current.has(id)) {
+        retryable.current.set(id, { attempts: (retryable.current.get(id)?.attempts ?? 0) + 1, message: String(e) });
+      } else retryable.current.delete(id);
       setError(conflictHandled ? '' : String(e));
     } finally {
       running.current.delete(id);
@@ -445,6 +459,8 @@ export function useNotebook(session: Session) {
       base: existingDraft ? existingDraft.base : latest,
     };
     drafts.current.set(target.id, draft);
+    const failure = retryable.current.get(target.id);
+    if (failure) { failure.attempts = 0; blocked.current.delete(target.id); }
     if (current.current?.id === target.id) show(updated);
     void persist(target.id, draft).catch(() => undefined);
     notify();
@@ -467,7 +483,7 @@ export function useNotebook(session: Session) {
           show(cached);
         }
       }
-      if (!navigator.onLine || session.offline) {
+      if (session.offline) {
         if (!cached) throw new Error('这篇笔记尚未保存到本机。');
         return cached;
       }
@@ -476,22 +492,24 @@ export function useNotebook(session: Session) {
       const revalidate = async (): Promise<Note | null> => {
         try {
           const result = await api.note(id, controller.signal);
+          if (controller.signal.aborted || !alive.current || generation !== selectionGeneration.current || drafts.current.has(id)) return null;
+          const newer = [mirror.current.get(id), current.current?.id === id ? current.current : null]
+            .find((value) => value && value.revision > result.note.revision);
+          if (newer) return newer;
           if (offlineLibraryRef.current) {
             mirror.current.set(id, result.note);
-            void cacheMirroredNote(userId, result.note).catch((e: unknown) => {
+            void cacheMirroredNote(userId, result.note, controller.signal).catch((e: unknown) => {
               if (alive.current) setError(`离线笔记写入失败。\n${String(e)}`);
             });
           }
-          if (!alive.current || generation !== selectionGeneration.current || drafts.current.has(id)) return null;
           if (current.current?.id !== id || current.current.revision !== result.note.revision) show(result.note);
-          if (offlineLibraryRef.current) setOnline(true);
+          setOnline(true);
           return result.note;
         } catch (e) {
           if (controller.signal.aborted || !alive.current || generation !== selectionGeneration.current) return null;
-          if (cached) {
-            if (!(e instanceof ApiError)) setOnline(false);
-            return null;
-          }
+          if (e instanceof NetworkError) setOnline(false);
+          else if (e instanceof ApiError) setOnline(true);
+          if (cached) return null;
           throw e;
         } finally {
           if (selectionAbort.current === controller) selectionAbort.current = null;
@@ -569,7 +587,7 @@ export function useNotebook(session: Session) {
         }
         const local = fullNotes.find((item) => item.revision === 0 && blankNote(item));
         if (local) return open(local);
-        if (navigator.onLine && !session.offline) {
+        if (!session.offline) {
           const existing = await api.blank();
           if (existing.note) return open(existing.note);
         }
@@ -595,6 +613,7 @@ export function useNotebook(session: Session) {
     let checkpointSaved = false;
     for (const id of [...drafts.current.keys()]) {
       blocked.current.delete(id);
+      retryable.current.delete(id);
       const createVersion = id === checkpointId;
       if (!await saveRef.current(id, false, createVersion)) { savedAll = false; break; }
       if (createVersion) checkpointSaved = true;
@@ -724,7 +743,7 @@ export function useNotebook(session: Session) {
       await persist(target.id, draft);
       blocked.current.delete(target.id);
       if (current.current?.id === target.id) show(next);
-      if (navigator.onLine && !session.offline) {
+      if (!session.offline) {
         if (!await save(target.id, false)) {
           throw new Error(`批量操作已处理 ${updated} 篇，在“${target.title || '未命名笔记'}”处停止。`);
         }
@@ -793,7 +812,7 @@ export function useNotebook(session: Session) {
   };
 
   const tasks = async () => {
-    if (!offlineLibraryRef.current || navigator.onLine && !session.offline) return (await api.tasks()).tasks;
+    if (!offlineLibraryRef.current) return (await api.tasks()).tasks;
     return (await allAvailableNotes()).flatMap(unfinishedTasks);
   };
 
@@ -807,12 +826,12 @@ export function useNotebook(session: Session) {
       onlineCursor.current = null;
       mirror.current = await loadMirroredNotes(userId);
       await cacheSession(session);
-      if (navigator.onLine && !session.offline) await syncOfflineMirror();
+      if (!session.offline) await syncOfflineMirror();
       renderMirror();
     } else {
       mirror.current.clear();
       setOfflineCount(0);
-      onlineCursor.current = navigator.onLine && !session.offline
+      onlineCursor.current = !session.offline
         ? (await api.syncHead()).cursor
         : null;
       await refreshRef.current();
@@ -837,25 +856,28 @@ export function useNotebook(session: Session) {
         setOfflineCount(mirror.current.size);
         if (mirror.current.size) { renderMirror(); setLoading(false); }
         if (!session.offline) await cacheSession(session);
-      } else if (navigator.onLine && !session.offline) {
+      } else if (!session.offline) {
         onlineCursor.current = (await api.syncHead()).cursor;
       }
       for (const id of loaded.keys()) blocked.current.add(id);
       if (loaded.size) show(loaded.values().next().value!.note);
       try {
-        if (enabled && loaded.size && navigator.onLine && !session.offline) await retry();
-        else {
-          await refreshRef.current();
-          if (!enabled && navigator.onLine && !session.offline) await syncOnlineRef.current();
-        }
+        await refreshRef.current();
+        if (!enabled && !session.offline) await syncOnlineRef.current();
       } catch (error) {
+        if (error instanceof NetworkError) setOnline(false);
+        else if (error instanceof ApiError) setOnline(true);
         if (!enabled || !mirror.current.size) throw error;
-        setOnline(false);
         renderMirror();
       }
       ready.current = true;
       setInitialized(true);
-    }).catch((e: unknown) => { if (alive.current) setError(String(e)); }).finally(() => {
+    }).catch((e: unknown) => {
+      if (!alive.current) return;
+      if (e instanceof NetworkError) setOnline(false);
+      else if (e instanceof ApiError) setOnline(true);
+      setError(String(e));
+    }).finally(() => {
       if (alive.current) { setLoading(false); notify(); }
     });
     return () => {
@@ -887,7 +909,7 @@ export function useNotebook(session: Session) {
   }, [initialized, view, query, tag, renderMirror]);
 
   useEffect(() => {
-    setOnline(navigator.onLine && !session.offline);
+    setOnline(!session.offline);
   }, [session.offline]);
 
   useEffect(() => {
@@ -897,7 +919,7 @@ export function useNotebook(session: Session) {
         pollQueued.current = true;
         return;
       }
-      if (!ready.current || document.hidden || !navigator.onLine || session.offline) return;
+      if (!ready.current || document.hidden || session.offline) return;
       pollInFlight.current = true;
       const controller = new AbortController();
       pollAbort.current = controller;
@@ -905,12 +927,21 @@ export function useNotebook(session: Session) {
       try {
         if (offlineLibraryRef.current) await refreshRef.current(false, controller.signal);
         else await syncOnlineRef.current(controller.signal);
+        setOnline(true);
+        for (const id of drafts.current.keys()) {
+          if (running.current.has(id) || pendingTimers.current.has(id)) continue;
+          const failure = retryable.current.get(id);
+          if (blocked.current.has(id) && (!failure || failure.attempts >= 3)) continue;
+          blocked.current.delete(id);
+          if (!await saveRef.current(id, false)) break;
+        }
         const previous = pollError.current;
         pollError.current = '';
         if (previous && alive.current) setError((value) => value === previous ? '' : value);
       } catch (e) {
         if (alive.current && !controller.signal.aborted) {
-          if (offlineLibraryRef.current) setOnline(false);
+          if (e instanceof NetworkError) setOnline(false);
+          else if (e instanceof ApiError) setOnline(true);
           const message = `后台同步失败，将自动重试。\n${String(e)}`;
           pollError.current = message;
           setError(message);
@@ -931,7 +962,7 @@ export function useNotebook(session: Session) {
     let reconnectDelay = 1000;
     let stopped = false;
     const connectEvents = () => {
-      if (stopped || session.offline || !navigator.onLine ||
+      if (stopped || session.offline ||
           socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
       socket = new WebSocket(noteEventsUrl());
       socket.addEventListener('open', () => {
@@ -950,7 +981,7 @@ export function useNotebook(session: Session) {
       socket.addEventListener('close', () => {
         window.clearInterval(pingTimer);
         socket = null;
-        if (stopped || session.offline || !navigator.onLine) return;
+        if (stopped || session.offline) return;
         window.clearTimeout(reconnectTimer);
         reconnectTimer = window.setTimeout(connectEvents, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
@@ -958,16 +989,9 @@ export function useNotebook(session: Session) {
       socket.addEventListener('error', () => socket?.close());
     };
     const network = () => {
-      setOnline(navigator.onLine && !session.offline);
-      if (navigator.onLine && !session.offline) {
-        connectEvents();
-        if (offlineLibraryRef.current && drafts.current.size) void retry();
-        else void poll();
-      }
-      else {
-        pollAbort.current?.abort();
-        socket?.close();
-      }
+      if (!navigator.onLine) setOnline(false);
+      connectEvents();
+      void poll();
     };
     const visibility = () => {
       if (document.hidden) pollAbort.current?.abort();
@@ -982,7 +1006,7 @@ export function useNotebook(session: Session) {
     window.addEventListener('offline', network);
     window.addEventListener('beforeunload', beforeUnload);
     connectEvents();
-    if (ready.current && navigator.onLine && !session.offline) {
+    if (ready.current && !session.offline) {
       if (offlineLibraryRef.current && drafts.current.size) void retry();
       else void poll();
     }

@@ -15,6 +15,8 @@ import type {
   Version,
 } from '../shared/types';
 
+export class NetworkError extends Error {}
+
 const API_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 const clientId = crypto.randomUUID();
@@ -56,9 +58,9 @@ async function timedFetch(
     const response = await fetch(path, { ...init, signal: controller.signal });
     return { response, raw: await response.text() };
   } catch (error) {
-    if (timedOut) throw new Error(`${method} ${path}\nRequest timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
+    if (timedOut) throw new NetworkError(`${method} ${path}\nRequest timed out after ${Math.round(timeoutMs / 1000)} seconds.`);
     if (init.signal?.aborted) throw error;
-    throw new Error(`${method} ${path}\n${String(error)}`);
+    throw new NetworkError(`${method} ${path}\n${String(error)}`);
   } finally {
     clearTimeout(timer);
     init.signal?.removeEventListener('abort', abortFromCaller);
@@ -84,7 +86,10 @@ export async function request<T>(path: string, method = 'GET', body?: unknown, s
   }, API_TIMEOUT_MS);
   handleUnauthorized(response.status, requestCsrf);
   let result;
-  try { result = JSON.parse(raw); } catch { throw new Error(`${method} ${path} [${response.status}]\n${raw}`); }
+  try { result = JSON.parse(raw); } catch {
+    if (!response.ok) throw new ApiError(response.status, { error: { message: raw } }, method, path);
+    throw new Error(`${method} ${path} [${response.status}]\n${raw}`);
+  }
   if (!response.ok) throw new ApiError(response.status, result, method, path);
   return result as T;
 }

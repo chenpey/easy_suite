@@ -39,6 +39,7 @@ export default defineConfig({
           'assets/index-*.js',
           'assets/editor-*.js',
           'assets/markdown-*.js',
+          'assets/katex-*.js',
         ],
         runtimeCaching: [{
           urlPattern: /\/(?:assets\/(?:pdfmake|pdfjs|pdf\.worker)[^/]*\.(?:js|mjs)|fonts\/NotoSansSC-(?:Regular|Bold)\.otf)$/,

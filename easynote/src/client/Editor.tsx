@@ -5,6 +5,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
+import { markdownMath } from './math';
 import DOMPurify from 'dompurify';
 import { idPattern } from '../shared/types';
 import { t } from './i18n';
@@ -207,7 +208,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
   return <div className="code-editor" ref={host} />;
 });
 
-const renderer = new MarkdownIt({ html: true, linkify: true, breaks: true }).use(footnote);
+const renderer = new MarkdownIt({ html: true, linkify: true, breaks: true }).use(footnote).use(markdownMath);
 renderer.core.ruler.after('block', 'source_lines', (state) => {
   for (const token of state.tokens) {
     if (token.map && token.nesting === 1) token.attrSet('data-source-line', String(token.map[0]));
@@ -293,7 +294,7 @@ function highlightRenderedText(root: HTMLElement, query: string) {
   let current = walker.nextNode();
   while (current) {
     const text = current as Text;
-    if (text.parentElement && !text.parentElement.closest('svg, .search-highlight') &&
+    if (text.parentElement && !text.parentElement.closest('svg, [data-math-display], .search-highlight') &&
         text.data.toLocaleLowerCase().includes(normalizedNeedle)) matches.push(text);
     current = walker.nextNode();
   }
@@ -320,7 +321,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
   const clean = DOMPurify.sanitize(renderer.render(content), {
     USE_PROFILES: { html: true },
     ADD_ATTR: [
-      'target', 'download', 'data-source-line', 'data-code-language', 'data-mermaid-source',
+      'target', 'download', 'data-source-line', 'data-code-language', 'data-mermaid-source', 'data-math-display',
       'data-note-id', 'data-private-image', 'data-private-file', 'data-footnotes',
       'data-footnotes-separator', 'data-footnote-id', 'data-footnote-ref',
       'data-footnote-reference', 'data-footnote-backref',
@@ -439,6 +440,7 @@ export function Preview({
   const html = useMemo(() => renderMarkdown(content, !!onTask, searchQuery), [content, !!onTask, searchQuery]);
   useEffect(() => {
     const elements = [...(host.current?.querySelectorAll<HTMLElement>('[data-mermaid-source]') ?? [])];
+    const formulas = [...(host.current?.querySelectorAll<HTMLElement>('[data-math-display]') ?? [])];
     const codeBlocks = [...(host.current?.querySelectorAll<HTMLElement>('code[data-code-language]') ?? [])];
     const privateImages = [...(host.current?.querySelectorAll<HTMLImageElement>('img[data-private-image]') ?? [])];
     const objectUrls: string[] = [];
@@ -459,9 +461,37 @@ export function Preview({
           });
         };
         image.addEventListener('error', useCached, { once: true });
-        if (!navigator.onLine || image.complete && image.naturalWidth === 0) useCached();
+        if (image.complete && image.naturalWidth === 0) useCached();
       }
     }
+    if (formulas.length) void (async () => {
+      try {
+        const { default: katex } = await import('katex');
+        if (cancelled) return;
+        for (const element of formulas) {
+          const source = element.textContent ?? '';
+          const display = element.dataset.mathDisplay === 'true';
+          element.className = display ? 'math-formula math-display' : 'math-formula';
+          try {
+            if (source.length > 10_000) throw new Error('Formula exceeds 10,000 characters.');
+            element.innerHTML = katex.renderToString(source, {
+              displayMode: display, output: 'mathml', trust: false,
+              throwOnError: true, maxExpand: 1000, maxSize: 20,
+            });
+          } catch (error) {
+            element.classList.add('math-error');
+            element.textContent = source;
+            element.title = String(error);
+          }
+          element.removeAttribute('data-math-display');
+        }
+      } catch (error) {
+        if (!cancelled) for (const element of formulas) {
+          element.title = String(error);
+          element.removeAttribute('data-math-display');
+        }
+      }
+    })();
     if (codeBlocks.some((code) => code.dataset.codeLanguage)) void (async () => {
       const { default: highlighter } = await import('highlight.js/lib/common');
       if (cancelled) return;

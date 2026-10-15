@@ -213,7 +213,7 @@ async function waitForPrintReady() {
   while (Date.now() < deadline) {
     const root = document.querySelector<HTMLElement>('.print-document[data-printing="true"]');
     const images = [...(root?.querySelectorAll<HTMLImageElement>('img') ?? [])];
-    const diagramsReady = !root?.querySelector('[data-mermaid-source]');
+    const diagramsReady = !root?.querySelector('[data-mermaid-source], [data-math-display]');
     const imagesReady = images.every((image) => image.complete && image.naturalWidth > 0);
     const fontsReady = !document.fonts || document.fonts.status === 'loaded';
     if (root && diagramsReady && imagesReady && fontsReady) return;
@@ -280,12 +280,16 @@ function PrivateApp() {
     if (value.user && !value.offline) void cacheSession(value);
   };
   const restoreSession = async (value: Session, cached: Session | null) => {
-    applySession(value);
-    if (!cached?.user || cached.user.id === value.user?.id) return;
+    if (!cached?.user || cached.user.id === value.user?.id) {
+      applySession(value);
+      return;
+    }
     setPassword('');
     setBootError(value.user ? '' : t('登录已过期，请重新登录。'));
     try { await clearAccountStorage(cached.user.id); }
     catch (error) { setBootError((message) => `${message}\n${String(error)}`.trim()); }
+    // A reload from the login screen must not revive the old offline session.
+    applySession(value);
   };
   const boot = () => {
     const generation = ++bootGeneration.current;
@@ -340,7 +344,7 @@ function PrivateApp() {
     let running = false;
     let cancelled = false;
     const reconnect = async () => {
-      if (running || !navigator.onLine) return;
+      if (running) return;
       running = true;
       try {
         const value = await api.session();
@@ -350,6 +354,7 @@ function PrivateApp() {
     };
     const timer = setInterval(() => void reconnect(), 5_000);
     window.addEventListener('online', reconnect);
+    void reconnect();
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -925,7 +930,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       } else if (book.offlineLibrary) {
         targetNote = await loadMirroredNote(session.user!.id, noteId);
       }
-      if (!targetNote && navigator.onLine && !session.offline) {
+      if (!targetNote && !session.offline) {
         try {
           const res = await api.note(noteId);
           targetNote = res.note;

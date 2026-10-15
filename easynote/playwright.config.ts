@@ -11,7 +11,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'node --import tsx test/server.ts',
+    // The runtime serves dist/client; always test the current source.
+    command: 'npm run build && node --import tsx test/server.ts',
     url: 'http://127.0.0.1:8792/api/session',
     reuseExistingServer: false,
     timeout: 60000,
