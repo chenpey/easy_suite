@@ -135,7 +135,7 @@ if (args[0] === 'd1' && args[1] === 'export') {
     const exportCall = calls.find((args) => args[0] === 'd1' && args[1] === 'export');
     const exportedTables = exportCall.flatMap((value, index) => value === '--table' ? [exportCall[index + 1]] : []);
     assert.deepEqual(exportedTables, [
-      'users', 'sessions', 'integration_tokens', 'login_attempts', 'account_attempts', 'app_state',
+      'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
       'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
     ]);
     assert.ok(!exportedTables.includes('notes_fts'));
@@ -185,7 +185,7 @@ const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(join(directory, 'calls.jsonl'))}, JSON.stringify(args) + '\\n');
 if (args[0] === 'd1' && args[1] === 'execute' && args.some((value) => value.includes('sqlite_master'))) {
   const tables = process.env.NEW_DATABASE === '1' && !existsSync(${JSON.stringify(join(directory, 'migrated'))}) ? [] : ${JSON.stringify([
-    'users', 'sessions', 'integration_tokens', 'login_attempts', 'account_attempts', 'app_state',
+    'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
     'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
   ].map((name) => ({ name })))};
   console.log(JSON.stringify([{results:tables}]));

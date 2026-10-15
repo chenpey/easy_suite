@@ -27,7 +27,8 @@ function migrationStatements(schema: string): string[] {
   return statements;
 }
 
-export async function createRuntime(port?: number) {
+export async function createRuntime(port?: number, options: { seedOwner?: boolean } = {}) {
+  const seedOwner = options.seedOwner ?? true;
   const config = JSON.parse(await readFile(new URL('../wrangler.json', import.meta.url), 'utf8'));
   const bundle = await build({
     entryPoints: [new URL('../src/worker/index.ts', import.meta.url).pathname],
@@ -69,6 +70,7 @@ export async function createRuntime(port?: number) {
   const bucket = await runtime.getR2Bucket('IMAGES');
   const objects = await bucket.list();
   if (objects.objects.length) await bucket.delete(objects.objects.map((object) => object.key));
+  if (!seedOwner) return { runtime, db, bucket };
   const now = Date.now();
   await db.prepare(`INSERT OR REPLACE INTO users
     (id,username,password_verifier,created_at,role,enabled,approved_at,updated_at)

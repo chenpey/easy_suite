@@ -8,7 +8,10 @@
     "directory": "./dist/client",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/mcp"]
+    "run_worker_first": [
+      "/api/*", "/mcp", "/oauth/*",
+      "/.well-known/*"
+    ]
   },
   "d1_databases": [
     {
@@ -46,6 +49,8 @@
     "REGISTRATION_GLOBAL_LIMIT": "50",
     "PASSWORD_RESET_IP_LIMIT": "5",
     "PASSWORD_RESET_GLOBAL_LIMIT": "50",
+    "OAUTH_CLIENT_IP_LIMIT": "20",
+    "OAUTH_CLIENT_GLOBAL_LIMIT": "200",
     "ALLOW_LOCAL_HTTP": "false"
   }
 }

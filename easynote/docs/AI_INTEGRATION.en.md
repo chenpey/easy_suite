@@ -78,6 +78,18 @@ Omit '#' from titles; start top-level sections in the body with '##'.
 Use easynote_trash_note for deletion; permanent removal is confirmed by users in the web app.
 ```
 
+## Connecting ChatGPT on the Web
+
+ChatGPT on the web authenticates with OAuth and cannot use a static token. In ChatGPT's MCP app settings, add:
+
+- Server URL: `https://your-easynote-domain/mcp`
+- Authentication: OAuth (automatic client registration, PKCE)
+
+ChatGPT opens EasyNote's consent page. Sign in and choose read-only or read-write access. Each authorization creates one "ChatGPT" token, listed under "Settings → AI Integration", and it can be revoked at any time. Access tokens last 1 hour, refresh tokens last 30 days and rotate on every refresh. Reusing an old refresh token revokes that authorization.
+
+OAuth endpoints: `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`. HTTPS only.
+
+
 ## Security Boundaries
 
 - `/mcp` strictly requires HTTPS (except loopback addresses during local development).

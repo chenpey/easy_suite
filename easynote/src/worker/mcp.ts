@@ -11,7 +11,18 @@ export async function mcpRoute(request: Request, env: Env): Promise<Response> {
   const origin = request.headers.get('Origin');
   if (origin && origin !== new URL(request.url).origin) throw new ApiError(403, 'Cross-origin request rejected.');
 
-  const identity = await integrationIdentity(request, env);
+  let identity;
+  try {
+    identity = await integrationIdentity(request, env);
+  } catch (error) {
+    // OAuth clients discover the authorization server from this challenge.
+    if (error instanceof ApiError && error.status === 401) {
+      const scheme = request.headers.has('Authorization') ? 'Bearer error="invalid_token",' : 'Bearer';
+      const challenge = `${scheme} resource_metadata="${new URL(request.url).origin}/.well-known/oauth-protected-resource"`;
+      return json({ error: { message: error.message } }, 401, { 'WWW-Authenticate': challenge });
+    }
+    throw error;
+  }
   const token = request.headers.get('Authorization')!.slice('Bearer '.length);
   const apiFetch: typeof fetch = async (input, init) => {
     const url = new URL(String(input));

@@ -15,7 +15,7 @@ const wrangler = fileURLToPath(new URL('../node_modules/wrangler/bin/wrangler.js
 const isoName = () => new Date().toISOString().replace(/[:.]/g, '-');
 const sqlString = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const applicationTables = [
-  'users', 'sessions', 'integration_tokens', 'login_attempts', 'account_attempts', 'app_state',
+  'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
   'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
 ];
 

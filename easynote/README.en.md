@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.9.0`
+Current Version: `0.10.0`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.10.0 Release Notes (2026-10-15)
+
+- Add OAuth authorization for remote MCP: clients that only support OAuth, such as ChatGPT on the web, can connect to `/mcp` directly, with automatic client registration and PKCE (S256). The consent page asks for the account password and a read-only or read-write access level.
+- Each authorization creates one integration token named after the client, listed under "Settings → AI Integration", revocable at any time, and sharing the limit of 10 active tokens per account with manually created tokens.
+- Access tokens last 1 hour. Refresh tokens last 30 days and rotate on every refresh; reusing a rotated-out refresh token revokes that authorization immediately. Changing a password, disabling an account, an administrator password reset, or account deletion also revokes OAuth grants.
+- OAuth endpoints accept HTTPS only: client registration uses the `ACCOUNT_WINDOW_SECONDS` window, consent submissions reuse the login rate limit, and unknown `/.well-known/*` paths return a JSON 404 instead of the app shell.
+- Deployments apply database migrations before the new code. Disaster-recovery backups include the new OAuth client table; after the migration version changes, restore older backups with matching code.
 
 ## 0.9.0 Release Notes (2026-10-15)
 
@@ -318,6 +326,13 @@ Configured in `wrangler.json` under `vars`:
 | `LOGIN_WINDOW_SECONDS` | 900 | Login attempt rate limit window |
 | `LOGIN_IP_LIMIT` | 20 | Login attempts per IP within window |
 | `LOGIN_GLOBAL_LIMIT` | 200 | Global login attempts within window |
+| `ACCOUNT_WINDOW_SECONDS` | 900 | Counting window for registration, recovery and OAuth client registration |
+| `REGISTRATION_IP_LIMIT` | 5 | Registration requests per IP within window |
+| `REGISTRATION_GLOBAL_LIMIT` | 50 | Instance-wide registration budget within window |
+| `PASSWORD_RESET_IP_LIMIT` | 5 | Password recovery requests per IP within window |
+| `PASSWORD_RESET_GLOBAL_LIMIT` | 50 | Instance-wide password recovery budget within window |
+| `OAUTH_CLIENT_IP_LIMIT` | 20 | OAuth client registrations per IP within window (`/oauth/register`) |
+| `OAUTH_CLIENT_GLOBAL_LIMIT` | 200 | Instance-wide OAuth client registration budget within window |
 
 ## Verification
 

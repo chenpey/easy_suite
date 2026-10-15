@@ -26,6 +26,8 @@ export interface Env {
   REGISTRATION_GLOBAL_LIMIT: string;
   PASSWORD_RESET_IP_LIMIT: string;
   PASSWORD_RESET_GLOBAL_LIMIT: string;
+  OAUTH_CLIENT_IP_LIMIT: string;
+  OAUTH_CLIENT_GLOBAL_LIMIT: string;
 }
 
 export class ApiError extends Error {

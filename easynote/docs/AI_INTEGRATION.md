@@ -78,6 +78,18 @@ bearer_token_env_var = "EASYNOTE_TOKEN"
 删除使用 easynote_trash_note；永久删除由用户在网页中确认。
 ```
 
+## 连接 ChatGPT 网页版
+
+ChatGPT 网页版使用 OAuth 授权，不能填写静态令牌。在 ChatGPT 的 MCP 应用设置中添加：
+
+- 服务器地址：`https://你的-EasyNote-域名/mcp`
+- 认证方式：OAuth（客户端自动注册，PKCE）
+
+ChatGPT 会打开 EasyNote 的授权页，输入账号密码并选择只读或读写权限后完成授权。每次授权生成一个“ChatGPT”令牌，出现在“设置 → AI 接入”中，可随时撤销。访问令牌 1 小时有效，刷新令牌 30 天有效，每次刷新都会轮换；重复使用旧刷新令牌会撤销该授权。
+
+OAuth 端点：`/.well-known/oauth-protected-resource/mcp`、`/.well-known/oauth-authorization-server`、`/oauth/register`、`/oauth/authorize`、`/oauth/token`。仅 HTTPS 可用。
+
+
 ## 安全边界
 
 - `/mcp` 只接受 HTTPS；本地开发回环地址除外。

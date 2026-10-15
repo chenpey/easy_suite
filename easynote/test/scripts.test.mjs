@@ -422,7 +422,7 @@ test('deployment reuses resource IDs, refreshes template settings and preserves 
   assert.equal(saved.account_id, original.account_id);
   assert.equal(saved.vars.AUTOSAVE_MS, config.vars.AUTOSAVE_MS);
   assert.equal(saved.vars.ALLOW_LOCAL_HTTP, 'false');
-  assert.deepEqual(saved.assets.run_worker_first, ['/api/*', '/mcp']);
+  assert.deepEqual(saved.assets.run_worker_first, JSON.parse(await readFile('wrangler.json', 'utf8')).assets.run_worker_first);
   assert.equal(saved.d1_databases[0].database_id, databaseId);
   const wranglerCalls = (await calls(f)).filter((c) => c.tool === 'wrangler');
   assert.deepEqual(wranglerCalls.map((c) => c.args.slice(0, 2)), [
@@ -431,6 +431,14 @@ test('deployment reuses resource IDs, refreshes template settings and preserves 
   assert.ok(wranglerCalls.every((call) => call.hasApiToken && call.accountId === accountId));
   assert.ok((await cloudflareCalls(f)).every((call) => call.method === 'GET'));
   assert.ok(!result.output.includes(apiToken));
+});
+
+test('the shipped wrangler template routes every OAuth and MCP path to the Worker', async () => {
+  // Fixed contract on the real template: run_worker_first decides whether OAuth reaches the Worker in production.
+  const shipped = JSON.parse(await readFile(new URL('../wrangler.json', import.meta.url), 'utf8'));
+  for (const route of ['/api/*', '/mcp', '/oauth/*', '/.well-known/*']) {
+    assert.ok(shipped.assets.run_worker_first.includes(route), `run_worker_first must include ${route}`);
+  }
 });
 
 test('new deployments create D1 and private R2 before initializing a missing owner secret', async () => {

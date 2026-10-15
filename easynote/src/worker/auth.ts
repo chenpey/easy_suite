@@ -189,7 +189,7 @@ const userView = (row: Pick<UserRow, 'id' | 'username' | 'role' | 'enabled' | 'a
   updatedAt: row.updated_at,
 });
 
-async function limitAccountAction(request: Request, env: Env, action: string, ipLimitKey: keyof Env, globalLimitKey: keyof Env): Promise<void> {
+export async function limitAccountAction(request: Request, env: Env, action: string, ipLimitKey: keyof Env, globalLimitKey: keyof Env): Promise<void> {
   const ip = request.headers.get('CF-Connecting-IP') ?? (localHttp(request, env) ? 'local' : null);
   if (!ip) throw new ApiError(503, 'Client address is unavailable.');
   const window = numberSetting(env, 'ACCOUNT_WINDOW_SECONDS', 60, 86400) * 1000;
@@ -392,6 +392,35 @@ async function adminRoutes(request: Request, env: Env, user: Identity, path: str
   return null;
 }
 
+// Shared by /api/login and the OAuth consent page. Returns the full user row on success.
+export async function verifyLogin(env: Env, username: string, password: string): Promise<UserRow | null> {
+  if (password.length > 128) return null;
+  const user = await env.DB.prepare(`SELECT * FROM users
+    WHERE username=? AND enabled=1 AND deletion_requested_at IS NULL`)
+    .bind(username.trim().toLowerCase()).first<UserRow>();
+  // passwordMatches always runs so unknown users cost the same as wrong passwords.
+  const matches = await passwordMatches(password, user?.password_verifier);
+  return user && matches ? user : null;
+}
+
+export async function limitLogin(request: Request, env: Env): Promise<void> {
+  const ip = request.headers.get('CF-Connecting-IP') ?? (localHttp(request, env) ? 'local' : null);
+  if (!ip) throw new ApiError(503, 'Client address is unavailable.');
+  const window = numberSetting(env, 'LOGIN_WINDOW_SECONDS', 60, 86400) * 1000;
+  for (const [key, limit] of [
+    [`ip:${await digest(ip)}`, numberSetting(env, 'LOGIN_IP_LIMIT', 1, 1000)],
+    ['global', numberSetting(env, 'LOGIN_GLOBAL_LIMIT', 1, 10000)],
+  ] as const) {
+    const now = Date.now();
+    const count = await env.DB.prepare(`INSERT INTO login_attempts(key,started_at,attempts) VALUES(?,?,1)
+      ON CONFLICT(key) DO UPDATE SET
+        attempts=CASE WHEN started_at<=? THEN 1 ELSE MIN(attempts+1,?) END,
+        started_at=CASE WHEN started_at<=? THEN excluded.started_at ELSE started_at END
+      RETURNING attempts`).bind(key, now, now - window, limit + 1, now - window).first<{ attempts: number }>();
+    if (!count || count.attempts > limit) throw new ApiError(429, 'Too many login attempts. Try again later.');
+  }
+}
+
 export async function authRoute(request: Request, env: Env, path: string): Promise<Response | null> {
   if (path === '/api/session' && request.method === 'GET') {
     const [user, registration] = await Promise.all([identity(request, env), registrationEnabled(env)]);
@@ -419,28 +448,9 @@ export async function authRoute(request: Request, env: Env, path: string): Promi
     if (typeof data.username !== 'string' || typeof data.password !== 'string' || data.password.length > 128) {
       throw new ApiError(400, 'Invalid credentials format.');
     }
-    const ip = request.headers.get('CF-Connecting-IP') ?? (localHttp(request, env) ? 'local' : null);
-    if (!ip) throw new ApiError(503, 'Client address is unavailable.');
-    const window = numberSetting(env, 'LOGIN_WINDOW_SECONDS', 60, 86400) * 1000;
-    for (const [key, limit] of [
-      [`ip:${await digest(ip)}`, numberSetting(env, 'LOGIN_IP_LIMIT', 1, 1000)],
-      ['global', numberSetting(env, 'LOGIN_GLOBAL_LIMIT', 1, 10000)],
-    ] as const) {
-      const now = Date.now();
-      const count = await env.DB.prepare(`INSERT INTO login_attempts(key,started_at,attempts) VALUES(?,?,1)
-        ON CONFLICT(key) DO UPDATE SET
-          attempts=CASE WHEN started_at<=? THEN 1 ELSE MIN(attempts+1,?) END,
-          started_at=CASE WHEN started_at<=? THEN excluded.started_at ELSE started_at END
-        RETURNING attempts`).bind(key, now, now - window, limit + 1, now - window).first<{ attempts: number }>();
-      if (!count || count.attempts > limit) throw new ApiError(429, 'Too many login attempts. Try again later.');
-    }
-    const username = data.username.trim().toLowerCase();
-    const user = await env.DB.prepare(`SELECT * FROM users
-      WHERE username=? AND enabled=1 AND deletion_requested_at IS NULL`)
-      .bind(username).first<UserRow>();
-    if (!await passwordMatches(data.password, user?.password_verifier) || !user) {
-      throw new ApiError(401, 'Incorrect username or password.');
-    }
+    await limitLogin(request, env);
+    const user = await verifyLogin(env, data.username, data.password);
+    if (!user) throw new ApiError(401, 'Incorrect username or password.');
     return createSession(request, env, user);
   }
   if (path === '/api/logout' && request.method === 'POST') {

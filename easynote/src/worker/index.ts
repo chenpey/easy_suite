@@ -6,18 +6,26 @@ import { noteRoutes } from './notes';
 import { featureRoutes, publicShareRoutes } from './features';
 import { connectNoteEvents } from './events';
 import { mcpRoute } from './mcp';
+import { oauthRoute } from './oauth';
 
 export { NoteEvents } from './events';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (path !== '/mcp' && !path.startsWith('/api/')) return env.ASSETS.fetch(request);
+    // Unknown /.well-known/* paths must get a JSON 404 from the Worker, not the SPA's index.html.
+    const oauthPath = path.startsWith('/oauth/') || path.startsWith('/.well-known/');
+    if (path !== '/mcp' && !path.startsWith('/api/') && !oauthPath) return env.ASSETS.fetch(request);
     try {
       if (new URL(request.url).protocol !== 'https:' && !localHttp(request, env)) {
         throw new ApiError(403, 'HTTPS is required.');
       }
       if (path === '/mcp') return await mcpRoute(request, env);
+      if (oauthPath) {
+        const response = await oauthRoute(request, env, path);
+        if (response) return response;
+        throw new ApiError(404, 'Endpoint not found.');
+      }
       if (path.startsWith('/api/public/shares/')) {
         const response = await publicShareRoutes(request, env, path);
         if (response) return response;

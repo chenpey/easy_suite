@@ -114,6 +114,12 @@ export async function cleanup(env: Env): Promise<void> {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(Date.now()),
     env.DB.prepare('DELETE FROM login_attempts WHERE started_at<?').bind(Date.now() - 86400_000),
+    env.DB.prepare('DELETE FROM oauth_codes WHERE expires_at<?').bind(Date.now()),
+    // Clients that never completed a grant are dropped after 30 days so anonymous registration cannot pile up.
+    env.DB.prepare(`DELETE FROM oauth_clients WHERE created_at<?
+      AND NOT EXISTS(SELECT 1 FROM oauth_codes WHERE oauth_codes.client_id=oauth_clients.client_id)
+      AND NOT EXISTS(SELECT 1 FROM integration_tokens WHERE integration_tokens.client_id=oauth_clients.client_id)`)
+      .bind(Date.now() - 30 * 86400_000),
     env.DB.prepare('DELETE FROM account_attempts WHERE started_at<?').bind(Date.now() - 86400_000),
     env.DB.prepare('DELETE FROM note_shares WHERE expires_at<?').bind(Date.now()),
     env.DB.prepare(`DELETE FROM integration_tokens

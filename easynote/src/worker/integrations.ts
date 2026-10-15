@@ -223,8 +223,9 @@ export async function integrationIdentity(request: Request, env: Env): Promise<I
       u.recovery_code_hash IS NOT NULL AS has_recovery_code FROM integration_tokens t
     JOIN users u ON u.id=t.user_id
     WHERE t.token_hash=? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at>?)
+      AND (t.access_expires_at IS NULL OR t.access_expires_at>?)
       AND u.enabled=1 AND u.deletion_requested_at IS NULL`)
-    .bind(tokenHash, now).first<TokenRow>();
+    .bind(tokenHash, now, now).first<TokenRow>();
   if (!row) throw new ApiError(401, 'The integration token is invalid, expired, or revoked.');
   if (row.last_used_at === null || row.last_used_at < now - 15 * 60_000) {
     await env.DB.prepare('UPDATE integration_tokens SET last_used_at=? WHERE id=?').bind(now, row.id).run();

@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.9.0`
+当前版本：`0.10.0`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 0.10.0 更新说明（2026-10-15）
+
+- 新增远程 MCP 的 OAuth 授权：ChatGPT 网页版等只支持 OAuth 的客户端可直接连接 `/mcp`，支持客户端自动注册与 PKCE（S256）；授权页输入账号密码后选择只读或读写权限。
+- 每次授权生成一个以客户端名称命名的集成令牌，出现在“设置 → AI 接入”，可随时撤销，并与手动创建的令牌共用每账号最多 10 个生效令牌的限制。
+- 访问令牌 1 小时有效；刷新令牌 30 天有效且每次刷新都会轮换，复用已轮换的旧刷新令牌会立即撤销该次授权。改密、停用账号、管理员重置密码或删除账号同样会撤销 OAuth 授权。
+- OAuth 端点只接受 HTTPS：客户端注册复用 `ACCOUNT_WINDOW_SECONDS` 窗口限流，授权提交复用登录限流，未知的 `/.well-known/*` 路径返回 JSON 404 而不回落到应用首页。
+- 部署时数据库迁移先于新代码应用；灾备备份包含新增的 OAuth 客户端表，迁移版本变化后需用相同版本的代码恢复旧备份。
 
 ## 0.9.0 更新说明（2026-10-15）
 
@@ -569,6 +577,8 @@ ZIP v2 包含 `manifest.json`、`notes/*.md` 和所引用的 `files/*`。Markdow
 | `REGISTRATION_GLOBAL_LIMIT` | 50 | 实例窗口内注册预算 |
 | `PASSWORD_RESET_IP_LIMIT` | 5 | 每 IP 窗口内恢复预算 |
 | `PASSWORD_RESET_GLOBAL_LIMIT` | 50 | 实例窗口内恢复预算 |
+| `OAUTH_CLIENT_IP_LIMIT` | 20 | 单个 IP 在 `ACCOUNT_WINDOW_SECONDS` 窗口内可注册的 OAuth 客户端数（`/oauth/register`） |
+| `OAUTH_CLIENT_GLOBAL_LIMIT` | 200 | 实例在 `ACCOUNT_WINDOW_SECONDS` 窗口内 OAuth 客户端注册预算 |
 | `ALLOW_LOCAL_HTTP` | false | 仅本地命令开启环回 HTTP |
 
 标题 256 字符、标签最多 20 个且每个 40 字符、单篇最多引用 80 个私有文件，这些校验位于 `src/worker/notes.ts`。不是 Cloudflare 平台通用限制。
