@@ -130,7 +130,7 @@ export function useNotebook(session: Session) {
   const [tags, setTags] = useState<string[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folder, setFolder] = useState<string | null>(null);
-  // Folder views default to the manual order; every other view stays last-modified.
+  // Root defaults to recent; individual folders default to manual order.
   const [folderOrders, setFolderOrders] = useState<Record<string, 'manual' | 'recent'>>(() => {
     try {
       const stored: unknown = JSON.parse(localStorage.getItem(`easynote-folder-orders-${userId}`) ?? '{}');
@@ -138,10 +138,9 @@ export function useNotebook(session: Session) {
       return Object.fromEntries(Object.entries(stored).filter(([, mode]) => mode === 'manual' || mode === 'recent'));
     } catch { return {}; }
   });
-  const folderOrder = folder && folderOrders[folder] === 'recent' ? 'recent' : 'manual';
+  const folderOrder = folderOrders[folder ?? 'root'] ?? (folder === null ? 'recent' : 'manual');
   const setFolderOrder = (mode: 'manual' | 'recent') => {
-    if (folder === null) return;
-    const next = { ...folderOrders, [folder]: mode };
+    const next = { ...folderOrders, [folder ?? 'root']: mode };
     setFolderOrders(next);
     try { localStorage.setItem(`easynote-folder-orders-${userId}`, JSON.stringify(next)); } catch { /* Optional preference. */ }
   };
@@ -181,7 +180,7 @@ export function useNotebook(session: Session) {
   const show = useCallback((value: Note | null) => { current.current = value; setNote(value); }, []);
   const notify = () => { if (alive.current) bump((v) => v + 1); };
   notesRef.current = notes;
-  const manualOrder = folder !== null && folderOrder === 'manual' && view === 'all' && !query && !tag;
+  const manualOrder = folderOrder === 'manual' && view === 'all' && !query && !tag;
   // Browsing stays at one level; searches span the library.
   const folderFilter = query ? null : folder ?? (view === 'all' && !tag ? 'root' : null);
 

@@ -1549,7 +1549,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
     flex-basis: 38px;
   }
   .list-command-action, .list-bulk-action, .list-sync-action,
-  .list-purge-action, .list-create-action { display: none; }
+  .list-purge-action { display: none; }
   .search-field { display: none; margin-top: 7px; background: var(--soft); }
   .search-field.mobile-open { display: flex; }
   .bulk-toolbar { margin: 8px 0 0; }
@@ -1707,54 +1707,34 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .math-formula math { font-size: 1.1em; }
 .math-error { color: #b42318; font-family: monospace; white-space: pre-wrap; }
 
-/* Folder sidebar and move target */
 .folder-nav { overflow-y: auto; }
-.folder-row { display: flex; align-items: center; gap: 2px; min-height: 30px; }
-.folder-row .folder-chevron {
-  width: 22px; height: 22px; flex: 0 0 22px; min-height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0; color: var(--subtle); background: transparent; border: 0; border-radius: 5px; box-shadow: none;
-}
-.folder-row .folder-chevron:hover { background: var(--hover); color: var(--ink); }
-.folder-row .folder-name {
-  flex: 1; min-width: 0; width: auto; min-height: 30px;
-  display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px;
-  border: 0; border-radius: 7px; background: transparent; color: var(--muted);
-  font-size: 13px; text-align: left; overflow-wrap: anywhere; box-shadow: none;
-}
-.folder-row .folder-name:hover { background: var(--hover); color: var(--ink); }
-.folder-row .folder-name.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
-.folder-name svg { color: var(--accent); flex: 0 0 auto; }
-.folder-name span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Hidden until hover so the 200px sidebar keeps the folder name readable at depth 5. */
-.folder-actions { display: none; gap: 0; }
-.folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { display: inline-flex; }
-/* nav button sets min-height 35px, which made the hovered row jump 5px taller. */
-.folder-row .folder-action { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; }
-/* Keep action tooltips inside the 200px sidebar; centered ones were clipped at the right edge. */
-.folder-actions .folder-action[data-tooltip]::after { left: auto; right: 0; transform: translate(0, -2px); }
-.folder-actions .folder-action[data-tooltip]:focus-visible::after { transform: translate(0, 0); }
-@media (hover: hover) and (min-width: 641px) {
-  .folder-actions .folder-action[data-tooltip]:hover::after { transform: translate(0, 0); }
-}
 
 /* Drag and drop: a line marks the inserted slot, a filled row marks "drop inside". */
 .note-row.drop-before::before, .note-row.drop-after::before,
-.folder-row.drop-before::before, .folder-row.drop-after::before {
+.folder-list-entry.drop-before::before, .folder-list-entry.drop-after::before {
   content: ''; position: absolute; left: 4px; right: 4px; height: 2px;
   border-radius: 2px; background: var(--accent);
 }
 .note-row.drop-before::before { top: 0; }
 .note-row.drop-after::before { bottom: 0; }
-/* .folder-row is a flex row; the insert lines above need it positioned. */
-.folder-row { position: relative; }
-.folder-row.drop-before::before { top: 0; }
-.folder-row.drop-after::before { bottom: 0; }
-.folder-row.drop-inside { background: var(--accent-soft); border-radius: 7px; }
+.folder-list-entry.drop-before::before { top: 0; z-index: 1; }
+.folder-list-entry.drop-after::before { bottom: 0; z-index: 1; }
 .folder-nav > button.drop-inside {
   background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent);
 }
 .folder-list-entry .note-row-title > svg { color: var(--accent); flex-shrink: 0; }
+.folder-list-entry { position: relative; }
+.folder-list-entry .folder-open { padding-right: 38px; }
+.folder-more { position: absolute; right: 4px; top: 8px; }
+.folder-navigation { display: flex; align-items: center; gap: 2px; margin-top: 5px; min-width: 0; }
+.folder-navigation > .icon-button { flex: 0 0 auto; }
+.folder-breadcrumbs { display: flex; flex-direction: row; align-items: center; gap: 2px; overflow-x: auto; min-width: 0; flex: 1; }
+.folder-breadcrumbs button { width: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 4px 6px; font-size: 12px; white-space: nowrap; }
+.folder-breadcrumbs button[aria-current="page"] { color: var(--ink); font-weight: 600; }
+.folder-breadcrumbs button.drop-inside { background: var(--accent-soft); color: var(--accent-text); }
+@media (max-width: 640px) {
+  .folder-more { width: 36px; height: 36px; }
+}
 .folder-list-entry.drop-inside { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 
 /* Folder views switch between the manual order and last-modified. */
@@ -1781,8 +1761,8 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   text-align: left; font-size: 13px; box-shadow: none;
 }
 .note-context-menu button:hover, .folder-context-menu button:hover { background: var(--hover); }
-.note-context-menu button.danger { color: var(--danger); }
-.note-context-menu button.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--paper)); }
+.note-context-menu button.danger, .folder-context-menu button.danger { color: var(--danger); }
+.note-context-menu button.danger:hover, .folder-context-menu button.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--paper)); }
 
 /* Move target dialog */
 .move-target-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
@@ -1795,15 +1775,3 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .move-target-row svg { color: var(--accent); flex: 0 0 auto; }
 .move-target-row span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .confirm-hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
-.mobile-navigation-folder-new {
-  display: flex; align-items: center; gap: 9px; min-height: 40px; margin: 10px 4px 0;
-  padding: 8px 11px; border: 1px dashed var(--line-strong); border-radius: 8px;
-  background: transparent; color: var(--muted); font-size: 14px; box-shadow: none;
-}
-.mobile-navigation-folder-new:hover { background: var(--hover); color: var(--ink); }
-
-@media(max-width: 640px) {
-  .mobile-navigation-list .folder-row { min-height: 40px; }
-  .mobile-navigation-list .folder-row .folder-chevron { width: 28px; height: 28px; flex-basis: 28px; min-height: 28px; }
-  .mobile-navigation-list .folder-row .folder-name { min-height: 40px; }
-}

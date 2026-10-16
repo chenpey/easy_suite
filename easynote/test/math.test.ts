@@ -36,6 +36,13 @@ test('mixed pagination defers folders older than the loaded note page without lo
   assert.deepEqual(ids(false), ['before', 'first', 'between', 'next', 'after']);
   assert.equal(mixFolderEntries([], folders, false, false).length, folders.length);
 });
+
+test('manual ties preserve folder name order and note modification order', () => {
+  const notes = [listNote('old', 1), listNote('new', 3)];
+  const folders = [{ ...listFolder('zhang', 5), name: '张' }, { ...listFolder('a', 2), name: '阿' }];
+  assert.deepEqual(mixFolderEntries(notes, folders, true, false).map((entry) => entry.item.id), ['a', 'zhang', 'new', 'old']);
+  assert.deepEqual(mixFolderEntries(notes, folders, false, false).map((entry) => entry.item.id), ['zhang', 'new', 'a', 'old']);
+});
 // Re-orders like the server does, keeping the previous display order for equal keys.
 const applied = (rows: Row[], updates: Map<string, number>, order: string[]): string[] => {
   const rank = new Map(order.map((id, index) => [id, index]));

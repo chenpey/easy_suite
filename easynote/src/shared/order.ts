@@ -46,6 +46,8 @@ export function mixFolderEntries(notes: NoteSummary[], folders: Folder[], manual
   entries.sort((left, right) =>
     Number(right.kind === 'note' && right.item.pinned) - Number(left.kind === 'note' && left.item.pinned) ||
     (manual ? left.item.position - right.item.position : 0) ||
+    (manual ? Number(left.kind === 'note') - Number(right.kind === 'note') : 0) ||
+    (manual && left.kind === 'folder' && right.kind === 'folder' ? compareFolders(left.item, right.item) : 0) ||
     right.item.updatedAt - left.item.updatedAt || left.item.id.localeCompare(right.item.id));
   // Older folders wait for the next note page, so unloaded newer notes cannot be skipped.
   while (hasMoreNotes && entries.at(-1)?.kind === 'folder') entries.pop();

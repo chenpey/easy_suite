@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.2.0`
+Current Version: `1.3.0`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.0 Release Notes (2026-10-16)
+
+- Remove the duplicate folder tree from desktop and mobile navigation. Browse folders in the mixed list; each folder's action menu supports creating subfolders, renaming, moving and deleting. Desktop also supports right-click and Shift+F10.
+- The list's plus button offers New Note and New Folder at the current level. All Notes no longer has a folder-creation context menu. Mobile uses the same visible creation menu; subfolder creation is disabled offline and at the fifth level.
+- Add a separate Back to parent folder button and clickable folder breadcrumbs. Navigation works with the sidebar collapsed; on mobile the path scrolls horizontally while the back button remains visible.
+- Preserve folder dragging and manual ordering, with breadcrumbs accepting drops into ancestor folders. Add a bulk Move action that appends cross-folder selections in display order; partial save failures prevent group reordering.
+- Remember sorting preferences independently for the root and each folder. Root defaults to Last modified and folders to Manual order. Equal manual positions retain folder name order and note modification order. No new database migration is required.
 
 ## 1.2.0 Release Notes (2026-10-16)
 
@@ -399,7 +407,9 @@ npm run test:ui
 
 ### Folders and note actions
 
-The folder tree appears below All Notes in the sidebar. On desktop, right-click All Notes and choose New Folder to create a root folder, or open the menu with Shift+F10 or the menu key. On mobile, tap New Folder in the navigation menu. Folder rows support creating subfolders, renaming, moving and deleting empty folders, and nesting up to five levels (top level counts as one). Moving a folder carries its subfolders and notes along, and a folder cannot be moved into itself or its own subtree, nor past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
+Browse folders and notes in the mixed center list; desktop and mobile navigation retain categories and tags. The list's plus button creates a note or folder at the current level. Each folder's action menu supports creating subfolders, renaming, moving and deleting; desktop also supports right-click and Shift+F10. Nesting is limited to five levels, and folder changes require a connection. Moving a folder carries its subfolders and notes along, and cannot move it into its own subtree or past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
+
+Back to parent folder and clickable breadcrumbs remain available with the sidebar collapsed. Click an ancestor to return there, or All Notes to return to the root. On mobile the path scrolls horizontally while the back button stays visible. Escape closes creation and folder action menus and restores focus; arrow keys select menu items.
 
 Folder names must be unique within the same level; creating, renaming, moving and importing all enforce this, and same-level folders with the same name are merged into one during import. Accounts are limited to 1200 folders, matching the ZIP import/export budget.
 
@@ -407,6 +417,6 @@ Right-click a note to duplicate, edit, move to trash, or move to a folder/root. 
 
 All Notes mixes root-level folders with unfiled notes. Opening a folder mixes its direct subfolders and notes, so filed notes no longer appear again at the root level. Click a folder in the list to open it; search spans all folders. Tags, Archive and Trash retain their respective filters.
 
-On desktop, drag folders to reorder siblings or move them into a target folder. Drag selected notes as a group into a sidebar or list folder, or onto All Notes to move them back to the root level. Desktop and mobile navigation no longer have a separate Root entry. In a folder, use Sort order to switch between Manual order and Last modified; each folder's preference is stored per account in the current browser. Manual order supports note dragging and Alt+Up / Alt+Down. Search, tag and All Notes lists use last-modified ordering. Moving and reordering require a connection, and mobile continues to use note action menus. Reordering notes leaves content, revisions and modification times unchanged.
+On desktop, drop notes or folders onto list folders or ancestor breadcrumbs, including All Notes at the root. Use the bulk Move action for selections spanning folders. Manual order supports dragging entries of the same type and Alt+Up / Alt+Down. Sort order switches between Manual order and Last modified, with preferences stored per account in the current browser for the root and each folder. Root defaults to Last modified and folders to Manual order. Search, tags, Archive and Trash retain last-modified ordering. Moving and reordering require a connection, and mobile uses action menus. Reordering notes leaves content, revisions and modification times unchanged.
 
 ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`; the existing deployment script applies migrations. Manual ordering also requires `0004_order.sql`, applied automatically by the existing deployment script. ZIP restores do not retain manual order.

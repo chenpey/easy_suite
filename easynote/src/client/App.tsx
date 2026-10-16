@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Archive, ArchiveRestore, ArrowLeft, ArrowUpDown, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Clock, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
-import type { Folder, ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
+import { MAX_FOLDER_DEPTH, type Folder, type ManagedNoteShare, type Note, type NoteInput, type NoteSummary, type NoteTask, type Session, type SharedNote, type Version } from '../shared/types';
 import { compareFolders, mixFolderEntries } from '../shared/order';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -569,11 +569,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
   const [mobileNoteActions, setMobileNoteActions] = useState(false);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'rename' | 'delete' | 'move'; folder?: Folder; parentId?: string | null; name?: string } | null>(null);
   const [noteContextMenu, setNoteContextMenu] = useState<{ noteId: string; x: number; y: number; trashed: boolean } | null>(null);
-  const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const allNotesRef = useRef<HTMLButtonElement>(null);
+  const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: Folder | null } | null>(null);
+  const folderMenuTrigger = useRef<HTMLButtonElement | null>(null);
   const [moveNoteIds, setMoveNoteIds] = useState<string[] | null>(null);
   const [sidebar, setSidebar] = useState(true);
   const [resizingList, setResizingList] = useState(false);
@@ -1335,7 +1334,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         showNotice(t('已重命名目录'));
       }
     }
-    setFolderDialog(null);
+    closeFolderDialog();
   });
   const openNoteMenu = (noteId: string, trashed: boolean, x: number, y: number) =>
     setNoteContextMenu({ noteId, trashed, x, y });
@@ -1345,11 +1344,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     });
     return null;
   });
-  const openFolderMenu = (x: number, y: number) => setFolderContextMenu({ x, y });
-  const closeFolderMenu = () => setFolderContextMenu((current) => {
-    if (current) requestAnimationFrame(() => allNotesRef.current?.focus());
-    return null;
+  const restoreFolderMenuFocus = () => requestAnimationFrame(() => {
+    const trigger = folderMenuTrigger.current;
+    (trigger?.isConnected ? trigger : document.querySelector<HTMLButtonElement>('.list-create-action'))?.focus();
   });
+  const closeFolderDialog = () => { setFolderDialog(null); restoreFolderMenuFocus(); };
+  const openFolderMenu = (folder: Folder | null, x: number, y: number, trigger?: HTMLButtonElement) => {
+    folderMenuTrigger.current = trigger ?? document.querySelector<HTMLButtonElement>(
+      folder ? `[data-folder-id="${folder.id}"] .folder-open` : '.list-create-action',
+    );
+    setNoteContextMenu(null);
+    setFolderContextMenu({ folder, x, y });
+  };
+  const closeFolderMenu = () => { setFolderContextMenu(null); restoreFolderMenuFocus(); };
   const contextCopy = (noteId: string) => void run(async () => {
     const copied = await book.copyNote(noteId);
     showNotice(t('已复制笔记'));
@@ -1393,10 +1400,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     if (menu) {
       menu.style.left = `${Math.max(8, Math.min(folderContextMenu.x, innerWidth - menu.offsetWidth - 8))}px`;
       menu.style.top = `${Math.max(8, Math.min(folderContextMenu.y, innerHeight - menu.offsetHeight - 8))}px`;
-      menu.querySelector<HTMLButtonElement>('button')?.focus();
+      (menu.querySelector<HTMLButtonElement>('button:not(:disabled)') ?? menu).focus();
     }
     const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target as HTMLElement).closest('.folder-context-menu')) setFolderContextMenu(null);
+      if (!(event.target as HTMLElement).closest('.folder-context-menu, .list-create-action')) setFolderContextMenu(null);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); closeFolderMenu(); }
@@ -1472,103 +1479,39 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       setTransfer('');
     }
   };
+  const folderPath = (id: string | null): Folder[] => {
+    const path: Folder[] = [];
+    while (id && path.length < MAX_FOLDER_DEPTH) {
+      const folder = book.folders.find((item) => item.id === id);
+      if (!folder) break;
+      path.unshift(folder);
+      id = folder.parentId;
+    }
+    return path;
+  };
+  const currentPath = folderPath(book.folder);
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
   const activeView = book.query ? t('搜索结果') : book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
     : book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
-  const renderFolderTree = (parentId: string | null, depth: number, actions: boolean): ReactNode =>
-    folderChildren(parentId).map((folder) => {
-      const children = folderChildren(folder.id);
-      const collapsed = collapsedFolders.has(folder.id);
-      return (
-        <div key={folder.id} className="folder-node">
-          <div className={`folder-row ${drop?.key === folder.id ? `drop-${drop.mode}` : ''}`} style={{ paddingLeft: depth * 12 }}
-            draggable={actions && canDrag}
-            onDragStart={(event) => {
-              setDrag({ kind: 'folder', ids: [folder.id] });
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData('text/plain', folder.id);
-            }}
-            onDragEnd={endDrag}
-            onDragOver={(event) => {
-              if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
-              event.preventDefault();
-              event.stopPropagation();
-              const rect = event.currentTarget.getBoundingClientRect();
-              const offset = (event.clientY - rect.top) / rect.height;
-              // The top and bottom edges insert beside the row; the middle drops inside it.
-              const inside = drag.kind === 'note' || (offset >= 0.25 && offset <= 0.75);
-              setDrop({ key: folder.id, mode: inside ? 'inside' : offset < 0.25 ? 'before' : 'after' });
-              scheduleExpand(folder.id, collapsed, children.length > 0);
-            }}
-            onDragLeave={(event) => {
-              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-              clearHoverExpand();
-              setDrop((value) => value?.key === folder.id ? null : value);
-            }}
-            onDrop={(event) => {
-              if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (drag.kind === 'note') { moveDraggedNotes(folder.id); return; }
-              const rect = event.currentTarget.getBoundingClientRect();
-              const offset = (event.clientY - rect.top) / rect.height;
-              if (offset < 0.25) moveDraggedFolder(folder.parentId, { beforeId: folder.id });
-              else if (offset > 0.75) moveDraggedFolder(folder.parentId, { afterId: folder.id });
-              else moveDraggedFolder(folder.id);
-            }}>
-            {children.length ? (
-              <button type="button" className="folder-chevron" aria-label={collapsed ? t('展开目录') : t('收起目录')}
-                onClick={() => setCollapsedFolders((current) => {
-                  const next = new Set(current);
-                  if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id);
-                  return next;
-                })}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</button>
-            ) : <span className="folder-chevron" />}
-            <button type="button" className={`folder-name ${book.folder === folder.id ? 'active' : ''}`}
-              onKeyDown={(event) => {
-                if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                if (!canDrag) return;
-                const siblings = folderChildren(folder.parentId);
-                const delta = event.key === 'ArrowUp' ? -1 : 1;
-                const anchor = siblings[siblings.findIndex((item) => item.id === folder.id) + delta];
-                const button = event.currentTarget;
-                if (anchor) void run(async () => {
-                  await book.moveFolder(folder.id, folder.parentId,
-                    delta < 0 ? { beforeId: anchor.id } : { afterId: anchor.id });
-                  button.focus();
-                });
-              }}
-              onClick={() => chooseFolder(folder.id)}><FolderIcon size={14} /><span>{folder.name}</span></button>
-            {actions && <span className="folder-actions">
-              <IconButton label="新建子目录" className="folder-action" disabled={depth >= 4 || !book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'create', parentId: folder.id })}><FolderPlus size={13} /></IconButton>
-              <IconButton label="重命名目录" className="folder-action" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'rename', folder, name: folder.name })}><Pencil size={13} /></IconButton>
-              <IconButton label="移动目录" className="folder-action" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'move', folder })}><FolderInput size={13} /></IconButton>
-              <IconButton label="删除目录" className="folder-action danger-icon" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'delete', folder })}><Trash2 size={13} /></IconButton>
-            </span>}
-          </div>
-          {children.length && !collapsed ? renderFolderTree(folder.id, depth + 1, actions) : null}
-        </div>
-      );
-    });
   const moveToFolder = (target: string | null) => void run(async () => {
     if (!moveNoteIds) return;
     const count = await book.moveNotes(moveNoteIds, target);
+    if (moveNoteIds.length > 1) await book.reorderNotes(moveNoteIds, null, null);
     showNotice(t('已移动 {0} 篇笔记', count));
     setMoveNoteIds(null);
+    exitSelectionMode();
   });
   const moveFolderTo = (target: string | null) => void run(async () => {
     const moving = folderDialog?.folder;
     if (!moving) return;
-    if (moving.parentId === target) { setFolderDialog(null); return; }
+    if (moving.parentId === target) { closeFolderDialog(); return; }
     if (book.folders.some((folder) => folder.parentId === target && folder.name === moving.name && folder.id !== moving.id)) {
       throw new Error(t('同一层已存在同名目录。'));
     }
     await book.moveFolder(moving.id, target);
     showNotice(t('已移动目录'));
-    setFolderDialog(null);
+    closeFolderDialog();
   });
   const folderSubtree = (id: string): Set<string> => {
     const ids = new Set<string>([id]);
@@ -1585,25 +1528,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     ));
   // Drag and drop uses HTML5 drag events only, so touch devices keep the existing menu path.
-  const hoverExpand = useRef(0);
-  const hoverFolder = useRef<string | null>(null);
-  const clearHoverExpand = () => { window.clearTimeout(hoverExpand.current); hoverFolder.current = null; };
-  const endDrag = () => { clearHoverExpand(); setDrag(null); setDrop(null); };
   const canDrag = book.online && !session.offline && book.view !== 'trash';
-  // Holding a folder opens it, so a collapsed parent can still receive a nested drop.
-  const scheduleExpand = (id: string, collapsed: boolean, hasChildren: boolean) => {
-    if (hoverFolder.current === id) return;
-    clearHoverExpand();
-    if (!collapsed || !hasChildren) return;
-    hoverFolder.current = id;
-    hoverExpand.current = window.setTimeout(() => {
-      setCollapsedFolders((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      });
-    }, 600);
-  };
+  const endDrag = () => { setDrag(null); setDrop(null); };
   // Dragging near an edge of a scrolling list continues the scroll.
   const edgeScroll = (event: { currentTarget: HTMLElement; clientY: number }) => {
     const box = event.currentTarget;
@@ -1648,7 +1574,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const wanted = selected.has(id) && selected.size > 1 ? selected : new Set([id]);
     return book.notes.filter((item) => wanted.has(item.id)).map((item) => item.id);
   };
-  const manualList = book.folder !== null && book.folderOrder === 'manual' && book.view === 'all' && !book.query && !book.tag;
+  const manualList = book.folderOrder === 'manual' && book.view === 'all' && !book.query && !book.tag;
   const reorderable = canDrag && manualList;
   const reorderTo = (key: string, mode: 'before' | 'after') => {
     if (!drag || drag.kind !== 'note') return;
@@ -1788,8 +1714,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
       <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
       <nav className="folder-nav" aria-label={t('note_categories')} onDragOverCapture={edgeScroll}>
-        <button ref={allNotesRef} className={`${!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} ${drop?.key === 'root' ? 'drop-inside' : ''}`} onClick={() => chooseView('all')}
-          onDragOver={(event) => { if (!drag) return; event.preventDefault(); clearHoverExpand(); setDrop({ key: 'root', mode: 'inside' }); }}
+        <button className={`${!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} ${drop?.key === 'root' ? 'drop-inside' : ''}`} onClick={() => chooseView('all')}
+          onDragOver={(event) => { if (!drag) return; event.preventDefault(); setDrop({ key: 'root', mode: 'inside' }); }}
           onDragLeave={(event) => {
             if (event.currentTarget.contains(event.relatedTarget as Node)) return;
             setDrop((value) => value?.key === 'root' ? null : value);
@@ -1800,14 +1726,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             if (drag.kind === 'folder') moveDraggedFolder(null);
             else moveDraggedNotes(null);
           }}
-          onContextMenu={(event) => { event.preventDefault(); openFolderMenu(event.clientX, event.clientY); }}
-          onKeyDown={(event) => {
-            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-            event.preventDefault();
-            const rect = event.currentTarget.getBoundingClientRect();
-            openFolderMenu(rect.left, rect.bottom);
-          }}><FileText size={17} />{t('all_notes')}</button>
-        {renderFolderTree(null, 0, true)}
+          ><FileText size={17} />{t('all_notes')}</button>
         <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -1838,7 +1757,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             if (selectionMode) exitSelectionMode();
             else setSelectionMode(true);
           }}>{selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}</IconButton>}
-          {book.folder !== null && book.view === 'all' && !book.query && !book.tag && <button type="button" className="sort-toggle" aria-label={t('排序方式')} title={t('排序方式')}
+          {book.view === 'all' && !book.query && !book.tag && <button type="button" className="sort-toggle" aria-label={t('排序方式')} title={t('排序方式')}
             onClick={() => book.setFolderOrder(book.folderOrder === 'manual' ? 'recent' : 'manual')}>
             {book.folderOrder === 'manual' ? <ArrowUpDown size={14} /> : <Clock size={14} />}
             <span>{book.folderOrder === 'manual' ? t('手动排序') : t('最近修改')}</span>
@@ -1846,8 +1765,37 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <IconButton label={syncing ? '正在同步全部' : '同步全部'} className="icon-button list-sync-action" onClick={() => void syncNow(false)} disabled={book.busy || syncing}>{syncing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}</IconButton>
           {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
             <IconButton label="全部永久删除" className="icon-button danger-icon list-purge-action" onClick={() => setConfirmAction('purge-all')} disabled={disabled || book.pending.length > 0}><Trash2 size={17} /></IconButton>}
-          <IconButton label="新建笔记" className="icon-button list-create-action" onClick={() => void createNote()} disabled={!!transfer || book.loading}><Plus size={18} /></IconButton>
+          <IconButton label="新建" className="icon-button list-create-action" aria-haspopup="menu" aria-controls="folder-menu"
+            aria-expanded={!!folderContextMenu && !folderContextMenu.folder} disabled={!!transfer || book.loading}
+            onClick={(event) => {
+              if (folderContextMenu && !folderContextMenu.folder) { closeFolderMenu(); return; }
+              const rect = event.currentTarget.getBoundingClientRect();
+              openFolderMenu(null, rect.left, rect.bottom, event.currentTarget);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowDown') return;
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openFolderMenu(null, rect.left, rect.bottom, event.currentTarget);
+            }}><Plus size={18} /></IconButton>
         </div>
+        {book.view === 'all' && <div className="folder-navigation">
+          {book.folder && <IconButton label="返回上一级" onClick={() => chooseFolder(currentPath.at(-1)?.parentId ?? null)}><ArrowLeft size={16} /></IconButton>}
+          <nav className="folder-breadcrumbs" aria-label={t('目录路径')}>
+          {[null, ...currentPath].map((folder) => <button key={folder?.id ?? 'root'} type="button"
+            aria-current={book.folder === (folder?.id ?? null) ? 'page' : undefined}
+            className={drop?.key === (folder?.id ?? 'root') ? 'drop-inside' : ''}
+            onClick={() => chooseFolder(folder?.id ?? null)}
+            onDragOver={(event) => { if (!drag) return; event.preventDefault(); setDrop({ key: folder?.id ?? 'root', mode: 'inside' }); }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDrop(null); }}
+            onDrop={(event) => {
+              if (!drag) return;
+              event.preventDefault();
+              if (drag.kind === 'note') moveDraggedNotes(folder?.id ?? null);
+              else moveDraggedFolder(folder?.id ?? null);
+            }}>{folder && <ChevronRight size={12} />}{folder?.name ?? t('all_notes')}</button>)}
+          </nav>
+        </div>}
         {selectionMode && <div className="bulk-toolbar">
           <div className="bulk-toolbar-header">
             <span>{uiLanguage() === 'en' ? `${selected.size} selected` : `已选 ${selected.size} 篇`}</span>
@@ -1859,6 +1807,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <div className="bulk-toolbar-actions">
             <button disabled={!selected.size || disabled} onClick={applyBulkArchive}>{book.view === 'archive' ? <ArchiveRestore size={14} /> : <Archive size={14} />}{book.view === 'archive' ? t('unarchive') : t('archive')}</button>
             <button disabled={!selected.size || disabled} onClick={() => setBulkTagOpen(true)}><Tag size={14} />{t('加标签')}</button>
+            <button disabled={!selected.size || disabled || !book.online || !!session.offline}
+              onClick={() => setMoveNoteIds(book.notes.filter((item) => selected.has(item.id)).map((item) => item.id))}><FolderInput size={14} />{t('移动笔记')}</button>
             <button className="danger" disabled={!selected.size || disabled} onClick={() => setConfirmAction('bulk-trash')}><Trash2 size={14} />{t('delete')}</button>
           </div>
         </div>}
@@ -1911,8 +1861,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         {book.loading ? <div className="empty-state">{t('loading')}</div> : !listEntries.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleEntries.map((entry) => {
           if (entry.kind === 'folder') {
             const folder = entry.item;
-            return <button key={`folder-${folder.id}`} type="button" className={`note-row folder-list-entry ${drop?.key === folder.id ? 'drop-inside' : ''}`}
-              data-folder-id={folder.id} aria-label={folder.name} onClick={() => chooseFolder(folder.id)}
+            return <div key={`folder-${folder.id}`} className={`folder-list-entry ${drop?.key === folder.id ? `drop-${drop.mode}` : ''}`}
+              data-folder-id={folder.id}
               draggable={canDrag}
               onDragStart={(event) => {
                 setDrag({ kind: 'folder', ids: [folder.id] });
@@ -1923,8 +1873,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               onDragOver={(event) => {
                 if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
                 event.preventDefault();
-                clearHoverExpand();
-                setDrop({ key: folder.id, mode: 'inside' });
+                const rect = event.currentTarget.getBoundingClientRect();
+                const offset = (event.clientY - rect.top) / rect.height;
+                const inside = drag.kind === 'note' || !manualList || (offset >= 0.25 && offset <= 0.75);
+                setDrop({ key: folder.id, mode: inside ? 'inside' : offset < 0.25 ? 'before' : 'after' });
               }}
               onDragLeave={(event) => {
                 if (event.currentTarget.contains(event.relatedTarget as Node)) return;
@@ -1933,13 +1885,46 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               onDrop={(event) => {
                 if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
                 event.preventDefault();
-                if (drag.kind === 'note') moveDraggedNotes(folder.id);
+                if (drag.kind === 'note') { moveDraggedNotes(folder.id); return; }
+                const rect = event.currentTarget.getBoundingClientRect();
+                const offset = (event.clientY - rect.top) / rect.height;
+                if (manualList && offset < 0.25) moveDraggedFolder(folder.parentId, { beforeId: folder.id });
+                else if (manualList && offset > 0.75) moveDraggedFolder(folder.parentId, { afterId: folder.id });
                 else moveDraggedFolder(folder.id);
-              }}>
+              }}
+              onContextMenu={(event) => { event.preventDefault(); openFolderMenu(folder, event.clientX, event.clientY); }}>
+              <button type="button" className="note-row folder-open" aria-label={folder.name} onClick={() => chooseFolder(folder.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    openFolderMenu(folder, rect.left, rect.bottom, event.currentTarget);
+                  }
+                  if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!canDrag || !manualList) return;
+                  const siblings = listEntries.filter((entry) => entry.kind === 'folder');
+                  const delta = event.key === 'ArrowUp' ? -1 : 1;
+                  const anchor = siblings[siblings.findIndex((entry) => entry.item.id === folder.id) + delta];
+                  const button = event.currentTarget;
+                  if (anchor) void run(async () => {
+                    await book.moveFolder(folder.id, folder.parentId,
+                      delta < 0 ? { beforeId: anchor.item.id } : { afterId: anchor.item.id });
+                    button.focus();
+                  });
+                }}>
               <div className="note-row-title"><FolderIcon size={16} /><span>{folder.name}</span><ChevronRight size={14} /></div>
               <div className="note-excerpt">{t('目录')}</div>
               <div className="note-row-meta"><time>{new Date(folder.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time></div>
-            </button>;
+              </button>
+              <IconButton label="目录操作" className="folder-more" aria-haspopup="menu"
+                aria-expanded={folderContextMenu?.folder?.id === folder.id}
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  openFolderMenu(folder, rect.left, rect.bottom, event.currentTarget);
+                }}><MoreHorizontal size={16} /></IconButton>
+            </div>;
           }
           const item = entry.item;
           return (
@@ -2006,7 +1991,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title={t('local_draft')} />}</div>
           </button>);
         })}
-        {(hasHiddenEntries || book.nextOffset !== null) && <button className="load-more" onClick={() => {
+        {(hasHiddenEntries || book.nextOffset !== null) && <button className="load-more" disabled={book.loading} onClick={() => {
           setVisibleEntryLimit((value) => value + 50);
           if (!hasHiddenEntries && book.nextOffset !== null) void run(book.loadMore);
         }}>{t('加载更多')}<ChevronDown size={14} /></button>}
@@ -2253,7 +2238,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
       <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
         <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
-        {renderFolderTree(null, 0, false)}
         <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -2266,8 +2250,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
         </nav>
       </>}
-      <button className="mobile-navigation-folder-new" disabled={!book.online || !!session.offline}
-        onClick={() => { setMobileNavigation(false); setFolderDialog({ mode: 'create', parentId: null }); }}><FolderPlus size={18} />{t('新建目录')}</button>
       <div className="mobile-navigation-actions">
         <button onClick={() => { setMobileNavigation(false); setCommandQuery(''); setCommandPalette(true); }}><Command size={18} />{t('quick_open')}</button>
         {book.view !== 'trash' && <button onClick={() => {
@@ -2596,21 +2578,21 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <label className="single-field">{t('tags')}<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
       <div className="dialog-actions"><button onClick={() => setBulkTagOpen(false)}>{t('cancel')}</button><button className="primary" disabled={!bulkTag.trim() || disabled} onClick={applyBulkTag}>{t('add')}</button></div>
     </Modal>}
-    {folderDialog && folderDialog.mode !== 'move' && <Modal title={folderDialog.mode === 'delete' ? t('删除目录') : folderDialog.mode === 'rename' ? t('重命名目录') : t('新建目录')} close={() => setFolderDialog(null)}>
+    {folderDialog && folderDialog.mode !== 'move' && <Modal title={folderDialog.mode === 'delete' ? t('删除目录') : folderDialog.mode === 'rename' ? t('重命名目录') : t('新建目录')} close={closeFolderDialog}>
       {folderDialog.mode === 'delete' ? (
         <>
           <div className="confirm-title">{folderDialog.folder?.name}</div>
           <p className="confirm-hint">{t('只能删除空目录；含子目录或笔记（包括回收站）时不可删除。')}</p>
-          <div className="dialog-actions"><button onClick={() => setFolderDialog(null)}>{t('cancel')}</button><button className="danger" onClick={submitFolderDialog}>{t('delete')}</button></div>
+          <div className="dialog-actions"><button onClick={closeFolderDialog}>{t('cancel')}</button><button className="danger" onClick={submitFolderDialog}>{t('delete')}</button></div>
         </>
       ) : (
         <>
           <label className="single-field">{t('目录名')}<input autoFocus maxLength={64} value={folderDialog.name ?? ''} onChange={(event) => setFolderDialog({ ...folderDialog, name: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitFolderDialog(); }} /></label>
-          <div className="dialog-actions"><button onClick={() => setFolderDialog(null)}>{t('cancel')}</button><button className="primary" disabled={!(folderDialog.name ?? '').trim()} onClick={submitFolderDialog}>{folderDialog.mode === 'rename' ? t('rename') : t('create')}</button></div>
+          <div className="dialog-actions"><button onClick={closeFolderDialog}>{t('cancel')}</button><button className="primary" disabled={!(folderDialog.name ?? '').trim()} onClick={submitFolderDialog}>{folderDialog.mode === 'rename' ? t('rename') : t('create')}</button></div>
         </>
       )}
     </Modal>}
-    {folderDialog?.mode === 'move' && folderDialog.folder && <Modal title={t('移动目录')} close={() => setFolderDialog(null)}>
+    {folderDialog?.mode === 'move' && folderDialog.folder && <Modal title={t('移动目录')} close={closeFolderDialog}>
       <div className="move-target-list">
         <button type="button" className="move-target-row" onClick={() => moveFolderTo(null)}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
         {renderMoveTargets(null, 0, moveFolderTo, folderSubtree(folderDialog.folder.id))}
@@ -2636,11 +2618,22 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       document.body,
     )}
     {folderContextMenu && createPortal(
-      <div className="folder-context-menu" role="menu" style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+      <div id="folder-menu" className="folder-context-menu" role="menu" tabIndex={-1} style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
         onKeyDown={(event) => moveButtonFocus(event, '[role="menuitem"]')}
         onContextMenu={(event) => event.preventDefault()}>
-        <button role="menuitem" disabled={!book.online || !!session.offline}
-          onClick={() => { setFolderContextMenu(null); setFolderDialog({ mode: 'create', parentId: null }); }}><FolderPlus size={15} />{t('新建目录')}</button>
+        {!folderContextMenu.folder && <button role="menuitem" disabled={!!transfer || book.loading}
+          onClick={() => { setFolderContextMenu(null); void createNote(); }}><FileText size={15} />{t('新建笔记')}</button>}
+        <button role="menuitem" disabled={!book.online || !!session.offline || folderPath(folderContextMenu.folder?.id ?? book.folder).length >= MAX_FOLDER_DEPTH}
+          onClick={() => { setFolderDialog({ mode: 'create', parentId: folderContextMenu.folder?.id ?? book.folder }); setFolderContextMenu(null); }}>
+          <FolderPlus size={15} />{t(folderContextMenu.folder ? '新建子目录' : '新建目录')}</button>
+        {folderContextMenu.folder && <>
+          <button role="menuitem" disabled={!book.online || !!session.offline}
+            onClick={() => { setFolderDialog({ mode: 'rename', folder: folderContextMenu.folder!, name: folderContextMenu.folder!.name }); setFolderContextMenu(null); }}><Pencil size={15} />{t('重命名目录')}</button>
+          <button role="menuitem" disabled={!book.online || !!session.offline}
+            onClick={() => { setFolderDialog({ mode: 'move', folder: folderContextMenu.folder! }); setFolderContextMenu(null); }}><FolderInput size={15} />{t('移动目录')}</button>
+          <button role="menuitem" className="danger" disabled={!book.online || !!session.offline}
+            onClick={() => { setFolderDialog({ mode: 'delete', folder: folderContextMenu.folder! }); setFolderContextMenu(null); }}><Trash2 size={15} />{t('删除目录')}</button>
+        </>}
       </div>,
       document.body,
     )}
