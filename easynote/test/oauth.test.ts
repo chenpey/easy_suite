@@ -140,6 +140,7 @@ test('consent page renders with a restrictive CSP and rejects wrong passwords', 
   })}`);
   assert.equal(consent.status, 200);
   assert.match(consent.headers.get('Content-Security-Policy') ?? '', /default-src 'none'/);
+  assert.equal(consent.headers.get('Referrer-Policy'), 'same-origin');
   assert.match(await consent.text(), /name="password"/);
 
   const wrong = await dispatch('/oauth/authorize', {
@@ -150,6 +151,53 @@ test('consent page renders with a restrictive CSP and rejects wrong passwords', 
   assert.equal(wrong.status, 401);
   assert.equal(wrong.headers.get('Location'), null);
 });
+
+for (const [name, headers] of [
+  ['popup with a cross-site fetch marker', { Origin: origin, 'Sec-Fetch-Site': 'cross-site' }],
+  ['Safari form with only a same-origin Referer', { Referer: `${origin}/oauth/authorize?client_id=test`, 'Sec-Fetch-Site': 'cross-site' }],
+] as const) {
+  test(`authorize accepts ${name}`, async () => {
+    const clientId = await register();
+    const response = await dispatch('/oauth/authorize', {
+      method: 'POST', redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers, ...nextIp() },
+      body: authorizeBody(clientId),
+    });
+    assert.equal(response.status, 302, await response.clone().text());
+    const target = new URL(response.headers.get('Location')!);
+    assert.equal(target.origin + target.pathname, redirect);
+    assert.equal(target.searchParams.get('state'), 'xyz');
+    assert.ok(target.searchParams.get('code'));
+  });
+}
+
+for (const [name, headers] of [
+  ['foreign Origin even with a same-origin Referer', { Origin: 'https://evil.example', Referer: `${origin}/oauth/authorize` }],
+  ['opaque Origin even with a same-origin Referer', { Origin: 'null', Referer: `${origin}/oauth/authorize` }],
+  ['missing Origin and Referer', {}],
+  ['same-origin fetch marker without source headers', { 'Sec-Fetch-Site': 'same-origin' }],
+  ['foreign Referer', { Referer: 'https://evil.example/oauth/authorize' }],
+  ['malformed Referer', { Referer: 'not-a-url' }],
+  ['relative Referer', { Referer: '/oauth/authorize' }],
+  ['Referer with a different scheme', { Referer: 'http://easynote.test/oauth/authorize' }],
+  ['Referer with a different port', { Referer: 'https://easynote.test:8443/oauth/authorize' }],
+  ['Referer with a deceptive hostname', { Referer: 'https://easynote.test.evil.example/oauth/authorize' }],
+] as const) {
+  test(`authorize rejects ${name}`, async () => {
+    const clientId = await register();
+    const before = await instance.db.prepare('SELECT COUNT(*) AS count FROM oauth_codes').first<{ count: number }>();
+    const response = await dispatch('/oauth/authorize', {
+      method: 'POST', redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers, ...nextIp() },
+      body: authorizeBody(clientId),
+    });
+    assert.equal(response.status, 403, await response.clone().text());
+    assert.equal(response.headers.get('Location'), null);
+    assert.match(await response.text(), /Cross-origin request rejected\./);
+    const after = await instance.db.prepare('SELECT COUNT(*) AS count FROM oauth_codes').first<{ count: number }>();
+    assert.equal(after?.count, before?.count);
+  });
+}
 
 test('PKCE code exchange issues a token that works on MCP and is single use', async () => {
   const clientId = await register();

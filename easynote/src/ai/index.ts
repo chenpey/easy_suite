@@ -184,7 +184,7 @@ export async function createMcpServer(client: EasyNoteClient): Promise<McpServer
     try {
       const page = await client.search({ q: query, tag, view, limit, offset });
       const result = {
-        notes: page.notes,
+        notes: page.notes.map((note) => ({ ...recentNote(note), matches: note.matches })),
         count: page.notes.length,
         offset,
         hasMore: page.nextOffset !== null,

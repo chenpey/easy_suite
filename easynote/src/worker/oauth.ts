@@ -1,5 +1,5 @@
 import { ensureOwner, limitAccountAction, limitLogin, verifyLogin } from './auth';
-import { ApiError, digest, json, readBytes, readJson, requireOrigin, token, type Env } from './core';
+import { ApiError, digest, json, readBytes, readJson, token, type Env } from './core';
 
 // OAuth 2.1 authorization code + PKCE for remote MCP clients (for example ChatGPT).
 // Each grant is stored as an integration_tokens row, so revocation, access levels
@@ -74,7 +74,7 @@ function page(title: string, body: string, status = 200): Response {
       'Cache-Control': 'no-store',
       'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
       'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
+      'Referrer-Policy': 'same-origin',
     },
   });
 }
@@ -162,8 +162,19 @@ async function authorizeSubmit(request: Request, env: Env): Promise<Response> {
   }
 }
 
+function requireOAuthOrigin(request: Request): void {
+  let origin = request.headers.get('Origin');
+  // Browser form submissions may omit Origin; only then use a same-origin Referer.
+  if (origin === null) {
+    try { origin = new URL(request.headers.get('Referer') ?? '').origin; } catch { /* Reject missing or invalid Referer. */ }
+  }
+  if (origin !== new URL(request.url).origin) {
+    throw new ApiError(403, 'Cross-origin request rejected.');
+  }
+}
+
 async function authorizeSubmitUnsafe(request: Request, env: Env): Promise<Response> {
-  requireOrigin(request);
+  requireOAuthOrigin(request);
   const fields = await formFields(request);
   const ctx = await authorizeContext(env, fields);
   if (ctx instanceof Response) return ctx;
