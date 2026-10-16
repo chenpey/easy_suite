@@ -32,6 +32,10 @@ async function openMobileNavigation(page: Page) {
   await expect(dialog.getByRole('heading', { name: 'EasyNote', exact: true })).toBeVisible();
   return dialog;
 }
+async function createRootFolder(page: Page) {
+  await page.locator('.sidebar').getByRole('button', { name: '全部笔记', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '新建目录', exact: true }).click();
+}
 async function openMobileNoteActions(page: Page) {
   await page.getByRole('button', { name: '更多笔记操作', exact: true }).click();
   const dialog = page.getByRole('dialog');
@@ -2867,11 +2871,11 @@ test('folders create nested notes and context menu copies edits moves and trashe
   const marker = randomUUID().slice(0, 8);
   const top = `目录-${marker}`, child = `子目录-${marker}`, title = `笔记-${marker}`;
   await page.goto('/');
-  await page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true }).click();
+  await createRootFolder(page);
   await page.getByRole('textbox', { name: '目录名' }).fill(top);
   await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
   const topRow = page.locator('.sidebar .folder-row').filter({ hasText: top });
-  await page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true }).click();
+  await createRootFolder(page);
   await page.getByRole('textbox', { name: '目录名' }).fill(top);
   await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('同一层已存在同名目录。');
@@ -2957,7 +2961,9 @@ test('folders enforce the fifth level in UI and remain available offline and on 
   await page.reload();
   await page.locator('.sidebar .folder-name').getByText(`${marker}-renamed`, { exact: true }).click();
   await expect(page.locator('.note-row').filter({ hasText: `离线-${marker}` })).toBeVisible();
-  await expect(page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true })).toBeDisabled();
+  await page.locator('.sidebar').getByRole('button', { name: '全部笔记', exact: true }).click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: '新建目录', exact: true })).toBeDisabled();
+  await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
   const navigation = await openMobileNavigation(page);
   await navigation.getByRole('button', { name: `${marker}-renamed`, exact: true }).click();
@@ -2989,6 +2995,82 @@ test('folders move from the sidebar and tolerate picking the current parent', as
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const folders = (await (await page.request.get('/api/folders')).json()).folders;
   expect(folders.find((folder: { id: string }) => folder.id === guest).parentId).toBe(home);
+});
+
+test('folders render under all notes and the all notes menu creates a root folder', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const parent = `父-${marker}`, child = `子-${marker}`, root = `根-${marker}`;
+  const parentId = randomUUID();
+  expect((await page.request.post('/api/folders', { headers, data: { id: parentId, name: parent, parentId: null } })).status()).toBe(201);
+  expect((await page.request.post('/api/folders', { headers, data: { id: randomUUID(), name: child, parentId } })).status()).toBe(201);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await expect(nav.getByRole('button', { name: '全部笔记', exact: true })).toBeVisible();
+  const parentRow = nav.locator('.folder-row').filter({ hasText: parent });
+  const childRow = nav.locator('.folder-row').filter({ hasText: child });
+  await expect(parentRow).toBeVisible();
+  await expect(childRow).toBeVisible();
+  // The standalone 目录 section is gone, and its tree sits inside the same nav as 全部笔记.
+  await expect(page.locator('.sidebar .section-label').filter({ hasText: '目录' })).toHaveCount(0);
+  const parentName = (await parentRow.locator('.folder-name').boundingBox())!;
+  const childName = (await childRow.locator('.folder-name').boundingBox())!;
+  expect(childName.x).toBeGreaterThan(parentName.x);
+  const allNotes = page.locator('.sidebar').getByRole('button', { name: '全部笔记', exact: true });
+  const menu = page.getByRole('menu');
+  const menuItem = page.getByRole('menuitem', { name: '新建目录', exact: true });
+  await allNotes.click({ button: 'right' });
+  await expect(menuItem).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(allNotes).toBeFocused();
+  // Near the viewport edge the menu is clamped so it stays fully visible.
+  const size = page.viewportSize()!;
+  await page.evaluate(() => {
+    const button = document.querySelector('.sidebar nav.folder-nav button')!;
+    button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: innerWidth - 2, clientY: innerHeight - 2 }));
+  });
+  const menuBox = (await page.locator('.folder-context-menu').boundingBox())!;
+  expect(Math.round(menuBox.x + menuBox.width)).toBeLessThanOrEqual(size.width - 8);
+  expect(Math.round(menuBox.y + menuBox.height)).toBeLessThanOrEqual(size.height - 8);
+  await page.keyboard.press('Escape');
+  // Clicking outside closes the menu, and the keyboard menu key opens the same one.
+  await allNotes.click({ button: 'right' });
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(menu).toHaveCount(0);
+  await allNotes.focus();
+  await allNotes.press('Shift+F10');
+  await expect(menuItem).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: '目录名' }).fill(root);
+  await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+  await expect(nav.locator('.folder-row').filter({ hasText: root })).toBeVisible();
+});
+
+test('folders follow all notes in the mobile navigation and keep the touch create entry', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const parent = `移动父-${marker}`, child = `移动子-${marker}`, created = `触摸-${marker}`;
+  const parentId = randomUUID();
+  expect((await page.request.post('/api/folders', { headers, data: { id: parentId, name: parent, parentId: null } })).status()).toBe(201);
+  expect((await page.request.post('/api/folders', { headers, data: { id: randomUUID(), name: child, parentId } })).status()).toBe(201);
+  await page.goto('/');
+  await page.setViewportSize({ width: 390, height: 844 });
+  let navigation = await openMobileNavigation(page);
+  const nav = navigation.locator('nav.mobile-navigation-list').first();
+  await expect(nav.getByRole('button', { name: '全部笔记', exact: true })).toBeVisible();
+  const parentRow = nav.locator('.folder-row').filter({ hasText: parent });
+  const childRow = nav.locator('.folder-row').filter({ hasText: child });
+  await expect(parentRow).toBeVisible();
+  await expect(childRow).toBeVisible();
+  await expect(navigation.locator('.mobile-navigation-label').filter({ hasText: '目录' })).toHaveCount(0);
+  const parentName = (await parentRow.locator('.folder-name').boundingBox())!;
+  const childName = (await childRow.locator('.folder-name').boundingBox())!;
+  expect(childName.x).toBeGreaterThan(parentName.x);
+  await navigation.getByRole('button', { name: '新建目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '目录名' }).fill(created);
+  await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+  navigation = await openMobileNavigation(page);
+  await expect(navigation.locator('.folder-row').filter({ hasText: created })).toBeVisible();
 });
 
 test('folders can move and delete an unsynced new draft with the offline library disabled', async ({ page }) => {

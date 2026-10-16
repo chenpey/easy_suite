@@ -570,6 +570,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'rename' | 'delete' | 'move'; folder?: Folder; parentId?: string | null; name?: string } | null>(null);
   const [noteContextMenu, setNoteContextMenu] = useState<{ noteId: string; x: number; y: number; trashed: boolean } | null>(null);
+  const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const allNotesRef = useRef<HTMLButtonElement>(null);
   const [moveNoteIds, setMoveNoteIds] = useState<string[] | null>(null);
   const [sidebar, setSidebar] = useState(true);
   const [resizingList, setResizingList] = useState(false);
@@ -1338,6 +1340,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     });
     return null;
   });
+  const openFolderMenu = (x: number, y: number) => setFolderContextMenu({ x, y });
+  const closeFolderMenu = () => setFolderContextMenu((current) => {
+    if (current) requestAnimationFrame(() => allNotesRef.current?.focus());
+    return null;
+  });
   const contextCopy = (noteId: string) => void run(async () => {
     const copied = await book.copyNote(noteId);
     showNotice(t('已复制笔记'));
@@ -1375,6 +1382,28 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [noteContextMenu]);
+  useEffect(() => {
+    if (!folderContextMenu) return;
+    const menu = document.querySelector<HTMLElement>('.folder-context-menu');
+    if (menu) {
+      menu.style.left = `${Math.max(8, Math.min(folderContextMenu.x, innerWidth - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(folderContextMenu.y, innerHeight - menu.offsetHeight - 8))}px`;
+      menu.querySelector<HTMLButtonElement>('button')?.focus();
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement).closest('.folder-context-menu')) setFolderContextMenu(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeFolderMenu(); }
+      if (event.key === 'Tab') setFolderContextMenu(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [folderContextMenu]);
   const handleSaveEditTag = () => void run(async () => {
     if (!editingTag) return;
     const target = editingTagValue.trim();
@@ -1611,16 +1640,22 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <IconButton label="收起侧栏" onClick={() => setSidebar(false)}><PanelLeftClose size={16} /></IconButton>
       </div>
       <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
-      <nav aria-label={t('note_categories')}>
-        <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={17} />{t('all_notes')}</button>
+      <nav className="folder-nav" aria-label={t('note_categories')}>
+        <button ref={allNotesRef} className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}
+          onContextMenu={(event) => { event.preventDefault(); openFolderMenu(event.clientX, event.clientY); }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            openFolderMenu(rect.left, rect.bottom);
+          }}><FileText size={17} />{t('all_notes')}</button>
+        {renderFolderTree(null, 0, true)}
         <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
           onClick={() => setShareManagement(true)}><Share2 size={17} />{t('sharing')}</button>
         <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={17} />{t('trash')}</button>
       </nav>
-      <div className="section-label"><span>{t('目录')}</span><IconButton label="新建目录" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'create', parentId: null })}><FolderPlus size={14} /></IconButton></div>
-      <nav className="folder-nav" aria-label={t('目录')}>{renderFolderTree(null, 0, true)}</nav>
       <div className="section-label"><span>{t('tags')}</span><IconButton label="管理标签" onClick={() => setTagManager(true)}><Tags size={14} /></IconButton></div>
       <nav className="tag-nav" aria-label={t('tags')}>{book.tags.map((tag) =>
         <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
@@ -1987,6 +2022,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
       <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
         <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
+        {renderFolderTree(null, 0, false)}
         <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -1998,10 +2034,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <nav className="mobile-navigation-list" aria-label={t('mobile_tags')}>{book.tags.map((tag) =>
           <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
         </nav>
-      </>}
-      {book.folders.length > 0 && <>
-        <div className="mobile-navigation-label">{t('目录')}</div>
-        <nav className="mobile-navigation-list folder-list" aria-label={t('目录')}>{renderFolderTree(null, 0, false)}</nav>
       </>}
       <button className="mobile-navigation-folder-new" disabled={!book.online || !!session.offline}
         onClick={() => { setMobileNavigation(false); setFolderDialog({ mode: 'create', parentId: null }); }}><FolderPlus size={18} />{t('新建目录')}</button>
@@ -2368,6 +2400,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <button role="menuitem" className="danger" onClick={() => { closeNoteMenu(); contextTrash(noteContextMenu.noteId, noteContextMenu.trashed); }}>
           {noteContextMenu.trashed ? <RotateCcw size={15} /> : <Trash2 size={15} />}{noteContextMenu.trashed ? t('恢复') : t('delete')}
         </button>
+      </div>,
+      document.body,
+    )}
+    {folderContextMenu && createPortal(
+      <div className="folder-context-menu" role="menu" style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+        onKeyDown={(event) => moveButtonFocus(event, '[role="menuitem"]')}
+        onContextMenu={(event) => event.preventDefault()}>
+        <button role="menuitem" disabled={!book.online || !!session.offline}
+          onClick={() => { setFolderContextMenu(null); setFolderDialog({ mode: 'create', parentId: null }); }}><FolderPlus size={15} />{t('新建目录')}</button>
       </div>,
       document.body,
     )}
