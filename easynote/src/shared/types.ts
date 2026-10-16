@@ -6,12 +6,15 @@ export interface Note {
   pinned: boolean;
   archived: boolean;
   deletedAt: number | null;
+  folderId: string | null;
   createdAt: number;
   updatedAt: number;
   revision: number;
 }
 
-export type NoteInput = Pick<Note, 'title' | 'content' | 'tags' | 'pinned' | 'archived' | 'deletedAt'>;
+export type NoteContentInput = Pick<Note, 'title' | 'content' | 'tags' | 'pinned' | 'archived' | 'deletedAt'>;
+// folderId stays optional: requests that omit it (old clients, AI tools) must keep the note where it is.
+export type NoteInput = NoteContentInput & { folderId?: string | null };
 export type NoteSummary = Omit<Note, 'content'> & { excerpt: string };
 export interface NoteSearchMatch {
   field: 'title' | 'content';
@@ -25,11 +28,40 @@ export type IntegrationNoteSummary = NoteSummary & {
   matches: NoteSearchMatch[];
   uri: string;
 };
-export interface Version extends NoteInput {
+export interface Version extends NoteContentInput {
   revision: number;
   savedAt: number;
   actorType: 'user' | 'ai';
   actorName: string;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// Top-level folders count as depth 1.
+export const MAX_FOLDER_DEPTH = 5;
+// Clients cap ZIP entries at 1200, so the server keeps folders within the same budget
+// and a full library always stays exportable.
+export const MAX_FOLDERS = 1200;
+
+export function folderDepth(folders: Pick<Folder, 'id' | 'parentId'>[], id: string): number | null {
+  let depth = 0;
+  let current: string | null = id;
+  const visited = new Set<string>();
+  while (current) {
+    if (visited.has(current)) return null;
+    visited.add(current);
+    const folder = folders.find((item) => item.id === current);
+    if (!folder) return null;
+    depth++;
+    current = folder.parentId;
+  }
+  return depth;
 }
 
 export interface IntegrationToken {
@@ -121,8 +153,10 @@ export interface SyncChange {
 export const noteInput = (note: Note): NoteInput => ({
   title: note.title, content: note.content, tags: note.tags,
   pinned: note.pinned, archived: note.archived, deletedAt: note.deletedAt,
+  folderId: note.folderId ?? null,
 });
 
+// Content fields only: note_versions and history never store folder placement.
 export function sameVersionedInput(left: NoteInput, right: NoteInput): boolean {
   return left.title === right.title &&
     left.content === right.content &&
@@ -133,7 +167,9 @@ export function sameVersionedInput(left: NoteInput, right: NoteInput): boolean {
 }
 
 export function sameNoteInput(left: NoteInput, right: NoteInput): boolean {
-  return left.pinned === right.pinned && sameVersionedInput(left, right);
+  return left.pinned === right.pinned &&
+    (left.folderId ?? null) === (right.folderId ?? null) &&
+    sameVersionedInput(left, right);
 }
 
 export const imagePath = (id: string) => `/api/images/${id}`;

@@ -1,5 +1,5 @@
 import { openDB } from 'idb';
-import type { Note, Session, SyncChange } from '../shared/types';
+import type { Folder, Note, Session, SyncChange } from '../shared/types';
 
 export interface Draft {
   note: Note;
@@ -8,12 +8,11 @@ export interface Draft {
 }
 export interface CachedFile { blob: Blob; mime: string; filename: string }
 
-const database = () => openDB('easynote', 1, {
+const database = () => openDB('easynote', 2, {
   upgrade(db) {
-    db.createObjectStore('drafts');
-    db.createObjectStore('notes');
-    db.createObjectStore('files');
-    db.createObjectStore('meta');
+    for (const store of ['drafts', 'notes', 'files', 'meta', 'folders']) {
+      if (!db.objectStoreNames.contains(store)) db.createObjectStore(store);
+    }
   },
 });
 
@@ -191,6 +190,19 @@ export async function cacheMirroredNote(userId: string, note: Note, signal?: Abo
   finally { db.close(); }
 }
 
+// Folders are small, stored per account as one list; the server list is authoritative.
+export async function loadMirroredFolders(userId: string): Promise<Folder[]> {
+  const db = await database();
+  try { return await db.get('folders', userId) as Folder[] | undefined ?? []; }
+  finally { db.close(); }
+}
+
+export async function cacheMirroredFolders(userId: string, folders: Folder[]): Promise<void> {
+  const db = await database();
+  try { await db.put('folders', folders, userId); }
+  finally { db.close(); }
+}
+
 export async function syncCursor(userId: string): Promise<number> {
   const db = await database();
   try {
@@ -253,9 +265,10 @@ async function deletePrefixed(store: { openCursor(): Promise<any> }, prefix: str
 export async function clearOfflineMirror(userId: string): Promise<void> {
   const db = await database();
   try {
-    const tx = db.transaction(['notes', 'files', 'meta'], 'readwrite');
+    const tx = db.transaction(['notes', 'files', 'meta', 'folders'], 'readwrite');
     await deletePrefixed(tx.objectStore('notes'), `${userId}:`);
     await deletePrefixed(tx.objectStore('files'), `${userId}:`);
+    await tx.objectStore('folders').delete(userId);
     await tx.objectStore('meta').delete(cursorKey(userId));
     await tx.objectStore('meta').delete(sessionKey(userId));
     if (await tx.objectStore('meta').get('last-user') === userId) await tx.objectStore('meta').delete('last-user');
@@ -267,10 +280,11 @@ export async function clearAccountStorage(userId: string): Promise<void> {
   while (draining) await draining;
   const db = await database();
   try {
-    const tx = db.transaction(['drafts', 'notes', 'files', 'meta'], 'readwrite');
+    const tx = db.transaction(['drafts', 'notes', 'files', 'meta', 'folders'], 'readwrite');
     await deletePrefixed(tx.objectStore('drafts'), `${userId}:`);
     await deletePrefixed(tx.objectStore('notes'), `${userId}:`);
     await deletePrefixed(tx.objectStore('files'), `${userId}:`);
+    await tx.objectStore('folders').delete(userId);
     await tx.objectStore('meta').delete(offlineKey(userId));
     await tx.objectStore('meta').delete(cursorKey(userId));
     await tx.objectStore('meta').delete(sessionKey(userId));

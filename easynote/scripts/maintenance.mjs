@@ -16,14 +16,15 @@ const isoName = () => new Date().toISOString().replace(/[:.]/g, '-');
 const sqlString = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const applicationTables = [
   'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
-  'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
+  'folders', 'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
 ];
 
-async function migrationsSha256() {
+async function migrationsSha256(beforeFolders = false) {
   const directory = new URL('../migrations/', import.meta.url);
   const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
   const hash = createHash('sha256');
   for (const name of names) {
+    if (beforeFolders && name >= '0003_folders.sql') break;
     hash.update(name).update('\0').update(await readFile(new URL(name, directory))).update('\0');
   }
   return hash.digest('hex');
@@ -186,17 +187,48 @@ function objectFromInsert(line) {
   };
 }
 
+function folderInsertMeta(line) {
+  const match = /^INSERT INTO "folders" \(([^)]+)\) VALUES\((.*)\);$/.exec(line);
+  if (!match) fail('The D1 export contains an unparseable folder row.');
+  const columns = [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
+  const values = parseSqlValues(match[2]);
+  const row = Object.fromEntries(columns.map((column, index) => [column, values[index]]));
+  if (typeof row.id !== 'string' || typeof row.user_id !== 'string' || typeof row.name !== 'string') {
+    fail('The D1 export contains an invalid folder row.');
+  }
+  return {
+    line, id: row.id, userId: row.user_id, name: row.name,
+    parentId: typeof row.parent_id === 'string' ? row.parent_id : null,
+  };
+}
+
+function* orderedFolderInserts(rows) {
+  let remaining = [...rows];
+  const emitted = new Set();
+  while (remaining.length) {
+    const ready = remaining.filter((row) => row.parentId === null || emitted.has(row.parentId));
+    if (!ready.length) fail('The D1 export contains folders with an invalid parent order.');
+    for (const row of ready) {
+      yield `${row.line}\n`;
+      emitted.add(row.id);
+    }
+    remaining = remaining.filter((row) => !emitted.has(row.id));
+  }
+}
+
 async function scanDatabase(path) {
+  const folders = [];
   const objects = [];
   const tables = new Set();
   const reader = createInterface({ input: createReadStream(path), crlfDelay: Infinity });
   for await (const line of reader) {
     const table = /^CREATE TABLE(?: IF NOT EXISTS)?\s+"?([A-Za-z0-9_]+)"?/.exec(line)?.[1];
     if (table) tables.add(table);
+    if (line.startsWith('INSERT INTO "folders" ')) folders.push(folderInsertMeta(line));
     const object = objectFromInsert(line);
     if (object) objects.push(object);
   }
-  return { objects, tables };
+  return { folders, objects, tables };
 }
 
 async function writeRestoreData(source, destination) {
@@ -204,11 +236,19 @@ async function writeRestoreData(source, destination) {
   async function* statements() {
     yield 'PRAGMA foreign_keys=ON;\n';
     yield 'DELETE FROM app_state;\n';
+    const folderInserts = [];
+    const laterInserts = [];
     const reader = createInterface({ input: createReadStream(source), crlfDelay: Infinity });
     for await (const line of reader) {
       const table = /^INSERT INTO "?([^" (]+)"?/.exec(line)?.[1];
-      if (table && included.has(table)) yield `${line}\n`;
+      if (!table || !included.has(table)) continue;
+      if (table === 'folders') { folderInserts.push(folderInsertMeta(line)); continue; }
+      if (applicationTables.indexOf(table) > applicationTables.indexOf('folders')) laterInserts.push(line);
+      else yield `${line}\n`;
     }
+    // Parents before children, so the self-referential FK never depends on export order.
+    yield* orderedFolderInserts(folderInserts);
+    for (const line of laterInserts) yield `${line}\n`;
   }
   await pipeline(Readable.from(statements()), createWriteStream(destination, { mode: 0o600, flags: 'wx' }));
 }
@@ -230,7 +270,16 @@ async function verifyBackup(path) {
     fail('database.sql checksum does not match the manifest.');
   }
   const scanned = await scanDatabase(databasePath);
+  // Restore replays folder rows verbatim, so refuse backups whose same-level names would reintroduce an invalid state.
+  const siblingKeys = new Set();
+  for (const folder of scanned.folders) {
+    const key = JSON.stringify([folder.userId, folder.parentId, folder.name]);
+    if (siblingKeys.has(key)) fail(`database.sql contains duplicate folder name ${JSON.stringify(folder.name)} under the same parent.`);
+    siblingKeys.add(key);
+  }
+  const legacy = !scanned.tables.has('folders') && manifest.migrationsSha256 === await migrationsSha256(true);
   for (const table of applicationTables) {
+    if (legacy && table === 'folders') continue;
     if (!scanned.tables.has(table)) fail(`database.sql does not contain table ${table}.`);
   }
   const exported = new Map(scanned.objects.map((entry) => [entry.key, entry]));
@@ -245,7 +294,7 @@ async function verifyBackup(path) {
     const actual = await fileMetadata(objectPath);
     if (actual.size !== object.size || actual.sha256 !== object.sha256) fail(`R2 object checksum mismatch for ${object.key}.`);
   }
-  if (manifest.migrationsSha256 !== await migrationsSha256()) {
+  if (!legacy && manifest.migrationsSha256 !== await migrationsSha256()) {
     fail('Backup schema differs from the current EasyNote migrations.');
   }
   return { directory, manifest, databasePath };

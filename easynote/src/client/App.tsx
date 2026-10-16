@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Download, ExternalLink, FileText, FolderOpen, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
-import type { ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
+import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import type { Folder, ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
 import { AiAccess } from './AiAccess';
@@ -182,13 +182,15 @@ const conflictFieldName: Record<NoteConflictField, string> = {
   pinned: '置顶状态',
   archived: '归档状态',
   deletedAt: '删除状态',
+  folderId: '所在目录',
 };
 
-function conflictFieldValue(note: Note, field: NoteConflictField): string {
+function conflictFieldValue(note: Note, field: NoteConflictField, folders: { id: string; name: string }[] = []): string {
   if (field === 'tags') return note.tags.join('、') || t('无标签');
   if (field === 'pinned') return note.pinned ? t('已置顶') : t('未置顶');
   if (field === 'archived') return note.archived ? t('已归档') : t('未归档');
   if (field === 'deletedAt') return note.deletedAt ? t('已移入回收站') : t('正常笔记');
+  if (field === 'folderId') return folders.find((item) => item.id === note.folderId)?.name ?? t('根目录');
   return note[field] || t('（空）');
 }
 
@@ -565,6 +567,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
   const [mobileNoteActions, setMobileNoteActions] = useState(false);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [folderDialog, setFolderDialog] = useState<{ mode: 'create' | 'rename' | 'delete' | 'move'; folder?: Folder; parentId?: string | null; name?: string } | null>(null);
+  const [noteContextMenu, setNoteContextMenu] = useState<{ noteId: string; x: number; y: number; trashed: boolean } | null>(null);
+  const [moveNoteIds, setMoveNoteIds] = useState<string[] | null>(null);
   const [sidebar, setSidebar] = useState(true);
   const [resizingList, setResizingList] = useState(false);
   const [noteListWidth, setNoteListWidth] = useState(() => {
@@ -819,7 +825,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     try { await action(); } catch (e) { book.setError(String(e)); }
   };
   const createNote = () => run(async () => {
-    await book.create();
+    await book.create({ folderId: book.folder });
     setMobileNavigation(false);
     setMobileNoteActions(false);
     setMobileNote(true);
@@ -854,6 +860,20 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const chooseView = (view: string, tag = '') => {
     book.setView(view);
     book.setTag(tag);
+    book.setFolder(null);
+    setMobileNavigation(false);
+    setMobileNote(false);
+    setSelectionMode(false);
+    setSelected(new Set());
+  };
+  const folderChildren = (parentId: string | null) =>
+    book.folders.filter((item) => item.parentId === parentId)
+      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+  const chooseFolder = (id: string | null) => {
+    book.setFolder(id);
+    book.setView('all');
+    book.setTag('');
+    book.setQuery('');
     setMobileNavigation(false);
     setMobileNote(false);
     setSelectionMode(false);
@@ -1286,6 +1306,75 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const count = await moveToTrash([...selected]);
     finishBulk(t('已将 {0} 篇笔记移入回收站', count));
   };
+  const submitFolderDialog = () => void run(async () => {
+    if (!folderDialog) return;
+    if (folderDialog.mode === 'delete') {
+      if (folderDialog.folder) {
+        await book.deleteFolder(folderDialog.folder.id);
+        showNotice(t('已删除目录'));
+      }
+    } else {
+      const name = (folderDialog.name ?? '').trim();
+      if (!name || name.length > 64) throw new Error(t('目录名必须为 1-64 个字符。'));
+      const parentId = folderDialog.mode === 'create' ? folderDialog.parentId ?? null : folderDialog.folder?.parentId ?? null;
+      if (book.folders.some((folder) => folder.parentId === parentId && folder.name === name && folder.id !== folderDialog.folder?.id)) {
+        throw new Error(t('同一层已存在同名目录。'));
+      }
+      if (folderDialog.mode === 'create') {
+        await book.createFolder(name, folderDialog.parentId ?? null);
+        showNotice(t('已创建目录'));
+      } else if (folderDialog.folder) {
+        await book.renameFolder(folderDialog.folder.id, name);
+        showNotice(t('已重命名目录'));
+      }
+    }
+    setFolderDialog(null);
+  });
+  const openNoteMenu = (noteId: string, trashed: boolean, x: number, y: number) =>
+    setNoteContextMenu({ noteId, trashed, x, y });
+  const closeNoteMenu = () => setNoteContextMenu((current) => {
+    if (current) requestAnimationFrame(() => {
+      document.querySelector<HTMLButtonElement>(`[data-note-id="${current.noteId}"]`)?.focus();
+    });
+    return null;
+  });
+  const contextCopy = (noteId: string) => void run(async () => {
+    const copied = await book.copyNote(noteId);
+    showNotice(t('已复制笔记'));
+    await openNote(copied.id);
+  });
+  const contextEdit = (noteId: string) => void run(async () => {
+    await openNote(noteId);
+    setLayout('edit');
+    requestAnimationFrame(() => editor.current?.goTo(0));
+  });
+  const contextTrash = (noteId: string, trashed: boolean) => {
+    const ids = [noteId];
+    if (trashed) void run(() => book.bulkUpdate(ids, () => ({ deletedAt: null })).then(() => showNotice(t('已恢复笔记'))));
+    else void run(async () => { await moveToTrash(ids); showNotice(t('已移入回收站')); });
+  };
+  useEffect(() => {
+    if (!noteContextMenu) return;
+    const menu = document.querySelector<HTMLElement>('.note-context-menu');
+    if (menu) {
+      menu.style.left = `${Math.max(8, Math.min(noteContextMenu.x, innerWidth - menu.offsetWidth - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(noteContextMenu.y, innerHeight - menu.offsetHeight - 8))}px`;
+      menu.querySelector<HTMLButtonElement>('button')?.focus();
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement).closest('.note-context-menu')) setNoteContextMenu(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeNoteMenu(); }
+      if (event.key === 'Tab') setNoteContextMenu(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [noteContextMenu]);
   const handleSaveEditTag = () => void run(async () => {
     if (!editingTag) return;
     const target = editingTagValue.trim();
@@ -1350,8 +1439,68 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
-  const activeView = book.tag ? `${viewName} · #${book.tag}` : viewName;
+  const activeView = book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
+    : book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
+  const renderFolderTree = (parentId: string | null, depth: number, actions: boolean): ReactNode =>
+    folderChildren(parentId).map((folder) => {
+      const children = folderChildren(folder.id);
+      const collapsed = collapsedFolders.has(folder.id);
+      return (
+        <div key={folder.id} className="folder-node">
+          <div className="folder-row" style={{ paddingLeft: depth * 12 }}>
+            {children.length ? (
+              <button type="button" className="folder-chevron" aria-label={collapsed ? t('展开目录') : t('收起目录')}
+                onClick={() => setCollapsedFolders((current) => {
+                  const next = new Set(current);
+                  if (next.has(folder.id)) next.delete(folder.id); else next.add(folder.id);
+                  return next;
+                })}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</button>
+            ) : <span className="folder-chevron" />}
+            <button type="button" className={`folder-name ${book.folder === folder.id ? 'active' : ''}`}
+              onClick={() => chooseFolder(folder.id)}><FolderIcon size={14} /><span>{folder.name}</span></button>
+            {actions && <span className="folder-actions">
+              <IconButton label="新建子目录" className="folder-action" disabled={depth >= 4 || !book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'create', parentId: folder.id })}><FolderPlus size={13} /></IconButton>
+              <IconButton label="重命名目录" className="folder-action" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'rename', folder, name: folder.name })}><Pencil size={13} /></IconButton>
+              <IconButton label="移动目录" className="folder-action" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'move', folder })}><FolderInput size={13} /></IconButton>
+              <IconButton label="删除目录" className="folder-action danger-icon" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'delete', folder })}><Trash2 size={13} /></IconButton>
+            </span>}
+          </div>
+          {children.length && !collapsed ? renderFolderTree(folder.id, depth + 1, actions) : null}
+        </div>
+      );
+    });
+  const moveToFolder = (target: string | null) => void run(async () => {
+    if (!moveNoteIds) return;
+    const count = await book.moveNotes(moveNoteIds, target);
+    showNotice(t('已移动 {0} 篇笔记', count));
+    setMoveNoteIds(null);
+  });
+  const moveFolderTo = (target: string | null) => void run(async () => {
+    const moving = folderDialog?.folder;
+    if (!moving) return;
+    if (moving.parentId === target) { setFolderDialog(null); return; }
+    if (book.folders.some((folder) => folder.parentId === target && folder.name === moving.name && folder.id !== moving.id)) {
+      throw new Error(t('同一层已存在同名目录。'));
+    }
+    await book.moveFolder(moving.id, target);
+    showNotice(t('已移动目录'));
+    setFolderDialog(null);
+  });
+  const folderSubtree = (id: string): Set<string> => {
+    const ids = new Set<string>([id]);
+    const walk = (parent: string) => folderChildren(parent).forEach((child) => { ids.add(child.id); walk(child.id); });
+    walk(id);
+    return ids;
+  };
+  const renderMoveTargets = (parentId: string | null, depth: number, onPick: (target: string | null) => void, exclude?: Set<string>): ReactNode =>
+    folderChildren(parentId).filter((folder) => !exclude?.has(folder.id)).map((folder) => (
+      <div key={folder.id}>
+        <button type="button" className="move-target-row" style={{ paddingLeft: depth * 12 }}
+          onClick={() => onPick(folder.id)}><FolderIcon size={14} /><span>{folder.name}</span></button>
+        {renderMoveTargets(folder.id, depth + 1, onPick, exclude)}
+      </div>
+    ));
   const commandMatch = (...labels: string[]) => {
     const query = commandQuery.trim().toLocaleLowerCase();
     return !query || labels.some((label) => label.toLocaleLowerCase().includes(query));
@@ -1463,13 +1612,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
       <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
       <nav aria-label={t('note_categories')}>
-        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={17} />{t('all_notes')}</button>
+        <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={17} />{t('all_notes')}</button>
         <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
           onClick={() => setShareManagement(true)}><Share2 size={17} />{t('sharing')}</button>
         <button className={!shareManagement && book.view === 'trash' ? 'active' : ''} onClick={() => chooseView('trash')}><Trash2 size={17} />{t('trash')}</button>
       </nav>
+      <div className="section-label"><span>{t('目录')}</span><IconButton label="新建目录" disabled={!book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'create', parentId: null })}><FolderPlus size={14} /></IconButton></div>
+      <nav className="folder-nav" aria-label={t('目录')}>{renderFolderTree(null, 0, true)}</nav>
       <div className="section-label"><span>{t('tags')}</span><IconButton label="管理标签" onClick={() => setTagManager(true)}><Tags size={14} /></IconButton></div>
       <nav className="tag-nav" aria-label={t('tags')}>{book.tags.map((tag) =>
         <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
@@ -1560,7 +1711,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </header>
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
         {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
-          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row key={item.id}
+          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row data-note-id={item.id} key={item.id}
             title={t('双击在独立窗口中打开阅读')}
             aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
@@ -1568,6 +1719,18 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               if (event.detail >= 2) return;
               if (selectionMode) toggleSelected(item.id);
               else void openNote(item.id);
+            }}
+            onContextMenu={(event) => {
+              if (selectionMode) return;
+              event.preventDefault();
+              openNoteMenu(item.id, item.deletedAt !== null, event.clientX, event.clientY);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                openNoteMenu(item.id, item.deletedAt !== null, rect.left + 8, rect.bottom - 4);
+              }
             }}
             onDoubleClick={(event) => {
               event.preventDefault();
@@ -1823,7 +1986,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }} />
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
       <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
-        <button className={!shareManagement && book.view === 'all' && !book.tag ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
+        <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
         <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -1836,6 +1999,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <button key={tag} className={!shareManagement && book.tag === tag ? 'active' : ''} onClick={() => chooseView(book.view, tag)}><span className="tag-prefix" aria-hidden="true">#</span>{tag}</button>)}
         </nav>
       </>}
+      {book.folders.length > 0 && <>
+        <div className="mobile-navigation-label">{t('目录')}</div>
+        <nav className="mobile-navigation-list folder-list" aria-label={t('目录')}>{renderFolderTree(null, 0, false)}</nav>
+      </>}
+      <button className="mobile-navigation-folder-new" disabled={!book.online || !!session.offline}
+        onClick={() => { setMobileNavigation(false); setFolderDialog({ mode: 'create', parentId: null }); }}><FolderPlus size={18} />{t('新建目录')}</button>
       <div className="mobile-navigation-actions">
         <button onClick={() => { setMobileNavigation(false); setCommandQuery(''); setCommandPalette(true); }}><Command size={18} />{t('quick_open')}</button>
         {book.view !== 'trash' && <button onClick={() => {
@@ -1852,6 +2021,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {mobileNoteActions && note && <Modal title="笔记操作" className="mobile-actions-dialog" close={() => setMobileNoteActions(false)}>
       <div className="mobile-action-list">
         <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void syncNow(); }}><Save size={18} />{t('sync_and_save_version')}</button>
+        <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void contextCopy(note.id); }}><Copy size={18} />{t('复制笔记')}</button>
+        <button disabled={disabled || !!note.deletedAt} onClick={() => { setMobileNoteActions(false); setMoveNoteIds([note.id]); }}><FolderInput size={18} />{t('移动笔记')}</button>
         <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); beginLinkInsertion(); }}><Link2 size={18} />{t('insert_internal_link')}</button>
         <button onClick={() => { setMobileNoteActions(false); setInspector((value) => !value); }}><ListTree size={18} />{t('outline_and_links')}</button>
         <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); setNoteFields({ pinned: !note.pinned }); }}><Pin size={18} fill={note.pinned ? 'currentColor' : 'none'} />{note.pinned ? t('取消置顶') : t('置顶')}</button>
@@ -2161,6 +2332,45 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <label className="single-field">{t('tags')}<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
       <div className="dialog-actions"><button onClick={() => setBulkTagOpen(false)}>{t('cancel')}</button><button className="primary" disabled={!bulkTag.trim() || disabled} onClick={applyBulkTag}>{t('add')}</button></div>
     </Modal>}
+    {folderDialog && folderDialog.mode !== 'move' && <Modal title={folderDialog.mode === 'delete' ? t('删除目录') : folderDialog.mode === 'rename' ? t('重命名目录') : t('新建目录')} close={() => setFolderDialog(null)}>
+      {folderDialog.mode === 'delete' ? (
+        <>
+          <div className="confirm-title">{folderDialog.folder?.name}</div>
+          <p className="confirm-hint">{t('只能删除空目录；含子目录或笔记（包括回收站）时不可删除。')}</p>
+          <div className="dialog-actions"><button onClick={() => setFolderDialog(null)}>{t('cancel')}</button><button className="danger" onClick={submitFolderDialog}>{t('delete')}</button></div>
+        </>
+      ) : (
+        <>
+          <label className="single-field">{t('目录名')}<input autoFocus maxLength={64} value={folderDialog.name ?? ''} onChange={(event) => setFolderDialog({ ...folderDialog, name: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitFolderDialog(); }} /></label>
+          <div className="dialog-actions"><button onClick={() => setFolderDialog(null)}>{t('cancel')}</button><button className="primary" disabled={!(folderDialog.name ?? '').trim()} onClick={submitFolderDialog}>{folderDialog.mode === 'rename' ? t('rename') : t('create')}</button></div>
+        </>
+      )}
+    </Modal>}
+    {folderDialog?.mode === 'move' && folderDialog.folder && <Modal title={t('移动目录')} close={() => setFolderDialog(null)}>
+      <div className="move-target-list">
+        <button type="button" className="move-target-row" onClick={() => moveFolderTo(null)}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
+        {renderMoveTargets(null, 0, moveFolderTo, folderSubtree(folderDialog.folder.id))}
+      </div>
+    </Modal>}
+    {moveNoteIds && <Modal title={t('移动笔记')} close={() => setMoveNoteIds(null)}>
+      <div className="move-target-list">
+        <button type="button" className="move-target-row" onClick={() => moveToFolder(null)}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
+        {renderMoveTargets(null, 0, moveToFolder)}
+      </div>
+    </Modal>}
+    {noteContextMenu && createPortal(
+      <div className="note-context-menu" role="menu" style={{ left: noteContextMenu.x, top: noteContextMenu.y }}
+        onKeyDown={(event) => moveButtonFocus(event, '[role="menuitem"]')}
+        onContextMenu={(event) => event.preventDefault()}>
+        <button role="menuitem" onClick={() => { closeNoteMenu(); contextCopy(noteContextMenu.noteId); }}><Copy size={15} />{t('复制笔记')}</button>
+        <button role="menuitem" onClick={() => { closeNoteMenu(); contextEdit(noteContextMenu.noteId); }}><Pencil size={15} />{t('编辑笔记')}</button>
+        <button role="menuitem" onClick={() => { closeNoteMenu(); setMoveNoteIds([noteContextMenu.noteId]); }}><FolderInput size={15} />{t('移动笔记')}</button>
+        <button role="menuitem" className="danger" onClick={() => { closeNoteMenu(); contextTrash(noteContextMenu.noteId, noteContextMenu.trashed); }}>
+          {noteContextMenu.trashed ? <RotateCcw size={15} /> : <Trash2 size={15} />}{noteContextMenu.trashed ? t('恢复') : t('delete')}
+        </button>
+      </div>,
+      document.body,
+    )}
     {book.conflict && <Modal title="检测到版本冲突" className="conflict-dialog" close={() => book.setConflict(null)}>
       <div className="conflict-summary">
         <strong>{book.conflict.local.title || t('untitled_note')}</strong>
@@ -2172,8 +2382,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         {book.conflict.fields.map((field) => <section key={field}>
           <h3>{t(conflictFieldName[field])}</h3>
           <div className="conflict-versions">
-            <div><span>{t('本机修改')}</span><pre>{conflictFieldValue(book.conflict!.local, field)}</pre></div>
-            <div><span>{t('云端修改')}</span><pre>{conflictFieldValue(book.conflict!.remote!, field)}</pre></div>
+            <div><span>{t('本机修改')}</span><pre>{conflictFieldValue(book.conflict!.local, field, book.folders)}</pre></div>
+            <div><span>{t('云端修改')}</span><pre>{conflictFieldValue(book.conflict!.remote!, field, book.folders)}</pre></div>
           </div>
         </section>)}
       </div>}

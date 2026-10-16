@@ -2,9 +2,18 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `0.10.2`
+Current Version: `0.11.0`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 0.11.0 Release Notes (2026-10-16)
+
+- Add a folder tree in the sidebar, five levels deep, with create, rename, move and delete. Moving a folder carries its whole subtree and the notes inside it, and a folder can never be moved into itself or its own subtree.
+- The note list gains a right-click menu for copy, edit, move and delete. The offline library mirrors the folder list, and AI/MCP note metadata now reports `folderId`.
+- Sibling folder names stay unique: create, rename, move, ZIP import and disaster-recovery restore all validate the same rule and return 409 on a clash. Migration `0003_folders.sql` adds a unique sibling index as a backstop, using `COALESCE` so root folders with a `NULL` parent are compared too.
+- One account may hold at most 1200 folders, matching the ZIP import and export budget. Importing merges same-name siblings and always generates new UUIDs for created folders, so a folder ID owned by another account no longer aborts the import.
+- Folder restore creates each level with up to six concurrent requests, cutting the wait for large archives on slow networks.
+- Disaster-recovery backups include folders, and the restore precheck now rejects old backups that contain duplicate sibling names. Deployments apply database migrations before the new code.
 
 ## 0.10.2 Release Notes (2026-10-15)
 
@@ -359,3 +368,13 @@ npm run test:scripts
 npx playwright install chromium
 npm run test:ui
 ```
+
+### Folders and note actions
+
+The sidebar supports creating, renaming, moving and deleting folders, and nesting up to five levels (top level counts as one). Moving a folder carries its subfolders and notes along, and a folder cannot be moved into itself or its own subtree, nor past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
+
+Folder names must be unique within the same level; creating, renaming, moving and importing all enforce this, and same-level folders with the same name are merged into one during import. Accounts are limited to 1200 folders, matching the ZIP import/export budget.
+
+Right-click a note to duplicate, edit, move to trash, or move to a folder/root. Shift+F10 opens the menu, arrow keys navigate, and Escape closes it. Mobile users can duplicate and move from the note actions menu. Cached folders and notes work offline; folder structure changes require a connection.
+
+ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Apply the new `0003_folders.sql` migration when upgrading; the existing deployment script applies migrations.

@@ -11,6 +11,7 @@ const baseNote = (patch: Partial<Note> = {}): Note => ({
   pinned: false,
   archived: false,
   deletedAt: null,
+  folderId: null,
   createdAt: 1,
   updatedAt: 1,
   revision: 1,
@@ -83,4 +84,16 @@ test('large line-based merges fall back to an explicit conflict without expensiv
   assert.deepEqual(merged.conflicts, ['content']);
   assert.equal(merged.note.content, local.content);
   assert.equal(mergeNoteChanges(base, local, remote, 'remote').note.content, remote.content);
+});
+
+test('folder moves merge with content edits and conflicting moves stay explicit', () => {
+  const base = baseNote({ folderId: null });
+  const local = { ...base, folderId: 'local-folder' };
+  const remote = { ...base, content: 'remote edit' };
+  const merged = mergeNoteChanges(base, local, remote);
+  assert.equal(merged.note.folderId, 'local-folder');
+  assert.equal(merged.note.content, 'remote edit');
+  assert.deepEqual(merged.conflicts, []);
+  const conflict = mergeNoteChanges(base, local, { ...base, folderId: 'remote-folder' });
+  assert.deepEqual(conflict.conflicts, ['folderId']);
 });

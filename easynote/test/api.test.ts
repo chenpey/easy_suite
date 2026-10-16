@@ -5,7 +5,7 @@ import { createRuntime, testCsrf, testToken, testUserId, testPassword } from './
 import { digest } from '../src/worker/core';
 import { cleanup } from '../src/worker/images';
 import { passwordVerifier } from '../src/worker/auth';
-import { noteFingerprint } from '../src/shared/types';
+import { MAX_FOLDERS, noteFingerprint } from '../src/shared/types';
 
 let instance: Awaited<ReturnType<typeof createRuntime>>;
 const origin = 'https://easynote.example.test';
@@ -815,4 +815,179 @@ test('private PDF and text attachments are validated and downloaded safely', asy
     body: Buffer.from('not a pdf'),
   });
   assert.equal(invalid.status, 415);
+});
+
+test('folders enforce five levels, ownership, and empty-only deletion', async () => {
+  const ids: string[] = [];
+  for (let depth = 0; depth < 5; depth++) {
+    const id = randomUUID();
+    const response = await request('/api/folders', 'POST', { id, name: `层-${id}`, parentId: ids.at(-1) ?? null });
+    assert.equal(response.status, 201, await response.clone().text());
+    ids.push(id);
+  }
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '第六层', parentId: ids[4] })).status, 400);
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '无父目录', parentId: randomUUID() })).status, 400);
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '   ', parentId: null })).status, 400);
+  assert.equal((await request(`/api/folders/${ids[0]}`, 'DELETE')).status, 409);
+  const foreignUser = randomUUID(), foreignFolder = randomUUID();
+  await instance.db.prepare(`INSERT INTO users(id,username,password_verifier,created_at,updated_at) VALUES(?,?,?,1,1)`)
+    .bind(foreignUser, `other-${foreignUser}`, '{}').run();
+  await instance.db.prepare('INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at) VALUES(?,?,NULL,?,1,1)')
+    .bind(foreignFolder, foreignUser, 'private').run();
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '越权', parentId: foreignFolder })).status, 400);
+  assert.equal((await request(`/api/folders/${foreignFolder}`, 'PATCH', { name: '改名' })).status, 404);
+  assert.equal((await request(`/api/folders/${foreignFolder}`, 'DELETE')).status, 404);
+  assert.equal((await save(randomUUID(), 0, { folderId: foreignFolder })).status, 400);
+  const folders = (await (await request('/api/folders')).json() as any).folders;
+  assert.ok(!folders.some((folder: any) => folder.id === foreignFolder));
+  const note = await create({ folderId: ids[4], title: randomUUID() });
+  assert.equal((await request(`/api/folders/${ids[4]}`, 'DELETE')).status, 409);
+  const trashed = await save(note.id, note.revision, { ...note, deletedAt: Date.now() });
+  assert.equal(trashed.status, 200);
+  assert.equal((await request(`/api/folders/${ids[4]}`, 'DELETE')).status, 409);
+  const root = await save(note.id, (await trashed.json() as any).note.revision, { ...note, deletedAt: Date.now(), folderId: null });
+  assert.equal(root.status, 200);
+  for (const id of ids.reverse()) assert.equal((await request(`/api/folders/${id}`, 'DELETE')).status, 200);
+});
+
+test('folders reject duplicate sibling names and keep renames idempotent', async () => {
+  const root = randomUUID(), child = randomUUID(), otherRoot = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: root, name: '同名', parentId: null })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '同名', parentId: null })).status, 409);
+  assert.equal((await request('/api/folders', 'POST', { id: child, name: '同名', parentId: root })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '同名', parentId: root })).status, 409);
+  assert.equal((await request('/api/folders', 'POST', { id: otherRoot, name: '同名', parentId: null })).status, 409);
+  const sibling = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: sibling, name: '兄弟', parentId: root })).status, 201);
+  assert.equal((await request(`/api/folders/${sibling}`, 'PATCH', { name: '同名' })).status, 409);
+  assert.equal((await request(`/api/folders/${sibling}`, 'PATCH', { name: '兄弟' })).status, 200);
+  assert.equal((await request(`/api/folders/${root}`, 'PATCH', { name: '同名' })).status, 200);
+  const foreign = randomUUID(), foreignFolder = randomUUID();
+  await instance.db.prepare('INSERT INTO users(id,username,password_verifier,created_at,updated_at) VALUES(?,?,?,1,1)')
+    .bind(foreign, `dup-${foreign}`, '{}').run();
+  await instance.db.prepare(`INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at) VALUES(?,?,NULL,'同名',1,1)`)
+    .bind(foreignFolder, foreign).run();
+  assert.equal((await request('/api/folders', 'POST', { id: randomUUID(), name: '独立', parentId: null })).status, 201);
+  // An ID owned by another account is a conflict, not a 500.
+  assert.equal((await request('/api/folders', 'POST', { id: foreignFolder, name: '外来', parentId: null })).status, 409);
+});
+
+test('folder moves carry subtrees and notes, and reject cycles, depth overflow and name clashes', async () => {
+  const target = randomUUID(), source = randomUUID(), middle = randomUUID(), leaf = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: target, name: '目标', parentId: null })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: source, name: '来源', parentId: null })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: middle, name: '中', parentId: source })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: leaf, name: '叶', parentId: middle })).status, 201);
+  const note = await create({ folderId: middle, title: randomUUID() });
+  const clash = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: clash, name: '中', parentId: target })).status, 201);
+  assert.equal((await request(`/api/folders/${middle}`, 'PATCH', { parentId: target })).status, 409);
+  assert.equal((await request(`/api/folders/${clash}`, 'DELETE')).status, 200);
+  const moved = await request(`/api/folders/${middle}`, 'PATCH', { parentId: target });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  assert.equal((await moved.json() as any).folder.parentId, target);
+  // Descendants and notes travel with the moved folder.
+  const folders = (await (await request('/api/folders')).json() as any).folders;
+  assert.equal(folders.find((folder: any) => folder.id === leaf).parentId, middle);
+  assert.equal((await (await request(`/api/notes/${note.id}`)).json() as any).note.folderId, middle);
+  assert.equal((await request(`/api/folders/${middle}`, 'PATCH', { parentId: source })).status, 200);
+  assert.equal((await request(`/api/folders/${source}`, 'PATCH', { parentId: source })).status, 400);
+  assert.equal((await request(`/api/folders/${source}`, 'PATCH', { parentId: leaf })).status, 400);
+  assert.equal((await request(`/api/folders/${middle}`, 'PATCH', { parentId: leaf })).status, 400);
+  // A folder that would push its subtree past the fifth level cannot be a destination.
+  const deep2 = randomUUID(), deep3 = randomUUID(), deep4 = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: deep2, name: '深二', parentId: target })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: deep3, name: '深三', parentId: deep2 })).status, 201);
+  assert.equal((await request('/api/folders', 'POST', { id: deep4, name: '深四', parentId: deep3 })).status, 201);
+  assert.equal((await request(`/api/folders/${source}`, 'PATCH', { parentId: deep4 })).status, 400);
+  assert.equal((await request(`/api/folders/${middle}`, 'PATCH', { parentId: null })).status, 200);
+  assert.equal((await request(`/api/folders/${leaf}`, 'PATCH', { name: '叶改' })).status, 200);
+  assert.equal((await request(`/api/folders/${leaf}`, 'PATCH', {})).status, 400);
+});
+
+test('folder creation stops at the export limit and the database keeps siblings unique', async () => {
+  const fresh = await createRuntime();
+  try {
+    const freshRequest = (path: string, method = 'GET', body?: unknown) =>
+      fresh.runtime.dispatchFetch(`${origin}${path}`, {
+        method, headers: {
+          Origin: origin, 'CF-Connecting-IP': '192.0.2.3',
+          Cookie: `__Host-easynote=${testToken}`, 'X-CSRF-Token': testCsrf,
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        }, body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    await fresh.db.prepare(`WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<${MAX_FOLDERS})
+      INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at)
+      SELECT lower(hex(randomblob(4))||'-'||hex(randomblob(2))||'-4'||substr(hex(randomblob(2)),2)||'-'||
+        substr('89ab',1+abs(random())%4,1)||substr(hex(randomblob(2)),2)||'-'||hex(randomblob(6))),
+        ?,NULL,'seed-'||n,1,1 FROM seq`).bind(testUserId).run();
+    const seeded = await fresh.db.prepare('SELECT id FROM folders WHERE user_id=? AND name=?')
+      .bind(testUserId, 'seed-1').first<{ id: string }>();
+    assert.equal((await freshRequest('/api/folders', 'POST', { id: randomUUID(), name: '超额', parentId: null })).status, 409);
+    // Renaming still works at the cap because it adds no folder.
+    assert.equal((await freshRequest(`/api/folders/${seeded!.id}`, 'PATCH', { name: 'seed-1-改' })).status, 200);
+    await assert.rejects(fresh.db.prepare('INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at) VALUES(?,?,NULL,?,1,1)')
+      .bind(randomUUID(), testUserId, 'seed-2').run());
+  } finally { await fresh.runtime.dispose(); }
+});
+
+test('moving notes preserves content/history, old requests keep folders, and blanks stay scoped', async () => {
+  const folderId = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
+  const note = await create({ title: randomUUID(), folderId });
+  const oldRequest = await save(note.id, note.revision, { title: note.title });
+  assert.equal(oldRequest.status, 200);
+  assert.equal((await oldRequest.json() as any).note.folderId, folderId);
+  const operationId = randomUUID();
+  const moved = await save(note.id, note.revision, { title: note.title, folderId: null }, operationId);
+  assert.equal(moved.status, 200, await moved.clone().text());
+  const saved = (await moved.json() as any).note;
+  assert.equal(saved.content, note.content);
+  assert.equal(saved.revision, note.revision + 1);
+  assert.equal(saved.folderId, null);
+  assert.equal((await save(note.id, note.revision, { title: note.title, folderId: null }, operationId)).status, 200);
+  const versions = (await (await request(`/api/notes/${note.id}/versions`)).json() as any).versions;
+  assert.equal(versions.length, 1);
+  assert.equal(versions[0].content, note.content);
+  assert.equal((await save(note.id, saved.revision, { folderId: randomUUID() })).status, 400);
+  const cursor = (await (await request('/api/sync/cursor')).json() as any).cursor;
+  const blank = await create({ title: '', content: '', tags: [], folderId });
+  const rootBlank = (await (await save(randomUUID(), 0, { title: '', content: '', tags: [], folderId: null })).json() as any).note;
+  assert.notEqual(blank.id, rootBlank.id);
+  assert.equal((await (await request(`/api/notes/blank?folder=${folderId}`)).json() as any).note.id, blank.id);
+  const list = (await (await request(`/api/notes?folder=${folderId}`)).json() as any).notes;
+  assert.ok(list.every((item: any) => item.folderId === folderId));
+  const sync = (await (await request(`/api/sync?after=${cursor}&limit=200`)).json() as any).changes;
+  assert.ok(sync.some((change: any) => change.noteId === blank.id && change.note.folderId === folderId));
+});
+
+test('blank-note moves never overwrite another blank and account deletion cascades safely', async () => {
+  const folderId = randomUUID();
+  await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null });
+  const blank = await create({ title: '', content: '', tags: [], folderId });
+  await save(randomUUID(), 0, { title: '', content: '', tags: [], folderId: null });
+  const moved = await save(blank.id, blank.revision, { title: '', content: '', tags: [], folderId: null });
+  assert.equal(moved.status, 409);
+  assert.equal((await (await request(`/api/notes/${blank.id}`)).json() as any).note.folderId, folderId);
+  const userId = randomUUID(), child = randomUUID();
+  await instance.db.prepare('INSERT INTO users(id,username,password_verifier,created_at,updated_at) VALUES(?,?,?,1,1)')
+    .bind(userId, userId, '{}').run();
+  await instance.db.prepare('INSERT INTO folders VALUES(?,?,NULL,?,1,1)').bind(child, userId, 'folder').run();
+  for (const target of [null, child]) await instance.db.prepare(`INSERT INTO notes
+    (id,user_id,title,content,dedup_hash,created_at,updated_at,mutation_id,mutation_hash,folder_id)
+    VALUES(?,?,'','','hash',1,1,?,?,?)`).bind(randomUUID(), userId, randomUUID(), 'hash', target).run();
+  await instance.db.prepare('DELETE FROM users WHERE id=?').bind(userId).run();
+  assert.equal(await instance.db.prepare('SELECT id FROM notes WHERE user_id=?').bind(userId).first(), null);
+  assert.equal(await instance.db.prepare('SELECT id FROM folders WHERE user_id=?').bind(userId).first(), null);
+});
+
+test('pre-folder mutation hashes accept identical upgrade retries and reject changed payloads', async () => {
+  const id = randomUUID(), operationId = randomUUID(), title = randomUUID();
+  assert.equal((await save(id, 0, { title }, operationId)).status, 201);
+  const legacyHash = await digest(JSON.stringify({ ...base, title, revision: 0, createVersion: true }));
+  await instance.db.prepare('UPDATE notes SET mutation_hash=? WHERE id=?').bind(legacyHash, id).run();
+  const retried = await save(id, 0, { title, folderId: null }, operationId);
+  assert.equal(retried.status, 200, await retried.clone().text());
+  assert.equal((await retried.json() as any).note.revision, 1);
+  assert.equal((await save(id, 0, { title: `${title}-changed` }, operationId)).status, 409);
 });

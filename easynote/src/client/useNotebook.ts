@@ -6,6 +6,7 @@ import {
   noteLinkIds,
   sameNoteInput,
   storedFileIds,
+  type Folder,
   type Note,
   type NoteInput,
   type NoteSummary,
@@ -18,11 +19,13 @@ import { mergeNoteChanges, type ConflictPreference, type NoteConflictField } fro
 import { preparePdfExport } from './pdf';
 import {
   applyMirrorChanges,
+  cacheMirroredFolders,
   cacheFile,
   cacheMirroredNote,
   cacheSession,
   loadCachedFile,
   loadDrafts,
+  loadMirroredFolders,
   loadMirroredNote,
   loadMirroredNotes,
   offlineEnabled,
@@ -114,6 +117,8 @@ export function useNotebook(session: Session) {
   const [query, setQuery] = useState('');
   const [tag, setTag] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [folder, setFolder] = useState<string | null>(null);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState<{
@@ -157,6 +162,7 @@ export function useNotebook(session: Session) {
         if (item.deletedAt === null) return false;
       } else if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
       if (tag && !item.tags.includes(tag)) return false;
+      if (folder && (item.folderId ?? null) !== folder) return false;
       return !query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
     });
     scoped.sort(compareNoteOrder);
@@ -171,7 +177,7 @@ export function useNotebook(session: Session) {
     setTags([...new Set([...viewTags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     setNextOffset(null);
     setOfflineCount(mirror.current.size);
-  }, [query, tag, userId, view]);
+  }, [folder, query, tag, userId, view]);
 
   const cacheReferencedFiles = useCallback(() => {
     if (fileCacheAbort.current || !alive.current || !offlineLibraryRef.current) return;
@@ -274,6 +280,7 @@ export function useNotebook(session: Session) {
         ? item.deletedAt !== null
         : item.deletedAt === null && item.archived === (view === 'archive'));
       const matches = inView && (!tag || item.tags.includes(tag)) &&
+        (!folder || (item.folderId ?? null) === folder) &&
         (!query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
       if (!item || !matches) updated.delete(change.noteId);
       else {
@@ -287,7 +294,7 @@ export function useNotebook(session: Session) {
     setNextOffset((value) => value === null ? null : values.length);
     const custom = loadCustomTags(userId);
     setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
-  }, [query, show, tag, userId, view]);
+  }, [folder, query, show, tag, userId, view]);
   const syncOnlineRef = useRef(syncOnlineChanges);
   syncOnlineRef.current = syncOnlineChanges;
 
@@ -299,7 +306,7 @@ export function useNotebook(session: Session) {
       return;
     }
     // Tags do not depend on the list result, so fetch both in parallel.
-    const listRequest = api.list({ q: query, view, tag, offset: append ? nextOffset ?? 0 : 0 }, signal);
+    const listRequest = api.list({ q: query, view, tag, folder: folder ?? '', offset: append ? nextOffset ?? 0 : 0 }, signal);
     // Early returns below never await this, so mark it handled; the awaited copy still throws.
     const tagsRequest = api.tags(view, signal);
     tagsRequest.catch(() => undefined);
@@ -307,9 +314,11 @@ export function useNotebook(session: Session) {
     if (!alive.current || generation !== listGeneration.current) return;
     const existingBlank = result.notes.find(blankSummary);
     if (existingBlank) {
+      const blankFolder = existingBlank.folderId ?? null;
       const redundant = [...drafts.current.values()]
         .map((draft) => draft.note)
-        .filter((item) => item.revision === 0 && item.id !== existingBlank.id && blankNote(item));
+        .filter((item) => item.revision === 0 && item.id !== existingBlank.id && blankNote(item) &&
+          (item.folderId ?? null) === blankFolder);
       if (redundant.length) {
         const replacement = redundant.some((item) => item.id === current.current?.id)
           ? mirror.current.get(existingBlank.id) ?? (await api.note(existingBlank.id, signal)).note
@@ -327,7 +336,7 @@ export function useNotebook(session: Session) {
     if (alive.current && generation === listGeneration.current) {
       setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     }
-  }, [nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
+  }, [folder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -571,37 +580,41 @@ export function useNotebook(session: Session) {
   const create = (input: Partial<NoteInput> = {}): Promise<Note> => {
     if (createInFlight.current) return createInFlight.current;
     const operation = (async () => {
+      // Blank notes are reused per folder only, so the new note keeps the requested placement.
+      const wantedFolder = input.folderId ?? null;
+      const inWantedFolder = (item: { folderId?: string | null }) => (item.folderId ?? null) === wantedFolder;
       const open = (value: Note) => {
         selectionGeneration.current++;
         setView('all'); setQuery(''); setTag(''); show(value);
         return value;
       };
-      if (!Object.keys(input).length) {
+      if (Object.keys(input).every((key) => key === 'folderId')) {
         const fullNotes = [
           ...mirror.current.values(),
           ...(current.current ? [current.current] : []),
           ...[...drafts.current.values()].map((draft) => draft.note),
         ];
-        const saved = fullNotes.find((item) => item.revision > 0 && blankNote(item));
+        const saved = fullNotes.find((item) => item.revision > 0 && blankNote(item) && inWantedFolder(item));
         if (saved) return open(saved);
-        const listed = notes.find(blankSummary);
+        const listed = notes.find((item) => blankSummary(item) && inWantedFolder(item));
         if (listed) {
           const existing = fullNotes.find((item) => item.id === listed.id) ?? (await api.note(listed.id)).note;
           const redundant = fullNotes.filter((item) =>
-            item.revision === 0 && item.id !== existing.id && blankNote(item) && drafts.current.has(item.id));
+            item.revision === 0 && item.id !== existing.id && blankNote(item) && inWantedFolder(item) &&
+            drafts.current.has(item.id));
           await Promise.all(redundant.map((item) => discardDraft(item.id)));
           return open(existing);
         }
-        const local = fullNotes.find((item) => item.revision === 0 && blankNote(item));
+        const local = fullNotes.find((item) => item.revision === 0 && blankNote(item) && inWantedFolder(item));
         if (local) return open(local);
         if (!session.offline) {
-          const existing = await api.blank();
+          const existing = await api.blank(wantedFolder);
           if (existing.note) return open(existing.note);
         }
       }
       const newNote: Note = {
         id: crypto.randomUUID(), title: '', content: '', tags: [], pinned: false, archived: false, deletedAt: null,
-        createdAt: Date.now(), updatedAt: Date.now(), revision: 0, ...input,
+        createdAt: Date.now(), updatedAt: Date.now(), revision: 0, ...input, folderId: input.folderId ?? null,
       };
       open(newNote);
       edit({}, newNote);
@@ -733,10 +746,14 @@ export function useNotebook(session: Session) {
 
   const bulkUpdate = async (ids: string[], transform: (value: Note) => Partial<NoteInput>): Promise<number> => {
     const wanted = new Set(ids);
-    const targets = (await allAvailableNotes()).filter((item) => wanted.has(item.id));
-    if (targets.length !== wanted.size) throw new Error('部分笔记已不可用，请刷新列表后重试。');
+    const targets = await Promise.all([...wanted].map(async (id) =>
+      drafts.current.get(id)?.note ?? mirror.current.get(id) ??
+      (current.current?.id === id ? current.current : null) ??
+      (session.offline ? null : (await api.note(id)).note)));
+    if (targets.some((item) => !item)) throw new Error('部分笔记已不可用，请刷新列表后重试。');
     let updated = 0;
     for (const target of targets) {
+      if (!target) continue;
       const latest = drafts.current.get(target.id)?.note ?? target;
       const next = { ...latest, ...transform(latest) };
       if (sameNoteInput(noteInput(latest), noteInput(next))) continue;
@@ -761,6 +778,69 @@ export function useNotebook(session: Session) {
     if (offlineLibraryRef.current) renderMirror();
     else await refreshRef.current();
     return updated;
+  };
+
+  const loadFolders = useCallback(async (): Promise<void> => {
+    if (session.offline) return;
+    const result = await api.folders();
+    if (!alive.current) return;
+    setFolders(result.folders);
+    setFolder((current) => current && !result.folders.some((item) => item.id === current) ? null : current);
+    if (offlineLibraryRef.current) await cacheMirroredFolders(userId, result.folders);
+  }, [session.offline, userId]);
+
+  const applyFolders = (next: Folder[]) => {
+    setFolders(next);
+    if (offlineLibraryRef.current) void cacheMirroredFolders(userId, next).catch(() => undefined);
+  };
+
+  // Folder structure lives on the server only, so these stay online-only.
+  const createFolder = async (name: string, parentId: string | null): Promise<Folder> => {
+    const { folder: created } = await api.createFolder({ id: crypto.randomUUID(), name, parentId });
+    applyFolders([...folders.filter((item) => item.id !== created.id), created]
+      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')));
+    return created;
+  };
+
+  const renameFolder = async (id: string, name: string): Promise<void> => {
+    const { folder: renamed } = await api.renameFolder(id, name);
+    applyFolders(folders.map((item) => item.id === id ? renamed : item));
+  };
+
+  const moveFolder = async (id: string, parentId: string | null): Promise<void> => {
+    const { folder: moved } = await api.moveFolder(id, parentId);
+    applyFolders(folders.map((item) => item.id === id ? moved : item));
+  };
+
+  const deleteFolder = async (id: string): Promise<void> => {
+    await api.deleteFolder(id);
+    applyFolders(folders.filter((item) => item.id !== id));
+    if (folder === id) setFolder(null);
+  };
+
+  const moveNotes = (ids: string[], target: string | null): Promise<number> =>
+    bulkUpdate(ids, () => ({ folderId: target }));
+
+  // Copies keep the source folder and include unsynced draft content.
+  const copyNote = async (id: string): Promise<Note> => {
+    const source = drafts.current.get(id)?.note ?? (offlineLibraryRef.current
+      ? mirror.current.get(id) ?? await loadMirroredNote(userId, id)
+      : session.offline ? null : (await api.note(id)).note);
+    if (!source) throw new Error('这篇笔记尚未保存到本机。');
+    const copy: Note = {
+      ...source, id: crypto.randomUUID(),
+      title: `${(source.title || '未命名笔记').slice(0, 252)}（副本）`,
+      pinned: false, archived: false, deletedAt: null,
+      revision: 0, createdAt: Date.now(), updatedAt: Date.now(),
+    };
+    const draft: Draft = { note: copy, base: copy, operationId: crypto.randomUUID() };
+    drafts.current.set(copy.id, draft);
+    await persist(copy.id, draft);
+    notify();
+    if (online && !session.offline) await saveRef.current(copy.id, false);
+    if (offlineLibraryRef.current) renderMirror();
+    await refreshRef.current();
+    return copy;
   };
 
   const manageTag = async (source: string, target: string | null): Promise<number> => {
@@ -833,6 +913,7 @@ export function useNotebook(session: Session) {
       onlineCursor.current = null;
       mirror.current = await loadMirroredNotes(userId);
       await cacheSession(session);
+      await cacheMirroredFolders(userId, folders);
       if (!session.offline) await syncOfflineMirror();
       renderMirror();
     } else {
@@ -861,6 +942,7 @@ export function useNotebook(session: Session) {
         mirror.current = await loadMirroredNotes(userId);
         if (!alive.current) return;
         setOfflineCount(mirror.current.size);
+        setFolders(await loadMirroredFolders(userId));
         if (mirror.current.size) { renderMirror(); setLoading(false); }
         if (!session.offline) await cacheSession(session);
       } else if (!session.offline) {
@@ -869,6 +951,12 @@ export function useNotebook(session: Session) {
       for (const id of loaded.keys()) blocked.current.add(id);
       if (loaded.size) show(loaded.values().next().value!.note);
       try {
+        if (!session.offline) {
+          const folderList = await api.folders();
+          if (!alive.current) return;
+          setFolders(folderList.folders);
+          if (enabled) await cacheMirroredFolders(userId, folderList.folders);
+        }
         await refreshRef.current();
         if (!enabled && !session.offline) await syncOnlineRef.current();
       } catch (error) {
@@ -940,6 +1028,7 @@ export function useNotebook(session: Session) {
       try {
         if (offlineLibraryRef.current) await refreshRef.current(false, controller.signal);
         else await syncOnlineRef.current(controller.signal);
+        await loadFolders();
         setOnline(true);
         for (const id of drafts.current.keys()) {
           if (running.current.has(id) || pendingTimers.current.has(id)) continue;
@@ -1035,7 +1124,7 @@ export function useNotebook(session: Session) {
       window.removeEventListener('offline', network);
       window.removeEventListener('beforeunload', beforeUnload);
     };
-  }, [initialized, session.config.pollSeconds, session.offline, show]);
+  }, [initialized, loadFolders, session.config.pollSeconds, session.offline, show]);
 
   const pending = [...drafts.current.values()].map((draft) => draft.note);
   const visible = notes.map((item) => {
@@ -1053,6 +1142,7 @@ export function useNotebook(session: Session) {
       if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
     }
     if (tag && !item.tags.includes(tag)) return false;
+    if (folder && (item.folderId ?? null) !== folder) return false;
     return !query || `${item.title} ${item.excerpt}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
   });
   const status = !online ? '仅保存在本机' : note && running.current.has(note.id) ? '正在保存' :
@@ -1060,6 +1150,7 @@ export function useNotebook(session: Session) {
   void tick;
   return {
     note, notes: filtered, tags, view, query, tag, setView, setQuery, setTag,
+    folders, folder, setFolder, createFolder, renameFolder, moveFolder, deleteFolder, moveNotes, copyNote,
     nextOffset, loading, error, setError, conflict, setConflict, status, pending,
     online, offlineLibrary, offlineCount,
     busy: running.current.size > 0, select, clearSelection, create, edit, append, save: () => note ? save(note.id) : Promise.resolve(true),

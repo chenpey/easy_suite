@@ -17,20 +17,22 @@ import { publishNoteChanges } from './events';
 
 export interface NoteRow {
   id: string; user_id: string; title: string; content: string; tags: string; pinned: number; archived: number;
-  deleted_at: number | null; created_at: number; updated_at: number; revision: number;
+  deleted_at: number | null; folder_id: string | null; created_at: number; updated_at: number; revision: number;
   dedup_hash: string; mutation_id: string; mutation_hash: string;
 }
 interface VersionInputRow {
   title: string; content: string; tags: string; pinned: number; archived: number; deleted_at: number | null;
 }
+// folderId stays optional: old clients and AI requests omit it and must keep the stored placement.
+type NoteSaveInput = Omit<NoteInput, 'folderId'> & { folderId: string | null | undefined };
 export const toNote = (row: NoteRow): Note => ({
   id: row.id, title: row.title, content: row.content, tags: JSON.parse(row.tags),
-  pinned: !!row.pinned, archived: !!row.archived, deletedAt: row.deleted_at, createdAt: row.created_at,
-  updatedAt: row.updated_at, revision: row.revision,
+  pinned: !!row.pinned, archived: !!row.archived, deletedAt: row.deleted_at,
+  folderId: row.folder_id ?? null, createdAt: row.created_at, updatedAt: row.updated_at, revision: row.revision,
 });
 const versionInput = (row: VersionInputRow): NoteInput => ({
   title: row.title, content: row.content, tags: JSON.parse(row.tags),
-  pinned: !!row.pinned, archived: !!row.archived, deletedAt: row.deleted_at,
+  pinned: !!row.pinned, archived: !!row.archived, deletedAt: row.deleted_at, folderId: null,
 });
 
 export async function loadNote(env: Env, userId: string, id: string): Promise<NoteRow | null> {
@@ -38,17 +40,22 @@ export async function loadNote(env: Env, userId: string, id: string): Promise<No
 }
 
 const blankCondition = "title='' AND content='' AND tags='[]' AND archived=0 AND deleted_at IS NULL";
+// Blank notes are unique per folder, so create never reuses a blank note from another folder.
+const blankFolderCondition = "COALESCE(folder_id,'')=?";
 
-async function loadBlank(env: Env, userId: string): Promise<NoteRow | null> {
-  return env.DB.prepare(`SELECT * FROM notes WHERE user_id=? AND ${blankCondition} LIMIT 1`)
-    .bind(userId).first<NoteRow>();
+async function loadBlank(env: Env, userId: string, folderId: string | null): Promise<NoteRow | null> {
+  return env.DB.prepare(`SELECT * FROM notes WHERE user_id=? AND ${blankCondition} AND ${blankFolderCondition} LIMIT 1`)
+    .bind(userId, folderId ?? '').first<NoteRow>();
 }
+
+const folderExists = (env: Env, userId: string, folderId: string) =>
+  env.DB.prepare('SELECT id FROM folders WHERE id=? AND user_id=?').bind(folderId, userId).first();
 
 function isBlank(input: NoteInput): boolean {
   return !input.title && !input.content && !input.tags.length && !input.archived && input.deletedAt === null;
 }
 
-function validate(data: Record<string, unknown>, env: Env): NoteInput {
+function validate(data: Record<string, unknown>, env: Env): NoteSaveInput {
   if (typeof data.title !== 'string' || data.title.length > 256 ||
       typeof data.content !== 'string' ||
       new TextEncoder().encode(data.content).length > clientConfig(env).maxNoteBytes ||
@@ -56,6 +63,8 @@ function validate(data: Record<string, unknown>, env: Env): NoteInput {
       data.tags.some((tag) => typeof tag !== 'string' || !tag.trim() || tag.length > 40) ||
       typeof data.pinned !== 'boolean' ||
       typeof data.archived !== 'boolean' ||
+      !(data.folderId === undefined || data.folderId === null ||
+        typeof data.folderId === 'string' && idPattern.test(data.folderId)) ||
       !(data.deletedAt === null || typeof data.deletedAt === 'number' && Number.isSafeInteger(data.deletedAt) && data.deletedAt > 0)) {
     throw new ApiError(400, 'Invalid note fields or note size limit exceeded.');
   }
@@ -63,6 +72,7 @@ function validate(data: Record<string, unknown>, env: Env): NoteInput {
     title: data.title.trim(), content: data.content,
     tags: [...new Set((data.tags as string[]).map((tag) => tag.trim()))],
     pinned: data.pinned, archived: data.archived, deletedAt: data.deletedAt as number | null,
+    folderId: data.folderId as string | null | undefined,
   };
 }
 
@@ -77,19 +87,31 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   }
   const createVersion = user.actorType === 'ai' || data.createVersion === true;
   const dedupHash = await noteFingerprint(input.title, input.content);
-  const hash = await digest(JSON.stringify({ ...input, revision: data.revision, createVersion }));
   // One D1 round trip for the current row and the purge tombstone.
   const [currentResult, purgedResult] = await env.DB.batch([
     env.DB.prepare('SELECT * FROM notes WHERE id=? AND user_id=?').bind(id, user.id),
     env.DB.prepare('SELECT id FROM purged_notes WHERE id=?').bind(id),
   ]);
   const current = (currentResult.results as NoteRow[])[0] ?? null;
-  if (current?.mutation_id === data.operationId) {
-    if (current.mutation_hash !== hash) throw new ApiError(409, 'Operation ID reused with different content.');
-    return json({ note: toNote(current) });
-  }
   if ((!create && !current) || purgedResult.results.length) {
     throw new ApiError(410, 'This note no longer exists. Keep a new copy of your draft.');
+  }
+  const folderId = create
+    ? input.folderId ?? null
+    : input.folderId === undefined ? current!.folder_id : input.folderId;
+  if (folderId !== null && folderId !== current?.folder_id && !await folderExists(env, user.id, folderId)) {
+    throw new ApiError(400, 'Folder not found.');
+  }
+  const normalized: NoteInput = { ...input, folderId };
+  const hash = await digest(JSON.stringify({ ...normalized, revision: data.revision, createVersion }));
+  if (current?.mutation_id === data.operationId) {
+    if (current.mutation_hash !== hash) {
+      const { folderId: _folderId, ...legacyInput } = normalized;
+      const legacyHash = folderId === null
+        ? await digest(JSON.stringify({ ...legacyInput, revision: data.revision, createVersion })) : null;
+      if (current.mutation_hash !== legacyHash) throw new ApiError(409, 'Operation ID reused with different content.');
+    }
+    return json({ note: toNote(current) });
   }
   if (current && (create || current.revision !== data.revision)) {
     throw new ApiError(409, 'The note changed on another device.', { current: toNote(current) });
@@ -101,8 +123,8 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
       .bind(id).first<VersionInputRow>()
     : null;
   const shouldCreateVersion = createVersion &&
-    (!latestVersion || !sameVersionedInput(versionInput(latestVersion), input));
-  if (current && currentInput && sameNoteInput(currentInput, input)) {
+    (!latestVersion || !sameVersionedInput(versionInput(latestVersion), normalized));
+  if (current && currentInput && sameNoteInput(currentInput, normalized)) {
     if (!shouldCreateVersion) return json({ note: toNote(current), unchanged: true });
     const time = Date.now();
     const revision = current.revision;
@@ -132,7 +154,7 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
     }
     return json({ note: toNote(saved), unchanged: true });
   }
-  const ids = storedFileIds(input.content);
+  const ids = storedFileIds(normalized.content);
   if (ids.length > 80) throw new ApiError(400, 'A note can reference at most 80 stored files.');
   const idsJson = JSON.stringify(ids);
   const readyCondition = ids.length
@@ -140,27 +162,32 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
         AND id IN (SELECT value FROM json_each(?)))=?`
     : '1=1';
   const readyBinds = ids.length ? [user.id, idsJson, ids.length] : [];
+  // Re-checked inside the write, so a folder deleted after the pre-check cannot leave
+  // an orphaned note or fail the batch with a foreign-key error.
+  const folderCondition = '(? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))';
+  const folderBinds: unknown[] = [folderId, folderId, user.id];
   const time = Date.now();
   const revision = Number(data.revision) + 1;
   const mutation = data.operationId;
   const fields = [
-    input.title, input.content, dedupHash, JSON.stringify(input.tags),
-    input.pinned ? 1 : 0, input.archived ? 1 : 0, input.deletedAt,
+    normalized.title, normalized.content, dedupHash, JSON.stringify(normalized.tags),
+    normalized.pinned ? 1 : 0, normalized.archived ? 1 : 0, normalized.deletedAt, folderId,
   ];
   const statements: D1PreparedStatement[] = [];
   if (create) {
     statements.push(env.DB.prepare(`INSERT OR IGNORE INTO notes
-      (id,user_id,title,content,dedup_hash,tags,pinned,archived,deleted_at,created_at,updated_at,revision,mutation_id,mutation_hash)
-      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      (id,user_id,title,content,dedup_hash,tags,pinned,archived,deleted_at,folder_id,created_at,updated_at,revision,mutation_id,mutation_hash)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       WHERE ${readyCondition}
+        AND ${folderCondition}
         AND NOT EXISTS(SELECT 1 FROM purged_notes WHERE id=?)
         AND (SELECT COUNT(*) FROM notes WHERE user_id=?)<? RETURNING *`)
-      .bind(id, user.id, ...fields, time, time, revision, mutation, hash, ...readyBinds, id, user.id, numberSetting(env, 'MAX_NOTES', 1, 10000)));
+      .bind(id, user.id, ...fields, time, time, revision, mutation, hash, ...readyBinds, ...folderBinds, id, user.id, numberSetting(env, 'MAX_NOTES', 1, 10000)));
   } else {
-    statements.push(env.DB.prepare(`UPDATE notes SET title=?,content=?,dedup_hash=?,tags=?,pinned=?,archived=?,deleted_at=?,
-      updated_at=?,revision=?,mutation_id=?,mutation_hash=?
-      WHERE id=? AND user_id=? AND revision=? AND ${readyCondition} RETURNING *`)
-      .bind(...fields, time, revision, mutation, hash, id, user.id, data.revision, ...readyBinds));
+    statements.push(env.DB.prepare(`UPDATE OR IGNORE notes SET title=?,content=?,dedup_hash=?,tags=?,pinned=?,archived=?,deleted_at=?,
+      folder_id=?,updated_at=?,revision=?,mutation_id=?,mutation_hash=?
+      WHERE id=? AND user_id=? AND revision=? AND ${readyCondition} AND ${folderCondition} RETURNING *`)
+      .bind(...fields, time, revision, mutation, hash, id, user.id, data.revision, ...readyBinds, ...folderBinds));
   }
   const guard = 'EXISTS(SELECT 1 FROM notes WHERE id=? AND user_id=? AND revision=? AND mutation_id=?)';
   const guardBinds = [id, user.id, revision, mutation];
@@ -173,7 +200,7 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   }
   statements.push(env.DB.prepare(`INSERT INTO note_changes(user_id,note_id,changed_at)
     SELECT ?,?,? WHERE ${guard}`).bind(user.id, id, time, ...guardBinds));
-  if (input.deletedAt !== null) {
+  if (normalized.deletedAt !== null) {
     statements.push(env.DB.prepare(`DELETE FROM note_shares WHERE note_id=? AND ${guard}`)
       .bind(id, ...guardBinds));
   }
@@ -199,9 +226,16 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   // The first statement's RETURNING row is the saved note; nothing later in the batch writes notes.
   const written = (result[0].results as NoteRow[])[0];
   if (!written) {
-    if (create && isBlank(input)) {
-      const blank = await loadBlank(env, user.id);
+    if (!create && isBlank(normalized)) {
+      const blank = await loadBlank(env, user.id, folderId);
+      if (blank && blank.id !== id) throw new ApiError(409, 'The target folder already contains a blank note.');
+    }
+    if (create && isBlank(normalized)) {
+      const blank = await loadBlank(env, user.id, folderId);
       if (blank) return json({ note: toNote(blank), reused: true });
+    }
+    if (folderId !== null && !await folderExists(env, user.id, folderId)) {
+      throw new ApiError(409, 'The target folder no longer exists.', { folderMissing: true });
     }
     const latest = await loadNote(env, user.id, id);
     if (latest) throw new ApiError(409, 'The note changed on another device.', { current: toNote(latest) });
@@ -258,6 +292,13 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
     if (view === 'trash') filters.push('deleted_at IS NOT NULL');
     else if (view === 'archive') filters.push('deleted_at IS NULL', 'archived=1');
     else if (view === 'all') filters.push('deleted_at IS NULL', 'archived=0');
+    const folder = url.searchParams.get('folder') ?? '';
+    if (folder === 'root') filters.push('folder_id IS NULL');
+    else if (folder) {
+      if (!idPattern.test(folder)) throw new ApiError(400, 'Invalid folder filter.');
+      filters.push('folder_id=?');
+      binds.push(folder);
+    }
     if (ftsQuery) {
       filters.push('notes.rowid IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?)');
       binds.push(ftsQuery);
@@ -270,7 +311,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
       ? `(CASE WHEN instr(lower(content),lower(?))>61 THEN '…' ELSE '' END) ||
         substr(content,max(1,instr(lower(content),lower(?))-60),max(180,length(?)+60))`
       : 'substr(content,1,180)';
-    const result = await env.DB.prepare(`SELECT id,title,${excerpt} AS content,tags,pinned,archived,deleted_at,created_at,updated_at,revision
+    const result = await env.DB.prepare(`SELECT id,title,${excerpt} AS content,tags,pinned,archived,deleted_at,folder_id,created_at,updated_at,revision
       FROM notes WHERE ${filters.join(' AND ')} ORDER BY pinned DESC,updated_at DESC,id ASC LIMIT ? OFFSET ?`)
       .bind(...(q ? [q, q, q] : []), ...binds, limit + 1, offset).all<NoteRow>();
     const notes = result.results.slice(0, limit).map((row) => {
@@ -345,7 +386,9 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
     return json({ deleted: count?.count ?? 0 });
   }
   if (path === '/api/notes/blank' && request.method === 'GET') {
-    const row = await loadBlank(env, user.id);
+    const folder = url.searchParams.get('folder');
+    if (folder !== null && folder !== 'root' && !idPattern.test(folder)) throw new ApiError(400, 'Invalid folder filter.');
+    const row = await loadBlank(env, user.id, folder === null || folder === 'root' ? null : folder);
     return json({ note: row ? toNote(row) : null });
   }
   const match = /^\/api\/notes\/([^/]+)(?:\/(versions|backlinks))?$/.exec(path);
@@ -357,7 +400,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
     if (match[2] === 'backlinks') {
       const escaped = id.replace(/[\\%_]/g, '\\$&');
       const rows = await env.DB.prepare(`SELECT id,title,substr(content,1,180) AS content,tags,pinned,archived,
-        deleted_at,created_at,updated_at,revision FROM notes
+        deleted_at,folder_id,created_at,updated_at,revision FROM notes
         WHERE user_id=? AND deleted_at IS NULL AND content LIKE ? ESCAPE '\\'
         ORDER BY updated_at DESC,id ASC LIMIT 200`).bind(user.id, `%[[${escaped}|%`).all<NoteRow>();
       return json({

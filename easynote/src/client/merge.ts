@@ -9,7 +9,8 @@ export interface NoteMergeResult {
   conflicts: NoteConflictField[];
 }
 
-const inputFields: NoteConflictField[] = ['title', 'content', 'tags', 'pinned', 'archived', 'deletedAt'];
+// Content fields resolve into note_versions; folderId is merged separately and never versioned.
+const contentFields: NoteConflictField[] = ['title', 'content', 'tags', 'pinned', 'archived', 'deletedAt'];
 const maxLineMergeWork = 250_000;
 
 function sameTags(left: string[], right: string[]): boolean {
@@ -95,7 +96,7 @@ function mergeText(
 }
 
 function changedFields(base: NoteInput, value: NoteInput): NoteConflictField[] {
-  return inputFields.filter((field) => !sameField(field, base[field] as never, value[field] as never));
+  return contentFields.filter((field) => !sameField(field, base[field] as never, value[field] as never));
 }
 
 export function mergeNoteChanges(
@@ -119,6 +120,8 @@ export function mergeNoteChanges(
   if (archived.conflict) conflicts.push('archived');
   const deletedAt = mergeScalar('deletedAt', base.deletedAt, local.deletedAt, remote.deletedAt, preference);
   if (deletedAt.conflict) conflicts.push('deletedAt');
+  const folder = mergeScalar('folderId', base.folderId ?? null, local.folderId ?? null, remote.folderId ?? null, preference);
+  if (folder.conflict) conflicts.push('folderId');
 
   const localChanges = changedFields(base, local);
   const remoteChanges = changedFields(base, remote);
@@ -139,6 +142,7 @@ export function mergeNoteChanges(
       pinned: pinned.value,
       archived: archived.value,
       deletedAt: deletedAt.value,
+      folderId: folder.value ?? null,
     },
     conflicts,
   };

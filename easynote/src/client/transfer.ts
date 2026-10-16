@@ -1,10 +1,12 @@
 import { zip, unzip, strToU8, strFromU8 } from 'fflate';
-import { filePath, idPattern, imagePath, noteFingerprint, storedFileIds, type ClientConfig } from '../shared/types';
+import { filePath, folderDepth, idPattern, imagePath, MAX_FOLDER_DEPTH, MAX_FOLDERS, noteFingerprint, storedFileIds, type ClientConfig } from '../shared/types';
 import { api, uploadAttachment, uploadImage } from './api';
 import { loadCachedFile, loadDrafts } from './drafts';
 
 const MAX_ARCHIVE_BYTES = 64 * 1024 ** 2;
 const MAX_ENTRIES = 1200;
+// Sibling folders can be created in parallel; keep the burst small for D1 writes and rate limits.
+const FOLDER_IMPORT_CONCURRENCY = 6;
 const NOTE_PATH = /^notes\/[^<>:"/\\|?*\u0000-\u001f]+\.md$/;
 const FILE_PATH = /^files\/[0-9a-f-]{36}-[^<>:"/\\|?*\u0000-\u001f]+$/i;
 const EXTERNAL_NOTE = /\.(?:md|markdown|txt)$/i;
@@ -20,8 +22,9 @@ const ATTACHMENT_MIMES: Record<string, string> = {
 interface Manifest {
   format: 'easynote';
   version: 2;
-  notes: Array<{ id: string; path: string; title: string; tags: string[]; pinned: boolean; archived: boolean; deletedAt: number | null }>;
+  notes: Array<{ id: string; path: string; title: string; tags: string[]; pinned: boolean; archived: boolean; deletedAt: number | null; folderId?: string | null }>;
   files: Array<{ id: string; path: string; mime: string; filename: string; sha256: string }>;
+  folders?: Array<{ id: string; name: string; parentId: string | null }>;
 }
 export interface ImportResult {
   imported: number;
@@ -95,7 +98,7 @@ function download(name: string, bytes: Uint8Array): void {
 
 export async function exportArchive(progress: (text: string) => void): Promise<void> {
   const files: Record<string, Uint8Array> = {};
-  const manifest: Manifest = { format: 'easynote', version: 2, notes: [], files: [] };
+  const manifest: Manifest = { format: 'easynote', version: 2, notes: [], files: [], folders: [] };
   let total = 0;
   const add = (path: string, bytes: Uint8Array) => {
     total += bytes.byteLength;
@@ -111,6 +114,11 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
   } while (offset !== null);
   const storedFiles = new Set<string>();
   const noteFilenames = new Set<string>();
+  const folderResult = await api.folders();
+  if (folderResult.folders.length > MAX_FOLDERS) throw new Error('目录数量超过导出上限 1200 个。');
+  manifest.folders = folderResult.folders.map((folder) => ({
+    id: folder.id, name: folder.name, parentId: folder.parentId,
+  }));
   for (const id of ids) {
     const { note } = await api.note(id);
     const path = noteExportPath(note.title, noteFilenames);
@@ -118,6 +126,7 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
     manifest.notes.push({
       id, path, title: note.title, tags: note.tags,
       pinned: note.pinned, archived: note.archived, deletedAt: note.deletedAt,
+      folderId: note.folderId ?? null,
     });
     storedFileIds(note.content).forEach((file) => storedFiles.add(file));
     progress(`导出笔记 ${manifest.notes.length}/${ids.size}`);
@@ -528,6 +537,24 @@ export async function importArchive(
   if (manifest.version !== 2 || !Array.isArray(manifest.notes) || !Array.isArray(manifest.files)) {
     throw new Error('不支持的备份格式。');
   }
+  const folderIds = new Set<string>();
+  const hasFolders = manifest.folders !== undefined;
+  if (hasFolders) {
+    if (!Array.isArray(manifest.folders)) throw new Error('目录清单无效。');
+    if (manifest.folders.length > MAX_FOLDERS) throw new Error('备份目录数量超过上限 1200 个。');
+    for (const folder of manifest.folders) {
+      if (!folder || typeof folder.id !== 'string' || !idPattern.test(folder.id) || folderIds.has(folder.id) ||
+          typeof folder.name !== 'string' || !folder.name.trim() || folder.name.length > 64 || /[\u0000-\u001f]/.test(folder.name) ||
+          !(folder.parentId === null || typeof folder.parentId === 'string' && idPattern.test(folder.parentId))) {
+        throw new Error('目录清单无效。');
+      }
+      folderIds.add(folder.id);
+    }
+    for (const folder of manifest.folders) {
+      const depth = folderDepth(manifest.folders, folder.id);
+      if (depth === null || depth > MAX_FOLDER_DEPTH) throw new Error('目录清单包含无效的父子关系或超过 5 层。');
+    }
+  }
   const seen = new Set<string>();
   for (const entry of manifest.files) {
     if (!entry || typeof entry.id !== 'string' || !idPattern.test(entry.id) || seen.has(entry.id) ||
@@ -551,6 +578,8 @@ export async function importArchive(
         files[entry.path].length > config.maxNoteBytes || typeof entry.title !== 'string' || entry.title.length > 256 ||
         !Array.isArray(entry.tags) || entry.tags.length > 20 || entry.tags.some((t) => typeof t !== 'string' || !t.trim() || t.length > 40) ||
         typeof entry.pinned !== 'boolean' || typeof entry.archived !== 'boolean' ||
+        !(entry.folderId === undefined || entry.folderId === null ||
+          (typeof entry.folderId === 'string' && idPattern.test(entry.folderId) && (!hasFolders || folderIds.has(entry.folderId)))) ||
         !(entry.deletedAt === null || Number.isSafeInteger(entry.deletedAt) && entry.deletedAt > 0)) {
       throw new Error('笔记清单无效或正文缺失。');
     }
@@ -581,6 +610,44 @@ export async function importArchive(
     fingerprints.add(fingerprint);
     unique.push(candidate);
   }
+  const folderRemap = new Map<string, string>();
+  if (manifest.folders?.length) {
+    const available = [...(await api.folders()).folders];
+    let pending = [...manifest.folders];
+    while (pending.length) {
+      const ready = pending.filter((folder) => folder.parentId === null || folderRemap.has(folder.parentId));
+      const groups = new Map<string, typeof ready>();
+      for (const folder of ready.sort((left, right) => left.id.localeCompare(right.id, 'en'))) {
+        const key = JSON.stringify([folder.parentId, folder.name.trim()]);
+        const group = groups.get(key) ?? [];
+        group.push(folder);
+        groups.set(key, group);
+      }
+      const create = async (group: typeof ready) => {
+        const parentId = group[0].parentId === null ? null : folderRemap.get(group[0].parentId)!;
+        const name = group[0].name.trim();
+        // Siblings that share a name in the archive must merge into one target folder.
+        const reusable = available.filter((item) => item.parentId === parentId && item.name === name)
+          .map((item) => item.id).sort()[0];
+        // IDs owned by other accounts are invisible here, so never reuse an archived ID; a retry reuses by parent and name.
+        const targetId = reusable ?? crypto.randomUUID();
+        if (!reusable) {
+          available.push((await api.createFolder({ id: targetId, name, parentId })).folder);
+        }
+        for (const folder of group) {
+          const id = folderRemap.get(folder.id) ?? targetId;
+          folderRemap.set(folder.id, id);
+        }
+      };
+      // Folders in one level are independent, so batch the round-trips instead of paying one
+      // latency per folder. A failed import stays retryable: the next attempt reuses by parent and name.
+      const queue = [...groups.values()];
+      for (let index = 0; index < queue.length; index += FOLDER_IMPORT_CONCURRENCY) {
+        await Promise.all(queue.slice(index, index + FOLDER_IMPORT_CONCURRENCY).map(create));
+      }
+      pending = pending.filter((folder) => !folderRemap.has(folder.id));
+    }
+  }
   const neededFiles = new Set(unique.flatMap(({ content }) => storedFileIds(content)));
   const remap = new Map<string, string>();
   let imported = 0;
@@ -602,6 +669,7 @@ export async function importArchive(
       await api.save(crypto.randomUUID(), {
         title: entry.title, content, tags: entry.tags, pinned: entry.pinned,
         archived: entry.archived, deletedAt: entry.deletedAt,
+        folderId: entry.folderId ? folderRemap.get(entry.folderId) ?? null : null,
       }, 0, crypto.randomUUID());
       imported++;
       progress(`恢复笔记 ${imported}/${unique.length}`);

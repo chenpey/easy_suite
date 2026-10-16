@@ -11,9 +11,9 @@ const project = resolve(new URL('..', import.meta.url).pathname);
 const maintenance = join(project, 'scripts/maintenance.mjs');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-async function migrationsFixture() {
+async function migrationsFixture(beforeFolders = false) {
   const directory = join(project, 'migrations');
-  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
+  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql') && (!beforeFolders || name < '0003_folders.sql')).sort();
   const hash = createHash('sha256');
   const contents = [];
   for (const name of names) {
@@ -136,7 +136,7 @@ if (args[0] === 'd1' && args[1] === 'export') {
     const exportedTables = exportCall.flatMap((value, index) => value === '--table' ? [exportCall[index + 1]] : []);
     assert.deepEqual(exportedTables, [
       'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
-      'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
+      'folders', 'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
     ]);
     assert.ok(!exportedTables.includes('notes_fts'));
   } finally {
@@ -151,8 +151,10 @@ test('restore preflight verifies empty D1 and missing R2 keys without writing', 
     const fileId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const object = Buffer.from('restore preflight object');
     const migrations = await migrationsFixture();
+    const parentFolder = '11111111-1111-4111-8111-111111111111';
+    const childFolder = '22222222-2222-4222-8222-222222222222';
     const database = Buffer.concat([migrations.bytes, Buffer.from(
-      `\nINSERT INTO "images" ("id","user_id","filename","mime","size","width","height","sha256","status","created_at","last_used_at") VALUES('${fileId}','${userId}','test.txt','text/plain',${object.length},0,0,'${sha256(object)}','ready',1,1);\n`,
+      `\nINSERT INTO "folders" ("id","user_id","parent_id","name","created_at","updated_at") VALUES('${childFolder}','${userId}','${parentFolder}','child',1,1);\nINSERT INTO "folders" ("id","user_id","parent_id","name","created_at","updated_at") VALUES('${parentFolder}','${userId}',NULL,'parent',1,1);\nINSERT INTO "notes" ("id","folder_id") VALUES('note','${childFolder}');\nINSERT INTO "images" ("id","user_id","filename","mime","size","width","height","sha256","status","created_at","last_used_at") VALUES('${fileId}','${userId}','test.txt','text/plain',${object.length},0,0,'${sha256(object)}','ready',1,1);\n`,
     )]);
     const backup = join(directory, 'backup');
     await mkdir(join(backup, 'objects', userId), { recursive: true });
@@ -186,7 +188,7 @@ appendFileSync(${JSON.stringify(join(directory, 'calls.jsonl'))}, JSON.stringify
 if (args[0] === 'd1' && args[1] === 'execute' && args.some((value) => value.includes('sqlite_master'))) {
   const tables = process.env.NEW_DATABASE === '1' && !existsSync(${JSON.stringify(join(directory, 'migrated'))}) ? [] : ${JSON.stringify([
     'users', 'sessions', 'integration_tokens', 'oauth_clients', 'login_attempts', 'account_attempts', 'app_state',
-    'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
+    'folders', 'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
   ].map((name) => ({ name })))};
   console.log(JSON.stringify([{results:tables}]));
 } else if (args[0] === 'd1' && args[1] === 'execute' && args.includes('--command')) {
@@ -221,6 +223,8 @@ if (args[0] === 'd1' && args[1] === 'execute' && args.some((value) => value.incl
     assert.match(restored.stdout, /Restore completed/);
     const applied = await readFile(join(directory, 'applied.sql'), 'utf8');
     assert.match(applied, /^PRAGMA foreign_keys=ON;\nDELETE FROM app_state;\n/);
+    assert.ok(applied.indexOf("VALUES('" + parentFolder) < applied.indexOf("VALUES('" + childFolder));
+    assert.ok(applied.indexOf("VALUES('" + childFolder) < applied.indexOf('INSERT INTO "notes"'));
     assert.ok(applied.indexOf('DELETE FROM app_state;') < applied.indexOf('INSERT INTO app_state'));
 
     const newDatabase = spawnSync(process.execPath, command.filter((value) => value !== '--check'), {
@@ -301,4 +305,54 @@ exit [lindex $result 3]
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('pre-folder disaster recovery backups remain verifiable', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'easynote-legacy-backup-'));
+  try {
+    const migrations = await migrationsFixture(true);
+    await writeFile(join(directory, 'database.sql'), migrations.bytes);
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+      format: 'easynote-disaster-recovery', version: 1,
+      database: { file: 'database.sql', size: migrations.bytes.length, sha256: sha256(migrations.bytes) },
+      migrationsSha256: migrations.sha256, objects: [],
+    }));
+    const result = run(['verify', directory]);
+    assert.equal(result.status, 0, result.stderr);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('restore verification refuses duplicate sibling folder names', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'easynote-folder-dup-'));
+  const userA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const userB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const folderRow = (id, user, name) =>
+    `INSERT INTO "folders" ("id","user_id","parent_id","name","created_at","updated_at") VALUES('${id}','${user}',NULL,'${name}',1,1);\n`;
+  const writeBackup = async (rows) => {
+    const migrations = await migrationsFixture();
+    const database = Buffer.concat([migrations.bytes, Buffer.from(rows)]);
+    await writeFile(join(directory, 'database.sql'), database);
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+      format: 'easynote-disaster-recovery', version: 1,
+      database: { file: 'database.sql', size: database.length, sha256: sha256(database) },
+      migrationsSha256: migrations.sha256, objects: [],
+    }));
+  };
+  try {
+    // The same name for different accounts sharing a parent stays legal.
+    await writeBackup(
+      folderRow('11111111-1111-4111-8111-111111111111', userA, 'dup') +
+      folderRow('22222222-2222-4222-8222-222222222222', userB, 'dup'),
+    );
+    const distinct = run(['verify', directory]);
+    assert.equal(distinct.status, 0, distinct.stderr);
+    await writeBackup(
+      folderRow('11111111-1111-4111-8111-111111111111', userA, 'dup') +
+      folderRow('22222222-2222-4222-8222-222222222222', userB, 'dup') +
+      folderRow('33333333-3333-4333-8333-333333333333', userA, 'dup'),
+    );
+    const duplicate = run(['verify', directory]);
+    assert.notEqual(duplicate.status, 0);
+    assert.match(duplicate.stderr, /duplicate folder name/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

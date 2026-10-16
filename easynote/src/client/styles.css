@@ -1706,3 +1706,67 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .math-display { display: block; max-width: 100%; overflow-x: auto; padding: .35em 0; }
 .math-formula math { font-size: 1.1em; }
 .math-error { color: #b42318; font-family: monospace; white-space: pre-wrap; }
+
+/* Folder sidebar and move target */
+.folder-nav { overflow-y: auto; }
+.folder-row { display: flex; align-items: center; gap: 2px; min-height: 30px; }
+.folder-row .folder-chevron {
+  width: 22px; height: 22px; flex: 0 0 22px; min-height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; color: var(--subtle); background: transparent; border: 0; border-radius: 5px; box-shadow: none;
+}
+.folder-row .folder-chevron:hover { background: var(--hover); color: var(--ink); }
+.folder-row .folder-name {
+  flex: 1; min-width: 0; width: auto; min-height: 30px;
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--muted);
+  font-size: 13px; text-align: left; overflow-wrap: anywhere; box-shadow: none;
+}
+.folder-row .folder-name:hover { background: var(--hover); color: var(--ink); }
+.folder-row .folder-name.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.folder-name svg { color: var(--accent); flex: 0 0 auto; }
+.folder-name span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Hidden until hover so the 200px sidebar keeps the folder name readable at depth 5. */
+.folder-actions { display: none; gap: 0; }
+.folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { display: inline-flex; }
+.folder-row .folder-action { width: 18px; height: 18px; flex: 0 0 18px; }
+
+/* Note context menu */
+.note-context-menu {
+  position: fixed; z-index: 2000; min-width: 176px;
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  background: var(--elevated); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--panel-shadow);
+}
+.note-context-menu button {
+  display: flex; align-items: center; gap: 9px; min-height: 34px; padding: 7px 10px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--ink);
+  text-align: left; font-size: 13px; box-shadow: none;
+}
+.note-context-menu button:hover { background: var(--hover); }
+.note-context-menu button.danger { color: var(--danger); }
+.note-context-menu button.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--paper)); }
+
+/* Move target dialog */
+.move-target-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
+.move-target-row {
+  display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 10px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--ink);
+  text-align: left; font-size: 13px; box-shadow: none;
+}
+.move-target-row:hover { background: var(--hover); }
+.move-target-row svg { color: var(--accent); flex: 0 0 auto; }
+.move-target-row span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.confirm-hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+.mobile-navigation-folder-new {
+  display: flex; align-items: center; gap: 9px; min-height: 40px; margin: 10px 4px 0;
+  padding: 8px 11px; border: 1px dashed var(--line-strong); border-radius: 8px;
+  background: transparent; color: var(--muted); font-size: 14px; box-shadow: none;
+}
+.mobile-navigation-folder-new:hover { background: var(--hover); color: var(--ink); }
+
+@media(max-width: 640px) {
+  .mobile-navigation-list.folder-list .folder-row { min-height: 40px; }
+  .mobile-navigation-list.folder-list .folder-row .folder-chevron { width: 28px; height: 28px; flex-basis: 28px; min-height: 28px; }
+  .mobile-navigation-list.folder-list .folder-row .folder-name { min-height: 40px; }
+}

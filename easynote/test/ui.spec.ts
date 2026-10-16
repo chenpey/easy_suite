@@ -903,7 +903,7 @@ test('a recovered empty local draft merges into the existing cloud blank note', 
   expect((await (await page.request.get('/api/notes/blank')).json()).note.id).toBe(cloudId);
   const draftKeys = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('easynote', 1);
+      const request = indexedDB.open('easynote');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -2442,7 +2442,7 @@ test('draft export offers an explicit incomplete backup when an attachment is mi
   await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(async (missingId) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('easynote', 1);
+      const request = indexedDB.open('easynote');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -2694,7 +2694,7 @@ for (const purged of [false, true]) {
     else await expect(editor).toContainText('v2');
     const mirrored = () => page.evaluate(async ({ userId, id }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const request = indexedDB.open('easynote', 1);
+        const request = indexedDB.open('easynote');
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -2813,7 +2813,7 @@ test('a large private image and inline math export together, with cached images 
   await editor.fill(`同一段落的公式 $x^2$ 与大图 ${imageMarkdown}，图片后的公式 $y^2$。`);
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(async (key) => {
-    const db = await new Promise<IDBDatabase>((resolve) => { const request = indexedDB.open('easynote', 1); request.onsuccess = () => resolve(request.result); });
+    const db = await new Promise<IDBDatabase>((resolve) => { const request = indexedDB.open('easynote'); request.onsuccess = () => resolve(request.result); });
     try {
       return await new Promise<boolean>((resolve) => { const request = db.transaction('files').objectStore('files').get(key); request.onsuccess = () => resolve(!!request.result); });
     } finally { db.close(); }
@@ -2861,6 +2861,171 @@ test('invalid or untrusted TeX stays safe without breaking other formulas', asyn
   await expect(preview.locator('.math-error')).toHaveCount(2);
   await expect(preview.locator('a, img, script, iframe')).toHaveCount(0);
   expect(externalRequests).toBe(0);
+});
+
+test('folders create nested notes and context menu copies edits moves and trashes them', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const top = `目录-${marker}`, child = `子目录-${marker}`, title = `笔记-${marker}`;
+  await page.goto('/');
+  await page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '目录名' }).fill(top);
+  await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+  const topRow = page.locator('.sidebar .folder-row').filter({ hasText: top });
+  await page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '目录名' }).fill(top);
+  await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('同一层已存在同名目录。');
+  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
+  await topRow.hover();
+  await topRow.getByRole('button', { name: '新建子目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '目录名' }).fill(child);
+  await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+  await page.locator('.sidebar .folder-name').getByText(child, { exact: true }).click();
+  await newNote(page, title, '原始正文');
+  const sourceId = await page.locator('.note-row').filter({ hasText: title }).first().getAttribute('data-note-id');
+  const source = page.locator(`[data-note-id="${sourceId}"]`);
+  const folderId = (await (await page.request.get(`/api/notes/${sourceId}`)).json()).note.folderId;
+  expect(folderId).toBeTruthy();
+  await page.getByRole('textbox', { name: '笔记正文' }).fill('尚未同步的完整正文');
+  await source.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '复制笔记', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(`${title}（副本）`);
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('尚未同步的完整正文');
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  const copy = page.locator('.note-row').filter({ hasText: `${title}（副本）` });
+  const copyId = await copy.getAttribute('data-note-id');
+  expect(copyId).not.toBe(sourceId);
+  await source.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '编辑笔记', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toBeFocused();
+  await copy.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '移动笔记', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '根目录', exact: true }).click();
+  await expect(copy).toHaveCount(0);
+  const moved = (await (await page.request.get(`/api/notes/${copyId}`)).json()).note;
+  expect(moved.folderId).toBeNull();
+  expect(moved.content).toBe('尚未同步的完整正文');
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+  await page.reload();
+  await page.locator('.sidebar .folder-name').getByText(child, { exact: true }).click();
+  await source.focus();
+  await source.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: '复制笔记' })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('menuitem', { name: '编辑笔记' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(source).toBeFocused();
+  await source.click({ button: 'right' });
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: '搜索笔记', exact: true })).toBeFocused();
+  await source.click();
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toBeVisible();
+  await source.click({ button: 'right' });
+  await page.getByRole('textbox', { name: '笔记正文' }).click();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toBeFocused();
+  await source.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+  await expect(source).toHaveCount(0);
+  expect((await (await page.request.get(`/api/notes/${sourceId}`)).json()).note.deletedAt).not.toBeNull();
+});
+
+test('folders enforce the fifth level in UI and remain available offline and on mobile', async ({ page, context }) => {
+  const marker = randomUUID().slice(0, 8);
+  let parentId: string | null = null;
+  for (let depth = 1; depth <= 5; depth++) {
+    const id = randomUUID();
+    expect((await page.request.post('/api/folders', { headers, data: { id, name: `${marker}-${depth}`, parentId } })).status()).toBe(201);
+    parentId = id;
+  }
+  await page.goto('/');
+  const fifth = page.locator('.sidebar .folder-row').filter({ hasText: `${marker}-5` });
+  await fifth.hover();
+  await expect(fifth.getByRole('button', { name: '新建子目录' })).toBeDisabled();
+  await fifth.getByRole('button', { name: '重命名目录' }).click();
+  await page.getByRole('textbox', { name: '目录名' }).fill(`${marker}-renamed`);
+  await page.getByRole('dialog').getByRole('button', { name: '重命名', exact: true }).click();
+  await page.locator('.sidebar .folder-name').getByText(`${marker}-renamed`, { exact: true }).click();
+  await newNote(page, `离线-${marker}`, '目录中的离线笔记');
+  await page.reload();
+  await expect(page.locator('.sidebar .folder-name').getByText(`${marker}-renamed`, { exact: true })).toBeVisible();
+  await context.setOffline(true);
+  await page.reload();
+  await page.locator('.sidebar .folder-name').getByText(`${marker}-renamed`, { exact: true }).click();
+  await expect(page.locator('.note-row').filter({ hasText: `离线-${marker}` })).toBeVisible();
+  await expect(page.locator('.sidebar').getByRole('button', { name: '新建目录', exact: true })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const navigation = await openMobileNavigation(page);
+  await navigation.getByRole('button', { name: `${marker}-renamed`, exact: true }).click();
+  await page.locator('.note-row').filter({ hasText: `离线-${marker}` }).click();
+  const actions = await openMobileNoteActions(page);
+  await expect(actions.getByRole('button', { name: '复制笔记', exact: true })).toBeVisible();
+  await expect(actions.getByRole('button', { name: '移动笔记', exact: true })).toBeVisible();
+  await context.setOffline(false);
+});
+
+test('folders move from the sidebar and tolerate picking the current parent', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const home = randomUUID(), guest = randomUUID();
+  for (const [id, name] of [[home, `家-${marker}`], [guest, `客-${marker}`]] as const) {
+    expect((await page.request.post('/api/folders', { headers, data: { id, name, parentId: null } })).status()).toBe(201);
+  }
+  await page.goto('/');
+  const guestRow = page.locator('.sidebar .folder-row').filter({ hasText: `客-${marker}` });
+  await guestRow.hover();
+  await guestRow.getByRole('button', { name: '移动目录' }).click();
+  // The picker hides the moved folder itself, and picking the current parent closes silently.
+  await expect(page.getByRole('dialog').getByRole('button', { name: `客-${marker}`, exact: true })).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: '根目录', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await guestRow.hover();
+  await guestRow.getByRole('button', { name: '移动目录' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: `家-${marker}`, exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const folders = (await (await page.request.get('/api/folders')).json()).folders;
+  expect(folders.find((folder: { id: string }) => folder.id === guest).parentId).toBe(home);
+});
+
+test('folders can move and delete an unsynced new draft with the offline library disabled', async ({ page }) => {
+  const sourceFolder = randomUUID(), targetFolder = randomUUID();
+  for (const id of [sourceFolder, targetFolder]) expect((await page.request.post('/api/folders', {
+    headers, data: { id, name: id, parentId: null },
+  })).status()).toBe(201);
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  for (const operation of ['move', 'delete']) {
+    await page.locator('.sidebar .folder-name').getByText(sourceFolder, { exact: true }).click();
+    await page.route('**/api/notes/*', async (route) => {
+      if (route.request().method() === 'POST') await route.abort();
+      else await route.continue();
+    });
+    await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+    await expect(page.locator('.note-row.selected')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue('');
+    const title = `${operation}-${randomUUID()}`;
+    await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
+    await page.getByRole('textbox', { name: '笔记正文' }).fill('保留新草稿正文');
+    await expect(page.getByText(/^(仅保存在本机|待处理草稿)$/)).toBeVisible();
+    const row = page.locator('.note-row').filter({ hasText: title });
+    const id = await row.getAttribute('data-note-id');
+    expect((await page.request.get(`/api/notes/${id}`)).status()).toBe(404);
+    await page.unroute('**/api/notes/*');
+    await row.click({ button: 'right' });
+    if (operation === 'move') {
+      await page.getByRole('menuitem', { name: '移动笔记' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: targetFolder, exact: true }).click();
+    } else await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+    await expect(row).toHaveCount(0);
+    const saved = (await (await page.request.get(`/api/notes/${id}`)).json()).note;
+    expect(saved.content).toBe('保留新草稿正文');
+    if (operation === 'move') expect(saved.folderId).toBe(targetFolder);
+    else expect(saved.deletedAt).not.toBeNull();
+  }
 });
 
 test('account security changes the password and logs out every device', async ({ page }) => {

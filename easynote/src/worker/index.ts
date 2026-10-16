@@ -2,6 +2,7 @@ import { authRoute, requireIdentity } from './auth';
 import { ApiError, json, localHttp, type Env } from './core';
 import { cleanup, imageRoutes } from './images';
 import { integrationIdentity, integrationRoutes, integrationTokenRoutes } from './integrations';
+import { folderRoutes } from './folders';
 import { noteRoutes } from './notes';
 import { featureRoutes, publicShareRoutes } from './features';
 import { connectNoteEvents } from './events';
@@ -50,6 +51,7 @@ export default {
         return await connectNoteEvents(request, env, user.id);
       }
       const response = await featureRoutes(request, env, user, path) ??
+        await folderRoutes(request, env, user, path) ??
         await noteRoutes(request, env, user, path) ??
         await imageRoutes(request, env, user, path);
       if (response) return response;
