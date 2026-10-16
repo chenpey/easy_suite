@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { createPortal } from 'react-dom';
 import { Archive, ArchiveRestore, ArrowLeft, ArrowUpDown, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Clock, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { Folder, ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
-import { compareFolders } from '../shared/order';
+import { compareFolders, mixFolderEntries } from '../shared/order';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
 import { AiAccess } from './AiAccess';
@@ -537,7 +537,7 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
 
 function Notebook({ session, installApp, logout }: { session: Session; installApp?(): Promise<void>; logout(): Promise<void> }) {
   const book = useNotebook(session);
-  const [visibleNoteLimit, setVisibleNoteLimit] = useState(50);
+  const [visibleEntryLimit, setVisibleEntryLimit] = useState(50);
   const [layout, setLayout] = useState<'edit' | 'preview'>('edit');
   const [mobileNote, updateMobileNote] = useState(false);
   const mobileHistoryKey = 'easynoteMobileNote';
@@ -687,10 +687,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setDialogFeedbackTarget(dialogFeedbackTargets.current.at(-1) ?? null);
   }, []);
   const note = book.note;
-  const visibleNotes = book.notes.slice(0, visibleNoteLimit);
-  const hasHiddenNotes = visibleNotes.length < book.notes.length;
   const outline = useMemo(() => headings(note?.content ?? ''), [note?.content]);
-  useEffect(() => setVisibleNoteLimit(50), [book.query, book.tag, book.view]);
+  useEffect(() => setVisibleEntryLimit(50), [book.folder, book.query, book.tag, book.view]);
   const updateNoteListWidth = (value: number) => {
     const next = Math.min(440, Math.max(220, Math.round(value)));
     noteListWidthRef.current = next;
@@ -1475,7 +1473,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
-  const activeView = book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
+  const activeView = book.query ? t('搜索结果') : book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
     : book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
   const renderFolderTree = (parentId: string | null, depth: number, actions: boolean): ReactNode =>
@@ -1650,7 +1648,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     const wanted = selected.has(id) && selected.size > 1 ? selected : new Set([id]);
     return book.notes.filter((item) => wanted.has(item.id)).map((item) => item.id);
   };
-  const reorderable = canDrag && book.folder !== null && book.folderOrder === 'manual' && book.view === 'all' && !book.query && !book.tag;
+  const manualList = book.folder !== null && book.folderOrder === 'manual' && book.view === 'all' && !book.query && !book.tag;
+  const reorderable = canDrag && manualList;
   const reorderTo = (key: string, mode: 'before' | 'after') => {
     if (!drag || drag.kind !== 'note') return;
     const ids = drag.ids;
@@ -1774,6 +1773,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     <IconButton label={t('关闭错误')} onClick={() => book.setError('')}><X size={15} /></IconButton>
   </div>;
   const noticeFeedback = notice && <div className="toast" role="status"><Check size={16} />{notice.text}</div>;
+  const listFolders = book.view === 'all' && !book.query && !book.tag ? folderChildren(book.folder) : [];
+  const listEntries = mixFolderEntries(book.notes, listFolders, manualList, book.nextOffset !== null);
+  const visibleEntries = listEntries.slice(0, visibleEntryLimit);
+  const hasHiddenEntries = visibleEntries.length < listEntries.length;
   return <DialogFeedbackContext.Provider value={registerDialogFeedback}>
     <div
       className={`app-shell ${sidebar ? '' : 'sidebar-hidden'} ${mobileNote ? 'mobile-note' : ''} ${resizingList ? 'resizing-list' : ''} ${inspector ? 'inspector-open' : ''}`}
@@ -1905,8 +1908,42 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
       </header>
       <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')} onDragOverCapture={edgeScroll}>
-        {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
-          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''} ${drop?.key === item.id ? `drop-${drop.mode}` : ''}`} data-note-row data-note-id={item.id} key={item.id}
+        {book.loading ? <div className="empty-state">{t('loading')}</div> : !listEntries.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleEntries.map((entry) => {
+          if (entry.kind === 'folder') {
+            const folder = entry.item;
+            return <button key={`folder-${folder.id}`} type="button" className={`note-row folder-list-entry ${drop?.key === folder.id ? 'drop-inside' : ''}`}
+              data-folder-id={folder.id} aria-label={folder.name} onClick={() => chooseFolder(folder.id)}
+              draggable={canDrag}
+              onDragStart={(event) => {
+                setDrag({ kind: 'folder', ids: [folder.id] });
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', folder.id);
+              }}
+              onDragEnd={endDrag}
+              onDragOver={(event) => {
+                if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
+                event.preventDefault();
+                clearHoverExpand();
+                setDrop({ key: folder.id, mode: 'inside' });
+              }}
+              onDragLeave={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                setDrop((value) => value?.key === folder.id ? null : value);
+              }}
+              onDrop={(event) => {
+                if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
+                event.preventDefault();
+                if (drag.kind === 'note') moveDraggedNotes(folder.id);
+                else moveDraggedFolder(folder.id);
+              }}>
+              <div className="note-row-title"><FolderIcon size={16} /><span>{folder.name}</span><ChevronRight size={14} /></div>
+              <div className="note-excerpt">{t('目录')}</div>
+              <div className="note-row-meta"><time>{new Date(folder.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time></div>
+            </button>;
+          }
+          const item = entry.item;
+          return (
+          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''} ${drop?.key === item.id ? `drop-${drop.mode}` : ''}`} data-note-row data-note-id={item.id} key={`note-${item.id}`}
             title={t('双击在独立窗口中打开阅读')}
             aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
@@ -1967,13 +2004,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <div className="note-row-title">{selectionMode && (selected.has(item.id) ? <CheckSquare size={14} /> : <Square size={14} />)}<span>{highlightMatches(item.title || t('untitled_note'), book.query)}</span>{item.pinned && <Pin size={12} />}</div>
             <div className="note-excerpt" aria-hidden="true">{highlightMatches(noteExcerptText(item.excerpt, book.query) || t('empty_note'), book.query)}</div>
             <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title={t('local_draft')} />}</div>
-          </button>)}
-        {(hasHiddenNotes || book.nextOffset !== null) && <button className="load-more" onClick={() => {
-          setVisibleNoteLimit((value) => value + 50);
-          if (!hasHiddenNotes && book.nextOffset !== null) void run(book.loadMore);
+          </button>);
+        })}
+        {(hasHiddenEntries || book.nextOffset !== null) && <button className="load-more" onClick={() => {
+          setVisibleEntryLimit((value) => value + 50);
+          if (!hasHiddenEntries && book.nextOffset !== null) void run(book.loadMore);
         }}>{t('加载更多')}<ChevronDown size={14} /></button>}
       </div>
-      <footer className="list-footer">{book.notes.length} {uiLanguage() === 'en' ? 'notes' : '篇'}{book.nextOffset !== null ? '+' : ''}
+      <footer className="list-footer"><span>{book.notes.length} {uiLanguage() === 'en' ? 'notes' : '篇'}{book.nextOffset !== null ? '+' : ''}{listFolders.length > 0 && <> · {listFolders.length} {t('目录')}</>}</span>
         {(!book.online || session.offline) && <span><WifiOff size={11} />{t('offline')}</span>}
       </footer>
       <button className="mobile-compose" aria-label="新建笔记" disabled={!!transfer || book.loading} onClick={() => void createNote()}><PenLine size={23} /></button>

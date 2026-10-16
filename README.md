@@ -10,7 +10,7 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.3.1` |
-| [EasyNote](easynote/) | `1.1.1` |
+| [EasyNote](easynote/) | `1.2.0` |
 | [EasyMac](easymac/) | `0.4.4` |
 | [EasyTest](easytest/) | `0.4.1` |
 <!-- versions:end -->
@@ -33,7 +33,7 @@ EasyDrop 是一个部署在 Cloudflare Workers 上的网页文件中转站。用
 
 EasyNote 是一个可自行部署的网页 Markdown 笔记应用，适合个人或小团队在多台设备上记录、整理、搜索和分享笔记。每个账号拥有独立的数据空间。
 
-主要能力包括自动保存、目录树与桌面拖拽整理、目录内手动排序、任务中心、Obsidian/Markdown 导入、带逐页预览的 PDF 导出、限时或永久只读分享、私有图片、全文搜索、回收站、版本历史、完整离线笔记库和并发冲突保护。管理员可以管理用户及审批注册，笔记、附件、离线缓存和 AI 令牌按用户隔离。
+主要能力包括自动保存、目录与笔记混排浏览、目录树与桌面拖拽整理、目录内手动排序、任务中心、Obsidian/Markdown 导入、带逐页预览的 PDF 导出、限时或永久只读分享、私有图片、全文搜索、回收站、版本历史、完整离线笔记库和并发冲突保护。管理员可以管理用户及审批注册，笔记、附件、离线缓存和 AI 令牌按用户隔离。
 
 技术栈：React、TypeScript、CodeMirror、pdfmake、PDF.js、Cloudflare Workers、D1、R2。
 

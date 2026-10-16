@@ -2,11 +2,40 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import MarkdownIt from 'markdown-it';
 import { markdownMath } from '../src/client/math';
-import { ORDER_STEP, placePositions } from '../src/shared/order';
+import { ORDER_STEP, mixFolderEntries, placePositions } from '../src/shared/order';
+import type { Folder, NoteSummary } from '../src/shared/types';
 
 const md = new MarkdownIt().use(markdownMath);
 type Row = { id: string; position: number };
 const rowsOf = (...positions: number[]): Row[] => positions.map((position, index) => ({ id: `n${index}`, position }));
+const listNote = (id: string, updatedAt: number, position = 0): NoteSummary => ({
+  id, title: id, excerpt: '', tags: [], pinned: false, archived: false, deletedAt: null,
+  folderId: null, position, createdAt: 0, updatedAt, revision: 1,
+});
+const listFolder = (id: string, updatedAt: number, position = 0): Folder => ({
+  id, name: id, parentId: null, position, createdAt: 0, updatedAt,
+});
+
+test('folders and notes share recent or manual ordering while pinned notes stay first', () => {
+  const notes = [listNote('new', 30, 2048), listNote('old', 10, 0)];
+  const folders = [listFolder('folder', 20, 1024)];
+  const ids = (manual: boolean) => mixFolderEntries(notes, folders, manual, false).map((entry) => entry.item.id);
+  assert.deepEqual(ids(false), ['new', 'folder', 'old']);
+  assert.deepEqual(ids(true), ['old', 'folder', 'new']);
+  notes[1].pinned = true;
+  assert.deepEqual(ids(false), ['old', 'new', 'folder']);
+});
+
+test('mixed pagination defers folders older than the loaded note page without losing them', () => {
+  const notes = [listNote('first', 30)];
+  const folders = [listFolder('before', 40), listFolder('between', 20), listFolder('after', 5)];
+  const ids = (more: boolean) => mixFolderEntries(notes, folders, false, more).map((entry) => entry.item.id);
+  assert.deepEqual(ids(true), ['before', 'first']);
+  notes.push(listNote('next', 10));
+  assert.deepEqual(ids(true), ['before', 'first', 'between', 'next']);
+  assert.deepEqual(ids(false), ['before', 'first', 'between', 'next', 'after']);
+  assert.equal(mixFolderEntries([], folders, false, false).length, folders.length);
+});
 // Re-orders like the server does, keeping the previous display order for equal keys.
 const applied = (rows: Row[], updates: Map<string, number>, order: string[]): string[] => {
   const rank = new Map(order.map((id, index) => [id, index]));

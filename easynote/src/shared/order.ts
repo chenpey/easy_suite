@@ -1,3 +1,5 @@
+import type { Folder, NoteSummary } from './types';
+
 // Position keys grow by ORDER_STEP so a drop can take a slot between two neighbours.
 export const ORDER_STEP = 1024;
 
@@ -33,4 +35,19 @@ export function placePositions(
     if (movingSet.has(id) || known.get(id) !== position) updates.set(id, position);
   });
   return updates;
+}
+type FolderListEntry = { kind: 'folder'; item: Folder } | { kind: 'note'; item: NoteSummary };
+
+export function mixFolderEntries(notes: NoteSummary[], folders: Folder[], manual: boolean, hasMoreNotes: boolean): FolderListEntry[] {
+  const entries: FolderListEntry[] = [
+    ...folders.map((item) => ({ kind: 'folder' as const, item })),
+    ...notes.map((item) => ({ kind: 'note' as const, item })),
+  ];
+  entries.sort((left, right) =>
+    Number(right.kind === 'note' && right.item.pinned) - Number(left.kind === 'note' && left.item.pinned) ||
+    (manual ? left.item.position - right.item.position : 0) ||
+    right.item.updatedAt - left.item.updatedAt || left.item.id.localeCompare(right.item.id));
+  // Older folders wait for the next note page, so unloaded newer notes cannot be skipped.
+  while (hasMoreNotes && entries.at(-1)?.kind === 'folder') entries.pop();
+  return entries;
 }

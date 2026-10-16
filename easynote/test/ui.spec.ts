@@ -3278,6 +3278,64 @@ async function storedOrderNote(page: Page, id: string, store: 'notes' | 'drafts'
   }, { id, store, userId: testUserId });
 }
 
+for (const enabled of [true, false]) {
+  test(`mixed folder browsing hides filed notes and searches globally with offline library ${enabled ? 'enabled' : 'disabled'}`, async ({ page, context }) => {
+    const marker = `混排-${randomUUID()}`;
+    const parent = randomUUID(), child = randomUUID();
+    for (const [id, name, parentId] of [[parent, `${marker}-目录`, null], [child, `${marker}-子目录`, parent]] as const) {
+      expect((await page.request.post('/api/folders', { headers, data: { id, name, parentId } })).status()).toBe(201);
+    }
+    const rootNote = randomUUID(), filedNote = randomUUID(), nestedNote = randomUUID();
+    for (const [id, suffix, folderId] of [[rootNote, '根层', null], [filedNote, '已分类', parent], [nestedNote, '深层', child]] as const) {
+      expect((await page.request.post(`/api/notes/${id}`, { headers, data: {
+        title: `${marker}-${suffix}`, content: marker, tags: [], pinned: false, archived: false,
+        deletedAt: null, folderId, revision: 0, operationId: randomUUID(),
+      } })).status()).toBe(201);
+    }
+    await page.goto('/');
+    if (!enabled) await disableOfflineLibrary(page);
+    const list = page.locator('.list-scroll');
+    const nav = page.locator('.sidebar nav.folder-nav');
+    const parentRow = list.locator(`[data-folder-id="${parent}"]`);
+    await expect(parentRow).toBeVisible();
+    await expect(list.locator(`[data-note-id="${rootNote}"]`)).toBeVisible();
+    await expect(list.locator(`[data-note-id="${filedNote}"]`)).toHaveCount(0);
+    await expect(list.locator(`[data-note-id="${nestedNote}"]`)).toHaveCount(0);
+    await expect(list.locator(`[data-folder-id="${child}"]`)).toHaveCount(0);
+    await parentRow.click();
+    await expect(list.locator(`[data-folder-id="${child}"]`)).toBeVisible();
+    await expect(list.locator(`[data-note-id="${filedNote}"]`)).toBeVisible();
+    await expect(list.locator(`[data-note-id="${nestedNote}"]`)).toHaveCount(0);
+    const search = page.getByRole('textbox', { name: '搜索笔记', exact: true });
+    await search.fill(marker);
+    for (const id of [rootNote, filedNote, nestedNote]) await expect(list.locator(`[data-note-id="${id}"]`)).toBeVisible();
+    await expect(list.locator('[data-folder-id]')).toHaveCount(0);
+    await search.fill('');
+    await nav.getByRole('button', { name: '全部笔记', exact: true }).click();
+    await list.locator(`[data-note-id="${rootNote}"]`).dragTo(parentRow);
+    await expect.poll(async () => (await (await page.request.get(`/api/notes/${rootNote}`)).json()).note.folderId).toBe(parent);
+    await expect(list.locator(`[data-note-id="${rootNote}"]`)).toHaveCount(0);
+    await parentRow.click();
+    await expect(list.locator(`[data-note-id="${rootNote}"]`)).toBeVisible();
+    await list.locator(`[data-note-id="${rootNote}"]`).dragTo(nav.getByRole('button', { name: '全部笔记', exact: true }));
+    await expect.poll(async () => (await (await page.request.get(`/api/notes/${rootNote}`)).json()).note.folderId).toBeNull();
+    await nav.getByRole('button', { name: '全部笔记', exact: true }).click();
+    await expect(list.locator(`[data-note-id="${rootNote}"]`)).toBeVisible();
+    if (enabled) {
+      await context.setOffline(true);
+      await page.reload();
+      await expect(parentRow).toBeVisible();
+      await expect(list.locator(`[data-note-id="${rootNote}"]`)).toBeVisible();
+      await expect(list.locator(`[data-note-id="${filedNote}"]`)).toHaveCount(0);
+      await parentRow.click();
+      await expect(list.locator(`[data-note-id="${filedNote}"]`)).toBeVisible();
+      await search.fill(marker);
+      for (const id of [rootNote, filedNote, nestedNote]) await expect(list.locator(`[data-note-id="${id}"]`)).toBeVisible();
+      await context.setOffline(false);
+    }
+  });
+}
+
 test('all notes is the only root entry on desktop and mobile and folder sort preferences are independent', async ({ page, context }) => {
   const a = await seedOrderFolder(page);
   const b = await seedOrderFolder(page);
@@ -3289,8 +3347,10 @@ test('all notes is the only root entry on desktop and mobile and folder sort pre
   await allNotes.focus();
   await allNotes.press('Enter');
   await expect(sort).toHaveCount(0);
-  await expect(page.locator(`[data-note-id="${a.ids[0]}"]`)).toBeVisible();
-  await expect(page.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
+  await expect(page.locator(`.list-scroll [data-folder-id="${a.folderId}"]`)).toBeVisible();
+  await expect(page.locator(`.list-scroll [data-folder-id="${b.folderId}"]`)).toBeVisible();
+  await expect(page.locator(`[data-note-id="${a.ids[0]}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-note-id="${b.ids[0]}"]`)).toHaveCount(0);
   await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
   const title = `未分类-${randomUUID()}`;
   await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
@@ -3326,6 +3386,12 @@ test('all notes is the only root entry on desktop and mobile and folder sort pre
 });
 
 test('all notes accepts folder drops back to the root level', async ({ page }) => {
+  const marker = randomUUID();
+  for (let index = 0; index < 32; index++) {
+    expect((await page.request.post('/api/folders', {
+      headers, data: { id: randomUUID(), name: `000-${index}-${marker}`, parentId: null },
+    })).status()).toBe(201);
+  }
   const parent = await seedOrderFolder(page, 0);
   const child = randomUUID();
   expect((await page.request.post('/api/folders', {
@@ -3333,8 +3399,20 @@ test('all notes accepts folder drops back to the root level', async ({ page }) =
   })).status()).toBe(201);
   await page.goto('/');
   const nav = page.locator('.sidebar nav.folder-nav');
-  await nav.locator('.folder-row').filter({ hasText: child })
-    .dragTo(nav.getByRole('button', { name: '全部笔记', exact: true }));
+  const source = nav.locator('.folder-row').filter({ hasText: child }).getByRole('button', { name: child, exact: true });
+  await source.scrollIntoViewIfNeeded();
+  const start = (await source.boundingBox())!;
+  await page.mouse.move(start.x + 10, start.y + start.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 24, start.y + start.height / 2, { steps: 3 });
+  // Start the native drag before scrolling, so the pointer still picks the intended source.
+  await nav.evaluate((element) => { element.scrollTop = 0; });
+  const target = (await nav.getByRole('button', { name: '全部笔记', exact: true }).boundingBox())!;
+  const moved = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/folders/${child}` && response.request().method() === 'PATCH' && response.ok());
+  await page.mouse.move(target.x + 20, target.y + target.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await moved;
   await expect.poll(async () => {
     const { folders } = await (await page.request.get('/api/folders')).json();
     return folders.find((folder: { id: string }) => folder.id === child)?.parentId;
@@ -3576,8 +3654,8 @@ test('remote order in a failed draft survives an offline cold start', async ({ p
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('冷启动保留正文');
-  const ordered = await page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')));
-  expect(ordered).toEqual([ids[1], ids[2], ids[0]]);
+  await expect.poll(() => page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id'))))
+    .toEqual([ids[1], ids[2], ids[0]]);
   await context.setOffline(false);
 });
 

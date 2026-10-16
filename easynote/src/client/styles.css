@@ -1754,6 +1754,8 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .folder-nav > button.drop-inside {
   background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent);
 }
+.folder-list-entry .note-row-title > svg { color: var(--accent); flex-shrink: 0; }
+.folder-list-entry.drop-inside { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 
 /* Folder views switch between the manual order and last-modified. */
 .sort-toggle {

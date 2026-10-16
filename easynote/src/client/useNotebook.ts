@@ -55,7 +55,7 @@ const recentNoteOrder = (
 const orderFor = (manual: boolean) => manual ? compareNoteOrder : recentNoteOrder;
 // `null` folder means every note; "root" means the notes that live outside any folder.
 const inFolder = (item: { folderId: string | null }, folder: string | null) =>
-  folder === null || (folder === 'root' ? item.folderId === null : item.folderId === folder);
+  folder === null || (folder === 'root' ? (item.folderId ?? null) === null : item.folderId === folder);
 const noteExcerpt = (content: string, query: string) => {
   const needle = query.trim();
   if (!needle) return content.slice(0, 180);
@@ -182,6 +182,8 @@ export function useNotebook(session: Session) {
   const notify = () => { if (alive.current) bump((v) => v + 1); };
   notesRef.current = notes;
   const manualOrder = folder !== null && folderOrder === 'manual' && view === 'all' && !query && !tag;
+  // Browsing stays at one level; searches span the library.
+  const folderFilter = query ? null : folder ?? (view === 'all' && !tag ? 'root' : null);
 
   const renderMirror = useCallback(() => {
     const scoped = [...mirror.current.values()].filter((item) => {
@@ -189,7 +191,7 @@ export function useNotebook(session: Session) {
         if (item.deletedAt === null) return false;
       } else if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
       if (tag && !item.tags.includes(tag)) return false;
-      if (!inFolder(item, folder)) return false;
+      if (!inFolder(item, folderFilter)) return false;
       return !query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
     });
     scoped.sort(orderFor(manualOrder));
@@ -204,7 +206,7 @@ export function useNotebook(session: Session) {
     setTags([...new Set([...viewTags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     setNextOffset(null);
     setOfflineCount(mirror.current.size);
-  }, [folder, manualOrder, query, tag, userId, view]);
+  }, [folderFilter, manualOrder, query, tag, userId, view]);
 
   const cacheReferencedFiles = useCallback(() => {
     if (fileCacheAbort.current || !alive.current || !offlineLibraryRef.current) return;
@@ -337,7 +339,7 @@ export function useNotebook(session: Session) {
       let rebuiltNextOffset: number | null = null;
       while (rebuilt.length < loaded.length) {
         const page = await api.list({
-          q: query, view, tag, folder: folder ?? '', offset, sort: 'manual',
+          q: query, view, tag, folder: folderFilter ?? '', offset, sort: 'manual',
         }, signal);
         rebuilt.push(...page.notes);
         rebuiltNextOffset = page.nextOffset;
@@ -363,7 +365,7 @@ export function useNotebook(session: Session) {
         ? item.deletedAt !== null
         : item.deletedAt === null && item.archived === (view === 'archive'));
       const matches = inView && (!tag || item.tags.includes(tag)) &&
-        inFolder(item, folder) &&
+        inFolder(item, folderFilter) &&
         (!query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
       if (!item || !matches) updated.delete(change.noteId);
       else {
@@ -378,7 +380,7 @@ export function useNotebook(session: Session) {
     const custom = loadCustomTags(userId);
     setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     onlineCursor.current = cursor;
-  }, [folder, manualOrder, nextOffset, persist, query, show, tag, userId, view]);
+  }, [folderFilter, manualOrder, nextOffset, persist, query, show, tag, userId, view]);
   const syncOnlineRef = useRef(syncOnlineChanges);
   syncOnlineRef.current = syncOnlineChanges;
 
@@ -391,7 +393,7 @@ export function useNotebook(session: Session) {
     }
     // Tags do not depend on the list result, so fetch both in parallel.
     const listRequest = api.list({
-      q: query, view, tag, folder: folder ?? '', offset: append ? nextOffset ?? 0 : 0,
+      q: query, view, tag, folder: folderFilter ?? '', offset: append ? nextOffset ?? 0 : 0,
       sort: manualOrder ? 'manual' : 'recent',
     }, signal);
     // Early returns below never await this, so mark it handled; the awaited copy still throws.
@@ -423,7 +425,7 @@ export function useNotebook(session: Session) {
     if (alive.current && generation === listGeneration.current) {
       setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     }
-  }, [folder, manualOrder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
+  }, [folderFilter, manualOrder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -1275,7 +1277,7 @@ export function useNotebook(session: Session) {
       if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
     }
     if (tag && !item.tags.includes(tag)) return false;
-    if (!inFolder(item, folder)) return false;
+    if (!inFolder(item, folderFilter)) return false;
     return !query || `${item.title} ${item.excerpt}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
   });
   const status = !online ? '仅保存在本机' : note && running.current.has(note.id) ? '正在保存' :
