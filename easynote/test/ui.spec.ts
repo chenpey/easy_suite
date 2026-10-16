@@ -468,7 +468,7 @@ test('a note share can be created, extended and cancelled from share management'
   await page.goto('/');
   await newNote(page, title, content);
   expect(await page.getByRole('navigation', { name: '笔记分类' }).getByRole('button').allTextContents())
-    .toEqual(['全部笔记', '任务中心', '归档', '分享', '回收站']);
+    .toEqual(['全部笔记', '根目录', '任务中心', '归档', '分享', '回收站']);
   await page.getByRole('button', { name: '只读分享', exact: true }).click();
   await expect(page.getByLabel('有效期').locator('option[value="permanent"]')).toHaveText('永久');
   await page.getByLabel('有效期').selectOption('24');
@@ -1195,7 +1195,7 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   await expect(page.getByRole('button').filter({ hasText: title })).toBeHidden();
   let navigation = await openMobileNavigation(page);
   expect(await navigation.getByRole('navigation', { name: '移动端笔记分类' }).getByRole('button').allTextContents())
-    .toEqual(['全部笔记', '任务中心', '归档', '分享', '回收站']);
+    .toEqual(['全部笔记', '根目录', '任务中心', '归档', '分享', '回收站']);
   await expect(navigation.getByRole('button', { name: '同步全部', exact: true })).toBeVisible();
   await expect(navigation.getByRole('button', { name: '同步并更新历史版本', exact: true })).toHaveCount(0);
   await navigation.screenshot({ path: 'test-results/mobile-navigation.png' });
@@ -2905,7 +2905,10 @@ test('folders create nested notes and context menu copies edits moves and trashe
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toBeFocused();
   await copy.click({ button: 'right' });
   await page.getByRole('menuitem', { name: '移动笔记', exact: true }).click();
+  const movedResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/notes/${copyId}` && response.request().method() === 'PUT' && response.ok());
   await page.getByRole('dialog').getByRole('button', { name: '根目录', exact: true }).click();
+  await movedResponse;
   await expect(copy).toHaveCount(0);
   const moved = (await (await page.request.get(`/api/notes/${copyId}`)).json()).note;
   expect(moved.folderId).toBeNull();
@@ -2933,7 +2936,10 @@ test('folders create nested notes and context menu copies edits moves and trashe
   await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toBeFocused();
   await source.click({ button: 'right' });
+  const deletedResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/notes/${sourceId}` && response.request().method() === 'PUT' && response.ok());
   await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+  await deletedResponse;
   await expect(source).toHaveCount(0);
   expect((await (await page.request.get(`/api/notes/${sourceId}`)).json()).note.deletedAt).not.toBeNull();
 });
@@ -3015,6 +3021,12 @@ test('folders render under all notes and the all notes menu creates a root folde
   const parentName = (await parentRow.locator('.folder-name').boundingBox())!;
   const childName = (await childRow.locator('.folder-name').boundingBox())!;
   expect(childName.x).toBeGreaterThan(parentName.x);
+  // Hovering a folder must not resize the row or push the tree past the sidebar edge.
+  const parentBox = (await parentRow.boundingBox())!;
+  await parentRow.hover();
+  await expect(parentRow.getByRole('button', { name: '重命名目录' })).toBeVisible();
+  expect((await parentRow.boundingBox())!.height).toBe(parentBox.height);
+  expect(await nav.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   const allNotes = page.locator('.sidebar').getByRole('button', { name: '全部笔记', exact: true });
   const menu = page.getByRole('menu');
   const menuItem = page.getByRole('menuitem', { name: '新建目录', exact: true });
@@ -3097,17 +3109,509 @@ test('folders can move and delete an unsynced new draft with the offline library
     const id = await row.getAttribute('data-note-id');
     expect((await page.request.get(`/api/notes/${id}`)).status()).toBe(404);
     await page.unroute('**/api/notes/*');
+    const savedResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/api/notes/${id}` && ['POST', 'PUT'].includes(response.request().method()) && response.ok());
     await row.click({ button: 'right' });
     if (operation === 'move') {
       await page.getByRole('menuitem', { name: '移动笔记' }).click();
       await page.getByRole('dialog').getByRole('button', { name: targetFolder, exact: true }).click();
     } else await page.getByRole('menuitem', { name: '删除', exact: true }).click();
+    await savedResponse;
     await expect(row).toHaveCount(0);
     const saved = (await (await page.request.get(`/api/notes/${id}`)).json()).note;
     expect(saved.content).toBe('保留新草稿正文');
     if (operation === 'move') expect(saved.folderId).toBe(targetFolder);
     else expect(saved.deletedAt).not.toBeNull();
   }
+});
+
+test('folder notes keep their manual order through keyboard reordering and folder drops', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const home = randomUUID(), other = randomUUID();
+  const homeName = `甲-${marker}`, otherName = `乙-${marker}`;
+  for (const [id, name] of [[home, homeName], [other, otherName]]) {
+    expect((await page.request.post('/api/folders', { headers, data: { id, name, parentId: null } })).status()).toBe(201);
+  }
+  for (const title of [`一-${marker}`, `二-${marker}`, `三-${marker}`]) {
+    expect((await page.request.post(`${origin}/api/notes/${randomUUID()}`, { headers, data: {
+      title, content: '顺序验证', tags: [], pinned: false, archived: false, deletedAt: null,
+      folderId: home, revision: 0, operationId: randomUUID(),
+    } })).status()).toBe(201);
+  }
+
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await nav.getByRole('button', { name: homeName, exact: true }).click();
+  const rows = page.locator('[data-note-row]');
+  await expect(rows).toHaveCount(3);
+  const order = () => rows.locator('.note-row-title span').allInnerTexts();
+  const before = await order();
+
+  // Alt+Arrow reuses the drag reorder path: the focused row steps one slot down.
+  const orderCalls: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/notes/order')) orderCalls.push(request.postData() ?? '');
+  });
+  await rows.nth(0).press('Alt+ArrowDown');
+  expect(orderCalls, orderCalls.join(' | ')).toHaveLength(1);
+  await expect.poll(order).toEqual([before[1], before[0], before[2]]);
+  const moving = rows.filter({ hasText: before[0] });
+  await expect(moving).toBeFocused();
+  await moving.press('Alt+ArrowDown');
+  await expect.poll(order).toEqual([before[1], before[2], before[0]]);
+  await expect(moving).toBeFocused();
+
+  // The order is server-side, so it survives a reload instead of living in the list state.
+  await page.reload();
+  await nav.getByRole('button', { name: homeName, exact: true }).click();
+  await expect.poll(order).toEqual([before[1], before[2], before[0]]);
+
+  // Dropping a row on a folder row moves the note there and appends it.
+  await rows.nth(0).dragTo(nav.locator('.folder-row').filter({ hasText: otherName }), {
+    targetPosition: { x: 40, y: 15 },
+  });
+  await expect(rows.filter({ hasText: before[1] })).toHaveCount(0);
+  await nav.getByRole('button', { name: otherName, exact: true }).click();
+  await expect(page.locator('[data-note-row]')).toHaveCount(1);
+  await expect(page.locator('.note-row-title span')).toHaveText(before[1]);
+});
+
+test('manual folder pagination rebuilds after a remote reorder without losing or duplicating notes', async ({ page }) => {
+  const marker = randomUUID().slice(0, 8);
+  const folderId = randomUUID();
+  const folderName = `分页目录-${marker}`;
+  expect((await page.request.post('/api/folders', {
+    headers, data: { id: folderId, name: folderName, parentId: null },
+  })).status()).toBe(201);
+
+  const allIds: string[] = [];
+  for (let index = 0; index < 80; index++) {
+    const id = randomUUID();
+    allIds.push(id);
+    const response = await page.request.post(`${origin}/api/notes/${id}`, {
+      headers,
+      data: {
+        title: `${marker}-${String(index).padStart(2, '0')}`,
+        content: '分页顺序', tags: [], pinned: false, archived: false, deletedAt: null,
+        folderId, revision: 0, operationId: randomUUID(),
+      },
+    });
+    expect(response.status()).toBe(201);
+  }
+  // Establish a deterministic manual order matching allIds (first -> last) before the UI loads.
+  expect((await page.request.patch(`${origin}/api/notes/order`, {
+    headers, data: { ids: allIds },
+  })).status()).toBe(200);
+
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  await page.locator('.sidebar nav.folder-nav').getByRole('button', { name: folderName, exact: true }).click();
+  await expect(page.locator('.note-row')).toHaveCount(50);
+  await expect(page.getByRole('button', { name: '加载更多' })).toBeVisible();
+
+  // Another device moves the first note to the end of the folder.
+  expect((await page.request.patch(`${origin}/api/notes/order`, {
+    headers, data: { ids: [allIds[0]], afterId: allIds[79] },
+  })).status()).toBe(200);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+  // The rebuilt prefix must drop the moved note and admit the one that slid in from the boundary.
+  await expect(page.locator('.note-row').filter({ hasText: `${marker}-00` })).toHaveCount(0);
+  await expect(page.locator('.note-row').filter({ hasText: `${marker}-50` })).toHaveCount(1);
+  await expect(page.locator('.note-row')).toHaveCount(50);
+
+  await page.getByRole('button', { name: '加载更多' }).click();
+  await expect(page.locator('.note-row')).toHaveCount(80);
+  const titles = await page.locator('.note-row .note-row-title span').allInnerTexts();
+  const expected = allIds.map((_, index) => `${marker}-${String(index).padStart(2, '0')}`);
+  expect(titles.length).toBe(80);
+  expect(new Set(titles).size).toBe(80);
+  expect([...titles].sort()).toEqual([...expected].sort());
+  // The target lives beyond the first server page; placement uses its real ID.
+  const moving = page.locator(`[data-note-id="${allIds[1]}"]`);
+  const target = page.locator(`[data-note-id="${allIds[65]}"]`);
+  await moving.scrollIntoViewIfNeeded();
+  const sourceBox = (await moving.boundingBox())!;
+  await page.mouse.move(sourceBox.x + 50, sourceBox.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(sourceBox.x + 70, sourceBox.y + 20, { steps: 5 });
+  // Start the native drag before scrolling to its offscreen target.
+  await target.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+  const targetBox = (await target.boundingBox())!;
+  await page.mouse.move(targetBox.x + 50, targetBox.y + 4, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => {
+    const first = (await (await page.request.get(`/api/notes?folder=${folderId}&sort=manual&limit=50`)).json()).notes;
+    const second = (await (await page.request.get(`/api/notes?folder=${folderId}&sort=manual&offset=50&limit=50`)).json()).notes;
+    const ordered = [...first, ...second].map((note: { id: string }) => note.id);
+    return ordered[ordered.indexOf(allIds[65]) - 1];
+  }).toBe(allIds[1]);
+});
+
+async function seedOrderFolder(page: Page, count = 3, parentId: string | null = null) {
+  const folderId = randomUUID();
+  expect((await page.request.post('/api/folders', { headers, data: { id: folderId, name: folderId, parentId } })).status()).toBe(201);
+  const ids: string[] = [];
+  for (let index = 0; index < count; index++) {
+    const id = randomUUID();
+    ids.push(id);
+    expect((await page.request.post(`/api/notes/${id}`, { headers, data: {
+      title: `${folderId}-${index}`, content: '原始正文', tags: [], pinned: false, archived: false,
+      deletedAt: null, folderId, revision: 0, operationId: randomUUID(),
+    } })).status()).toBe(201);
+  }
+  if (ids.length) expect((await page.request.patch('/api/notes/order', { headers, data: { ids } })).status()).toBe(200);
+  return { folderId, ids };
+}
+async function storedOrderNote(page: Page, id: string, store: 'notes' | 'drafts') {
+  return page.evaluate(async ({ id, store, userId }) => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open('easynote');
+      request.onsuccess = () => resolve(request.result);
+    });
+    try {
+      return await new Promise<import('../src/shared/types').Note | import('../src/client/drafts').Draft | undefined>((resolve) => {
+        const request = db.transaction(store).objectStore(store).get(`${userId}:${id}`);
+        request.onsuccess = () => resolve(request.result);
+      });
+    } finally { db.close(); }
+  }, { id, store, userId: testUserId });
+}
+
+test('root is permanent on desktop and mobile and folder sort preferences are independent', async ({ page, context }) => {
+  const a = await seedOrderFolder(page);
+  const b = await seedOrderFolder(page);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  const sort = page.getByRole('button', { name: '排序方式', exact: true });
+  const root = nav.getByRole('button', { name: '根目录', exact: true });
+  await root.focus();
+  await root.press('Enter');
+  await expect(sort).toHaveText('手动排序');
+  await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+  const title = `未分类-${randomUUID()}`;
+  await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  const created = (await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json()).notes[0];
+  expect(created.folderId).toBeNull();
+  await nav.getByRole('button', { name: a.folderId, exact: true }).click();
+  await sort.click();
+  await expect(sort).toHaveText('最近修改');
+  await nav.getByRole('button', { name: b.folderId, exact: true }).click();
+  await expect(sort).toHaveText('手动排序');
+  await nav.getByRole('button', { name: a.folderId, exact: true }).click();
+  await expect(sort).toHaveText('最近修改');
+  await page.reload();
+  await nav.getByRole('button', { name: a.folderId, exact: true }).click();
+  await expect(sort).toHaveText('最近修改');
+  await nav.getByRole('button', { name: b.folderId, exact: true }).click();
+  await expect(sort).toHaveText('手动排序');
+  await context.setOffline(true);
+  await expect(page.getByText('离线', { exact: true })).toBeVisible();
+  await expect(page.locator(`[data-note-id="${b.ids[0]}"]`)).toHaveAttribute('draggable', 'false');
+  let orderCalls = 0;
+  page.on('request', (request) => { if (request.url().endsWith('/api/notes/order')) orderCalls++; });
+  await page.locator(`[data-note-id="${b.ids[0]}"]`).press('Alt+ArrowDown');
+  expect(orderCalls).toBe(0);
+  expect(await page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')))).toEqual(b.ids);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const navigation = await openMobileNavigation(page);
+  await navigation.getByRole('button', { name: '根目录', exact: true }).click();
+  await expect(page.locator('[data-note-row]').filter({ hasText: title })).toBeVisible();
+  await context.setOffline(false);
+});
+
+test('folder search stays recent and forbids list sorting while allowing folder drops', async ({ page }) => {
+  const a = await seedOrderFolder(page), b = await seedOrderFolder(page, 0);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await nav.getByRole('button', { name: a.folderId, exact: true }).click();
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill(a.folderId);
+  await expect(page.getByRole('button', { name: '排序方式', exact: true })).toHaveCount(0);
+  const recent = (await (await page.request.get(`/api/notes?folder=${a.folderId}&q=${a.folderId}`)).json()).notes.map((note: { id: string }) => note.id);
+  const order = () => page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')));
+  await expect.poll(order).toEqual(recent);
+  let orderCalls = 0;
+  page.on('request', (request) => { if (request.url().endsWith('/api/notes/order')) orderCalls++; });
+  const row = page.locator(`[data-note-id="${recent[0]}"]`);
+  await row.press('Alt+ArrowDown');
+  await row.dragTo(page.locator(`[data-note-id="${recent[1]}"]`));
+  expect(orderCalls).toBe(0);
+  await row.dragTo(nav.locator('.folder-row').filter({ hasText: b.folderId }));
+  await expect.poll(async () => (await (await page.request.get(`/api/notes/${recent[0]}`)).json()).note.folderId).toBe(b.folderId);
+});
+
+test('folder keyboard ordering uses Chinese display order and retains focus at boundaries', async ({ page }) => {
+  const { folderId: parent } = await seedOrderFolder(page, 0);
+  const ids = [randomUUID(), randomUUID(), randomUUID()];
+  for (const [index, name] of ['阿', '波', '张'].entries()) {
+    expect((await page.request.post('/api/folders', { headers, data: { id: ids[index], name: `${name}-${parent}`, parentId: parent } })).status()).toBe(201);
+  }
+  await page.goto('/');
+  const parentNode = page.locator('.sidebar .folder-node').filter({ has: page.getByRole('button', { name: parent, exact: true }) }).first();
+  const names = () => parentNode.locator('.folder-name span').allTextContents();
+  const zhang = parentNode.getByRole('button', { name: `张-${parent}`, exact: true });
+  await zhang.press('Alt+ArrowUp');
+  await expect.poll(names).toEqual([parent, `阿-${parent}`, `张-${parent}`, `波-${parent}`]);
+  await expect(zhang).toBeFocused();
+  await zhang.press('Alt+ArrowUp');
+  await expect.poll(names).toEqual([parent, `张-${parent}`, `阿-${parent}`, `波-${parent}`]);
+  await expect(zhang).toBeFocused();
+  const atBoundary = page.waitForTimeout(100);
+  await zhang.press('Alt+ArrowUp');
+  await atBoundary;
+  await expect(zhang).toBeFocused();
+  await page.reload();
+  await expect.poll(names).toEqual([parent, `张-${parent}`, `阿-${parent}`, `波-${parent}`]);
+});
+
+test('multi-note folder drops append the entire stable selection including resident notes and root', async ({ page }) => {
+  const a = await seedOrderFolder(page, 2), b = await seedOrderFolder(page, 3);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill('原始正文');
+  const wanted = new Set([a.ids[0], a.ids[1], b.ids[0]]);
+  for (const id of wanted) await expect(page.locator(`[data-note-id="${id}"]`)).toBeVisible();
+  await page.getByRole('button', { name: '批量选择', exact: true }).click();
+  const selectedIds = (await page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')!))).filter((id) => wanted.has(id));
+  for (const id of selectedIds) await page.locator(`[data-note-id="${id}"]`).click();
+  const ordered = async (folder: string) => (await (await page.request.get(`/api/notes?folder=${folder}&sort=manual`)).json()).notes.map((note: { id: string }) => note.id);
+  await page.locator(`[data-note-id="${selectedIds[0]}"]`).dragTo(nav.locator('.folder-row').filter({ hasText: b.folderId }));
+  await expect.poll(() => ordered(b.folderId)).toEqual([...b.ids.slice(1), ...selectedIds]);
+  await nav.getByRole('button', { name: b.folderId, exact: true }).click();
+  // Dropping a note in its current folder is still an append, even though no content save is needed.
+  await page.locator(`[data-note-id="${b.ids[1]}"]`).dragTo(nav.locator('.folder-row').filter({ hasText: b.folderId }));
+  await expect.poll(() => ordered(b.folderId)).toEqual([b.ids[2], ...selectedIds, b.ids[1]]);
+  await page.locator(`[data-note-id="${b.ids[1]}"]`).dragTo(nav.getByRole('button', { name: '根目录', exact: true }));
+  await expect.poll(async () => (await (await page.request.get(`/api/notes/${b.ids[1]}`)).json()).note.folderId).toBeNull();
+  await nav.getByRole('button', { name: '根目录', exact: true }).click();
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill(`${b.folderId}-1`);
+  await expect(page.locator(`[data-note-id="${b.ids[1]}"]`)).toBeVisible();
+});
+
+for (const enabled of [true, false]) {
+  test(`remote order updates current and pending drafts with offline library ${enabled ? 'enabled' : 'disabled'}`, async ({ page }) => {
+    const { folderId, ids } = await seedOrderFolder(page);
+    await page.goto('/');
+    if (!enabled) await disableOfflineLibrary(page);
+    await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
+    await page.locator(`[data-note-id="${ids[0]}"]`).click();
+    expect((await page.request.patch('/api/notes/order', { headers, data: { ids: [ids[0]] } })).status()).toBe(200);
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    const rowIds = () => page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')));
+    await expect.poll(rowIds).toEqual([ids[1], ids[2], ids[0]]);
+    await page.getByRole('textbox', { name: '笔记正文' }).fill('顺序同步后继续编辑');
+    await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+    await expect.poll(rowIds).toEqual([ids[1], ids[2], ids[0]]);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let held = false;
+    await page.route(`**/api/notes/${ids[0]}`, async (route) => {
+      if (route.request().method() !== 'PUT') { await route.continue(); return; }
+      held = true;
+      await gate;
+      await route.continue();
+    });
+    try {
+      await page.getByRole('textbox', { name: '笔记正文' }).fill('未保存草稿正文');
+      await expect.poll(() => held).toBe(true);
+      const before = await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft;
+      expect((await page.request.patch('/api/notes/order', { headers, data: { ids: [ids[0]], beforeId: ids[1] } })).status()).toBe(200);
+      const remote = (await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note;
+      await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await expect.poll(async () => (await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft)?.note.position).toBe(remote.position);
+      const after = await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft;
+      expect(after).toEqual({ ...before, note: { ...before.note, position: remote.position } });
+      await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('未保存草稿正文');
+      await expect.poll(rowIds).toEqual(ids);
+      release();
+      await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+      await expect.poll(rowIds).toEqual(ids);
+    } finally { release(); }
+  });
+
+  for (const newerDraft of [false, true]) {
+    test(`late save response preserves newer position with ${newerDraft ? 'new' : 'same'} draft and offline library ${enabled ? 'enabled' : 'disabled'}`, async ({ page }) => {
+      const { folderId, ids } = await seedOrderFolder(page);
+      await page.goto('/');
+      if (!enabled) await disableOfflineLibrary(page);
+      await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
+      await page.locator(`[data-note-id="${ids[0]}"]`).click();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      let held = false;
+      await page.route(`**/api/notes/${ids[0]}`, async (route) => {
+        if (route.request().method() !== 'PUT' || held) { await route.continue(); return; }
+        held = true;
+        const response = await route.fetch();
+        await gate;
+        await route.fulfill({ response });
+      });
+      try {
+        await page.getByRole('textbox', { name: '笔记正文' }).fill('已发出的保存正文');
+        await expect.poll(() => held).toBe(true);
+        // Wait until the server has saved, while its response remains delayed on this device.
+        await expect.poll(async () => (await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note.content).toBe('已发出的保存正文');
+        if (newerDraft) await page.getByRole('textbox', { name: '笔记正文' }).fill('保存期间的新草稿正文');
+        let observedPosition: number | undefined;
+        page.on('response', async (response) => {
+          if (new URL(response.url()).pathname !== '/api/sync' || !response.ok()) return;
+          const synced = await response.json().catch(() => ({ changes: [] }));
+          const change = synced.changes.find((change: { noteId: string }) => change.noteId === ids[0]);
+          if (change?.note) observedPosition = change.note.position;
+        });
+        expect((await page.request.patch('/api/notes/order', { headers, data: { ids: [ids[0]] } })).status()).toBe(200);
+        const remote = (await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note;
+        await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+        const rowIds = () => page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')));
+        // A draft keeps its revision until the delayed save is acknowledged.
+        await expect.poll(() => observedPosition).toBe(remote.position);
+        release();
+        await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+        await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText(newerDraft ? '保存期间的新草稿正文' : '已发出的保存正文');
+        await expect.poll(rowIds).toEqual([ids[1], ids[2], ids[0]]);
+        if (enabled) await expect.poll(async () => (await storedOrderNote(page, ids[0], 'notes') as import('../src/shared/types').Note)?.position).toBe(remote.position);
+        expect((await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note.content).toBe(newerDraft ? '保存期间的新草稿正文' : '已发出的保存正文');
+        await page.getByRole('textbox', { name: '笔记正文' }).fill('响应后继续编辑');
+        await expect.poll(async () => (await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft)?.note.position).toBe(remote.position);
+        await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+        await expect.poll(rowIds).toEqual([ids[1], ids[2], ids[0]]);
+      } finally { release(); }
+    });
+  }
+}
+
+test('a local reorder during save preserves the same operation draft and the acknowledged position', async ({ page }) => {
+  const { folderId, ids } = await seedOrderFolder(page);
+  await page.goto('/');
+  await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
+  await page.locator(`[data-note-id="${ids[0]}"]`).click();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let held = false;
+  await page.route(`**/api/notes/${ids[0]}`, async (route) => {
+    if (route.request().method() !== 'PUT' || held) { await route.continue(); return; }
+    held = true;
+    const response = await route.fetch();
+    await gate;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.getByRole('textbox', { name: '笔记正文' }).fill('保存与排序并行');
+    await expect.poll(() => held).toBe(true);
+    await expect.poll(async () => (await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note.content).toBe('保存与排序并行');
+    const before = await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft;
+    await page.locator(`[data-note-id="${ids[0]}"]`).press('Alt+ArrowDown');
+    await expect.poll(async () => (await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft)?.note.position).not.toBe(before.note.position);
+    const after = await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft;
+    expect(after).toEqual({ ...before, note: { ...before.note, position: after.note.position } });
+    release();
+    await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+    await expect.poll(async () => (await storedOrderNote(page, ids[0], 'notes') as import('../src/shared/types').Note)?.position).toBe(after.note.position);
+    await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('保存与排序并行');
+  } finally { release(); }
+});
+
+test('a partially failed group move never reorders the whole selection', async ({ page }) => {
+  const a = await seedOrderFolder(page), b = await seedOrderFolder(page, 0);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await nav.getByRole('button', { name: a.folderId, exact: true }).click();
+  await page.getByRole('button', { name: '批量选择', exact: true }).click();
+  for (const id of a.ids) await page.locator(`[data-note-id="${id}"]`).click();
+  let orderCalls = 0;
+  page.on('request', (request) => { if (request.url().endsWith('/api/notes/order')) orderCalls++; });
+  await page.route(`**/api/notes/${a.ids[1]}`, async (route) => {
+    if (route.request().method() === 'PUT') await route.abort(); else await route.continue();
+  });
+  await page.locator(`[data-note-id="${a.ids[0]}"]`).dragTo(nav.locator('.folder-row').filter({ hasText: b.folderId }));
+  await expect(page.getByRole('alert')).toContainText('批量操作已处理 1 篇');
+  expect(orderCalls).toBe(0);
+  for (const [index, id] of a.ids.entries()) {
+    const note = (await (await page.request.get(`/api/notes/${id}`)).json()).note;
+    expect(note.folderId).toBe(index === 0 ? b.folderId : a.folderId);
+    expect(note.content).toBe('原始正文');
+  }
+});
+
+test('remote order in a failed draft survives an offline cold start', async ({ page, context }) => {
+  const { folderId, ids } = await seedOrderFolder(page);
+  await page.goto('/');
+  await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
+  await page.locator(`[data-note-id="${ids[0]}"]`).click();
+  await page.route(`**/api/notes/${ids[0]}`, async (route) => {
+    if (route.request().method() === 'PUT') await route.abort(); else await route.continue();
+  });
+  await page.getByRole('textbox', { name: '笔记正文' }).fill('冷启动保留正文');
+  await expect(page.getByText(/^(仅保存在本机|待处理草稿)$/)).toBeVisible();
+  expect((await page.request.patch('/api/notes/order', { headers, data: { ids: [ids[0]] } })).status()).toBe(200);
+  const remote = (await (await page.request.get(`/api/notes/${ids[0]}`)).json()).note;
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(async () => (await storedOrderNote(page, ids[0], 'drafts') as import('../src/client/drafts').Draft)?.note.position).toBe(remote.position);
+  await context.setOffline(true);
+  page.on('dialog', (dialog) => dialog.accept());
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.locator('.sidebar .folder-name').getByText(folderId, { exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('冷启动保留正文');
+  const ordered = await page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')));
+  expect(ordered).toEqual([ids[1], ids[2], ids[0]]);
+  await context.setOffline(false);
+});
+
+test('native drag hover expands once, Escape cancels, and edge rows keep scrolling', async ({ page }) => {
+  const { folderId, ids } = await seedOrderFolder(page, 18);
+  const child = await seedOrderFolder(page, 0, folderId);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  const target = nav.locator('.folder-row').filter({ hasText: folderId });
+  await target.locator('.folder-chevron').click();
+  const childRow = nav.locator('.folder-row').filter({ hasText: child.folderId });
+  await expect(childRow).toHaveCount(0);
+  // Put our note near the top of All Notes and start a real Chromium HTML5 drag.
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill(folderId);
+  const source = await page.locator(`[data-note-id="${ids[17]}"]`).boundingBox();
+  const box = (await target.locator('.folder-name').boundingBox())!;
+  await page.mouse.move(source!.x + 50, source!.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(source!.x + 65, source!.y + 20, { steps: 5 });
+  await page.mouse.move(box.x + 30, box.y + box.height / 2, { steps: 10 });
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await page.waitForTimeout(650);
+  await expect(childRow).toHaveCount(0);
+  await page.mouse.move(source!.x + 50, source!.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(source!.x + 65, source!.y + 20, { steps: 5 });
+  await page.mouse.move(box.x + 30, box.y + box.height / 2, { steps: 10 });
+  for (let index = 0; index < 9; index++) {
+    await page.waitForTimeout(100);
+    await page.mouse.move(box.x + 30 + index % 2, box.y + box.height / 2);
+  }
+  await expect(childRow).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(nav.locator('[class*="drop-inside"]')).toHaveCount(0);
+  expect((await (await page.request.get(`/api/notes/${ids[17]}`)).json()).note.folderId).toBe(folderId);
+  await nav.getByRole('button', { name: folderId, exact: true }).click();
+  const rows = page.locator('[data-note-row]');
+  await expect(rows).toHaveCount(18);
+  const list = page.locator('.list-scroll');
+  const first = (await rows.first().boundingBox())!;
+  const listBox = (await list.boundingBox())!;
+  await page.mouse.move(first.x + 50, first.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(first.x + 70, first.y + 20, { steps: 5 });
+  await page.mouse.move(first.x + 40, listBox.y + listBox.height - 12, { steps: 10 });
+  const before = await list.evaluate((element) => element.scrollTop);
+  for (let index = 0; index < 8; index++) {
+    await page.waitForTimeout(70);
+    await page.mouse.move(first.x + 40 + index % 2, listBox.y + listBox.height - 12);
+  }
+  expect(await list.evaluate((element) => element.scrollTop)).toBeGreaterThan(before);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  expect((await (await page.request.get(`/api/notes?folder=${folderId}&sort=manual`)).json()).notes.map((note: { id: string }) => note.id)).toEqual(ids);
 });
 
 test('account security changes the password and logs out every device', async ({ page }) => {

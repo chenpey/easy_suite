@@ -972,13 +972,171 @@ test('blank-note moves never overwrite another blank and account deletion cascad
   const userId = randomUUID(), child = randomUUID();
   await instance.db.prepare('INSERT INTO users(id,username,password_verifier,created_at,updated_at) VALUES(?,?,?,1,1)')
     .bind(userId, userId, '{}').run();
-  await instance.db.prepare('INSERT INTO folders VALUES(?,?,NULL,?,1,1)').bind(child, userId, 'folder').run();
+  await instance.db.prepare('INSERT INTO folders VALUES(?,?,NULL,?,1,1,0)').bind(child, userId, 'folder').run();
   for (const target of [null, child]) await instance.db.prepare(`INSERT INTO notes
     (id,user_id,title,content,dedup_hash,created_at,updated_at,mutation_id,mutation_hash,folder_id)
     VALUES(?,?,'','','hash',1,1,?,?,?)`).bind(randomUUID(), userId, randomUUID(), 'hash', target).run();
   await instance.db.prepare('DELETE FROM users WHERE id=?').bind(userId).run();
   assert.equal(await instance.db.prepare('SELECT id FROM notes WHERE user_id=?').bind(userId).first(), null);
   assert.equal(await instance.db.prepare('SELECT id FROM folders WHERE user_id=?').bind(userId).first(), null);
+});
+
+test('manual note order writes only the position and never bumps a revision', async () => {
+  const folderId = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
+  for (const title of ['第一篇', '第二篇', '第三篇']) await create({ title, folderId });
+  const before = (await (await request(`/api/notes?folder=${folderId}&sort=manual`)).json() as any).notes
+    .map((item: any) => item.id) as string[];
+  const last = before[before.length - 1];
+  const revisionBefore = (await (await request(`/api/notes/${last}`)).json() as any).note;
+  const cursor = (await (await request('/api/sync/cursor')).json() as any).cursor;
+
+  // The UI sends the neighbouring row as the anchor, never an absolute index.
+  const moved = await request('/api/notes/order', 'PATCH', { ids: [last], beforeId: before[0] });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  const movedNote = (await moved.json() as any).notes[0];
+  const reordered = (await (await request(`/api/notes?folder=${folderId}&sort=manual`)).json() as any).notes
+    .map((item: any) => item.id) as string[];
+  assert.deepEqual(reordered, [last, ...before.filter((id) => id !== last)]);
+
+  // Reordering is placement metadata: no new revision, timestamp or content version.
+  const revisionAfter = (await (await request(`/api/notes/${last}`)).json() as any).note;
+  assert.equal(revisionAfter.revision, revisionBefore.revision);
+  assert.equal(revisionAfter.updatedAt, revisionBefore.updatedAt);
+  assert.equal(revisionAfter.content, revisionBefore.content);
+  assert.equal((await (await request(`/api/notes/${last}/versions`)).json() as any).versions.length, 1);
+  // Other devices learn the new key through sync, so the order converges without a content edit.
+  const sync = (await (await request(`/api/sync?after=${cursor}&limit=200`)).json() as any).changes;
+  assert.ok(sync.some((change: any) => change.noteId === last && change.note.position === movedNote.position));
+  // The last-modified view keeps its own order, so the manual key never leaks out of folder views.
+  const recent = (await (await request(`/api/notes?folder=${folderId}`)).json() as any).notes;
+  assert.deepEqual(new Set(recent.map((item: any) => item.id)), new Set(before));
+});
+
+test('a tight reorder returns and publishes every key it had to renumber', async () => {
+  const folderId = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
+  const ids = [randomUUID(), randomUUID(), randomUUID()];
+  for (const [index, id] of ids.entries()) {
+    assert.equal((await save(id, 0, { title: `紧凑 ${index}`, folderId })).status, 201);
+  }
+  // Adjacent keys leave no integer slot between the first two notes.
+  for (const [position, id] of [[1024, ids[0]], [1025, ids[1]], [2048, ids[2]]] as const) {
+    await instance.db.prepare('UPDATE notes SET position=? WHERE id=?').bind(position, id).run();
+  }
+  const cursor = (await (await request('/api/sync/cursor')).json() as any).cursor;
+  const moved = await request('/api/notes/order', 'PATCH', { ids: [ids[2]], afterId: ids[0] });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  const notes = (await moved.json() as any).notes;
+  // The response carries the dragged note and the neighbour whose key had to move.
+  assert.deepEqual(notes.map((item: any) => item.id).sort(), [ids[1], ids[2]].sort());
+  assert.equal(notes.find((item: any) => item.id === ids[1]).position, 3072);
+  const list = (await (await request(`/api/notes?folder=${folderId}&sort=manual`)).json() as any).notes;
+  assert.deepEqual(list.map((item: any) => item.id), [ids[0], ids[2], ids[1]]);
+  assert.deepEqual(list.map((item: any) => item.position), [1024, 2048, 3072]);
+  const sync = (await (await request(`/api/sync?after=${cursor}&limit=200`)).json() as any).changes;
+  // Other devices must learn about the renumbered neighbour too, not only the dragged note.
+  for (const id of [ids[1], ids[2]]) assert.ok(sync.some((change: any) => change.noteId === id), id);
+});
+
+test('note order rejects cross-folder groups, foreign anchors and missing notes', async () => {
+  const folderA = randomUUID(), folderB = randomUUID();
+  for (const id of [folderA, folderB]) {
+    assert.equal((await request('/api/folders', 'POST', { id, name: id, parentId: null })).status, 201);
+  }
+  const a = await create({ title: 'A', folderId: folderA });
+  const b = await create({ title: 'B', folderId: folderB });
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [a.id, b.id], afterId: null })).status, 400);
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [a.id], beforeId: randomUUID() })).status, 400);
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [a.id], beforeId: a.id })).status, 400);
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [randomUUID()], afterId: null })).status, 404);
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [a.id], extra: true })).status, 400);
+  // Notes that live outside every folder can be ordered too; "root" is a view, not a folder ID.
+  const root = await create({ title: '未归档', folderId: null });
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids: [root.id], afterId: null })).status, 200);
+  assert.equal((await (await request(`/api/notes/blank?folder=root`)).json() as any).note.folderId, null);
+});
+
+test('a large folder reorder keeps one JSON query per batch and returns only positions', async () => {
+  const folderId = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
+  const total = 230;
+  const ids: string[] = [];
+  for (let i = 0; i < total; i++) {
+    const note = await create({ title: `批量 ${i}`, folderId });
+    ids.push(note.id);
+  }
+  // Every note starts at position 0, so the first drop renumbers the whole folder.
+  const moved = await request('/api/notes/order', 'PATCH', { ids: [ids[0]], beforeId: ids[1] });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  const updated = (await moved.json() as any).notes;
+  assert.equal(updated.length, total);
+  // A huge backfill must not echo every note's full content, only the new keys.
+  for (const entry of updated) assert.deepEqual(Object.keys(entry).sort(), ['id', 'position']);
+
+  // A >200 ID selection also exceeds the old 8192-byte request limit.
+  const group = ids.slice(0, 220);
+  const grouped = await request('/api/notes/order', 'PATCH', { ids: group, afterId: null });
+  assert.equal(grouped.status, 200, await grouped.clone().text());
+  assert.equal((await grouped.json() as any).notes.length, 220);
+});
+
+test('folder moves land on the sibling anchor and are rejected inside their own subtree', async () => {
+  const parent = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: parent, name: '排序父目录', parentId: null })).status, 201);
+  const ids = [randomUUID(), randomUUID(), randomUUID()];
+  for (const [index, id] of ids.entries()) {
+    assert.equal((await request('/api/folders', 'POST', { id, name: `目录 ${index}`, parentId: parent })).status, 201);
+  }
+  const children = async () => ((await (await request('/api/folders')).json() as any).folders as any[])
+    .filter((item) => item.parentId === parent).map((item) => item.id) as string[];
+  const before = await children();
+  const last = before[before.length - 1];
+  const moved = await request(`/api/folders/${last}`, 'PATCH', { parentId: parent, beforeId: before[0] });
+  assert.equal(moved.status, 200, await moved.clone().text());
+  assert.deepEqual(await children(), [last, ...before.filter((id) => id !== last)]);
+
+  // A plain rename keeps the slot; an unknown anchor and a cycle both fail loudly.
+  assert.equal((await request(`/api/folders/${last}`, 'PATCH', { name: '改名目录' })).status, 200);
+  assert.deepEqual(await children(), [last, ...before.filter((id) => id !== last)]);
+  assert.equal((await request(`/api/folders/${last}`, 'PATCH', { parentId: parent, beforeId: parent })).status, 400);
+  const nested = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: nested, name: '子目录', parentId: last })).status, 201);
+  assert.equal((await request(`/api/folders/${last}`, 'PATCH', { parentId: nested })).status, 400);
+  assert.equal((await request(`/api/folders/${last}`, 'PATCH', { parentId: parent, beforeId: randomUUID() })).status, 400);
+});
+
+test('manual order is ignored for folder searches, tags and non-active views', async () => {
+  const folderId = randomUUID(), tag = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
+  const ids: string[] = [];
+  for (let index = 0; index < 3; index++) {
+    const note = await create({ title: `检索顺序-${index}`, folderId, tags: [tag] });
+    ids.push(note.id);
+    await instance.db.prepare('UPDATE notes SET updated_at=? WHERE id=?').bind(1000 + index, note.id).run();
+  }
+  assert.equal((await request('/api/notes/order', 'PATCH', { ids })).status, 200);
+  const listed = async (extra: string) => ((await (await request(`/api/notes?folder=${folderId}&sort=manual${extra}`)).json() as any).notes as any[]).map((note) => note.id);
+  assert.deepEqual(await listed(''), ids);
+  assert.deepEqual(await listed('&q=检索顺序'), [...ids].reverse());
+  assert.deepEqual(await listed(`&tag=${tag}`), [...ids].reverse());
+  await instance.db.prepare('UPDATE notes SET archived=1 WHERE folder_id=?').bind(folderId).run();
+  assert.deepEqual(await listed('&view=archive'), [...ids].reverse());
+  await instance.db.prepare('UPDATE notes SET deleted_at=1234 WHERE folder_id=?').bind(folderId).run();
+  assert.deepEqual(await listed('&view=trash'), [...ids].reverse());
+});
+
+test('first Chinese folder drop uses the same collation as the visible tree', async () => {
+  const parentId = randomUUID();
+  assert.equal((await request('/api/folders', 'POST', { id: parentId, name: parentId, parentId: null })).status, 201);
+  const ids = [randomUUID(), randomUUID(), randomUUID()];
+  for (const [index, name] of ['阿', '波', '张'].entries()) {
+    assert.equal((await request('/api/folders', 'POST', { id: ids[index], name, parentId })).status, 201);
+  }
+  const names = async () => ((await (await request('/api/folders')).json() as any).folders as any[]).filter((folder) => folder.parentId === parentId).map((folder) => folder.name);
+  assert.deepEqual(await names(), ['阿', '波', '张']);
+  assert.equal((await request(`/api/folders/${ids[2]}`, 'PATCH', { parentId, beforeId: ids[1] })).status, 200);
+  assert.deepEqual(await names(), ['阿', '张', '波']);
 });
 
 test('pre-folder mutation hashes accept identical upgrade retries and reject changed payloads', async () => {

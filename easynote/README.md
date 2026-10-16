@@ -2,9 +2,18 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`1.0.0`
+当前版本：`1.1.0`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 1.1.0 更新说明（2026-10-16）
+
+- 桌面支持拖拽目录调整同层顺序或移动到其他目录，也可多选笔记后拖入目标目录或根目录；保留目录深度、同层重名和禁止循环移动的校验。
+- 根目录固定显示；每个目录可独立切换“手动排序”和“最近修改”，排序偏好按账号保存在当前浏览器。手动排序支持拖拽及 Alt+↑ / Alt+↓，搜索、标签和全部笔记列表继续按最近修改排序。
+- 调整笔记顺序只更新位置，不修改正文、内容版本或修改时间；跨设备同步位置时保留未保存草稿，并重建手动排序列表的分页。
+- 升级到 1.1.0 需先应用 `0004_order.sql`，为笔记和目录添加位置字段及排序索引；现有部署脚本会在发布代码前应用迁移。ZIP 恢复保留目录结构，但不保留手动顺序；手机继续使用操作菜单，移动和排序需要联网。
+- 修复网页版 ChatGPT MCP 授权：PWA 不再拦截 OAuth、发现元数据、MCP 和分享路径；授权表单使用严格的同源 Origin 校验，缺失时回退到同源 Referer，兼容弹窗跨站标记及仅携 Referer 的提交。
+- 修复 MCP 搜索结果包含内部排序字段时被客户端拒收的问题；从旧版本升级时仍需确保 `0002_oauth.sql` 已应用，部署脚本会统一检查并执行待应用迁移。
 
 ## 1.0.0 更新说明（2026-10-16）
 
@@ -116,7 +125,7 @@ easynote/
 │   │   └── client.ts         # MCP 内部 API 客户端
 │   └── shared/types.ts
 ├── docs/AI_INTEGRATION.md    # 用户与 AI 接入指南
-├── migrations/               # 新安装使用的 D1 Schema 基线
+├── migrations/               # D1 初始结构与增量升级迁移
 ├── scripts/
 │   ├── common.sh             # 环境、锁定依赖、构建与端口检查
 │   ├── setup.mjs             # 强制交互式账号初始化
@@ -422,7 +431,7 @@ cd easynote
 bash deploy.sh
 ```
 
-部署脚本会构建并检查项目，然后更新 Worker。数据库结构统一定义在 `0001_initial.sql`，分享数据只使用 `note_shares` 表。按终端提示输入 Cloudflare API Token，并使用 `deploy <Worker 名称>` 确认即可。
+部署脚本会构建并检查项目，按顺序应用 `migrations/` 中尚未执行的数据库迁移，然后更新 Worker。`0001_initial.sql` 定义初始结构，后续迁移补充 OAuth、目录和手动排序；升级到 1.1.0 需包含 `0004_order.sql`。分享数据只使用 `note_shares` 表。按终端提示输入 Cloudflare API Token，并使用 `deploy <Worker 名称>` 确认即可。
 
 官方参考：[Wrangler API Token 环境变量](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/)、[Workers 权限](https://developers.cloudflare.com/workers/authorization/)、[创建 API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)、[创建 D1 API](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/create/)、[创建 R2 bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/)、[workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)、[Worker Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)、[List Routes API](https://developers.cloudflare.com/api/resources/workers/subresources/routes/methods/list/)。
 
@@ -694,4 +703,6 @@ API 测试使用内存 D1 / R2；浏览器测试自动在 `127.0.0.1:8792` 启�
 
 在笔记列表右键可复制为独立副本、编辑、移入回收站或移动到指定目录/根目录。键盘可用 Shift+F10 打开菜单，方向键选择，Escape 关闭；手机通过“更多笔记操作”复制或移动。离线可查看目录和编辑已缓存笔记，目录结构操作需要联网。
 
-ZIP 导入导出和灾备备份保留目录结构；旧 ZIP 和添加目录功能前的灾备备份仍可导入/恢复。从 0.11.0 之前的版本升级时需应用 `0003_folders.sql` 迁移（现有部署脚本会应用迁移）；从 0.11.0 升级到 1.0.0 无新增迁移。
+桌面可拖拽目录调整同层顺序或移动到目标目录；多选笔记后可整组拖入目录或固定的“根目录”入口。在目录内点击“排序方式”切换手动排序与最近修改，各目录偏好按账号保存在当前浏览器；手动排序时可拖拽笔记或用 Alt+↑ / Alt+↓ 调整位置。搜索、标签和全部笔记列表继续按最近修改排序。移动和排序需要联网，手机继续通过操作菜单移动笔记。调整顺序不改变正文、内容版本或修改时间。
+
+ZIP 导入导出和灾备备份保留目录结构；旧 ZIP 和添加目录功能前的灾备备份仍可导入/恢复。从 0.11.0 之前的版本升级时需应用 `0003_folders.sql` 迁移（现有部署脚本会应用迁移）；手动顺序还需 `0004_order.sql`，现有部署脚本会自动应用；ZIP 恢复不保留手动顺序。

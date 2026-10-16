@@ -14,6 +14,7 @@ import {
   type SyncChange,
 } from '../shared/types';
 import { unfinishedTasks } from '../shared/tasks';
+import { compareFolders } from '../shared/order';
 import { api, ApiError, NetworkError, noteEventsUrl } from './api';
 import { mergeNoteChanges, type ConflictPreference, type NoteConflictField } from './merge';
 import { preparePdfExport } from './pdf';
@@ -41,10 +42,20 @@ const blankNote = (note: Pick<Note, 'title' | 'content' | 'tags' | 'archived' | 
 const blankSummary = (note: NoteSummary) =>
   !note.title && !note.excerpt && !note.tags.length && !note.archived && note.deletedAt === null;
 const compareNoteOrder = (
+  left: Pick<NoteSummary, 'id' | 'pinned' | 'updatedAt' | 'position'>,
+  right: Pick<NoteSummary, 'id' | 'pinned' | 'updatedAt' | 'position'>,
+) => Number(right.pinned) - Number(left.pinned) ||
+  left.position - right.position ||
+  right.updatedAt - left.updatedAt || left.id.localeCompare(right.id);
+const recentNoteOrder = (
   left: Pick<NoteSummary, 'id' | 'pinned' | 'updatedAt'>,
   right: Pick<NoteSummary, 'id' | 'pinned' | 'updatedAt'>,
 ) => Number(right.pinned) - Number(left.pinned) ||
   right.updatedAt - left.updatedAt || left.id.localeCompare(right.id);
+const orderFor = (manual: boolean) => manual ? compareNoteOrder : recentNoteOrder;
+// `null` folder means every note; "root" means the notes that live outside any folder.
+const inFolder = (item: { folderId: string | null }, folder: string | null) =>
+  folder === null || (folder === 'root' ? item.folderId === null : item.folderId === folder);
 const noteExcerpt = (content: string, query: string) => {
   const needle = query.trim();
   if (!needle) return content.slice(0, 180);
@@ -119,6 +130,21 @@ export function useNotebook(session: Session) {
   const [tags, setTags] = useState<string[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [folder, setFolder] = useState<string | null>(null);
+  // Folder views default to the manual order; every other view stays last-modified.
+  const [folderOrders, setFolderOrders] = useState<Record<string, 'manual' | 'recent'>>(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(`easynote-folder-orders-${userId}`) ?? '{}');
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+      return Object.fromEntries(Object.entries(stored).filter(([, mode]) => mode === 'manual' || mode === 'recent'));
+    } catch { return {}; }
+  });
+  const folderOrder = folder && folderOrders[folder] === 'recent' ? 'recent' : 'manual';
+  const setFolderOrder = (mode: 'manual' | 'recent') => {
+    if (folder === null) return;
+    const next = { ...folderOrders, [folder]: mode };
+    setFolderOrders(next);
+    try { localStorage.setItem(`easynote-folder-orders-${userId}`, JSON.stringify(next)); } catch { /* Optional preference. */ }
+  };
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState<{
@@ -155,6 +181,7 @@ export function useNotebook(session: Session) {
   const show = useCallback((value: Note | null) => { current.current = value; setNote(value); }, []);
   const notify = () => { if (alive.current) bump((v) => v + 1); };
   notesRef.current = notes;
+  const manualOrder = folder !== null && folderOrder === 'manual' && view === 'all' && !query && !tag;
 
   const renderMirror = useCallback(() => {
     const scoped = [...mirror.current.values()].filter((item) => {
@@ -162,10 +189,10 @@ export function useNotebook(session: Session) {
         if (item.deletedAt === null) return false;
       } else if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
       if (tag && !item.tags.includes(tag)) return false;
-      if (folder && (item.folderId ?? null) !== folder) return false;
+      if (!inFolder(item, folder)) return false;
       return !query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
     });
-    scoped.sort(compareNoteOrder);
+    scoped.sort(orderFor(manualOrder));
     setNotes(scoped.map(({ content, ...item }) => ({ ...item, excerpt: noteExcerpt(content, query) })));
     const viewTags = new Set<string>();
     for (const item of mirror.current.values()) {
@@ -177,7 +204,7 @@ export function useNotebook(session: Session) {
     setTags([...new Set([...viewTags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     setNextOffset(null);
     setOfflineCount(mirror.current.size);
-  }, [folder, query, tag, userId, view]);
+  }, [folder, manualOrder, query, tag, userId, view]);
 
   const cacheReferencedFiles = useCallback(() => {
     if (fileCacheAbort.current || !alive.current || !offlineLibraryRef.current) return;
@@ -221,15 +248,27 @@ export function useNotebook(session: Session) {
       const page = await api.sync(cursor, signal);
       await applyMirrorChanges(userId, page.changes, page.cursor);
       for (const change of page.changes) {
-        if (current.current?.id === change.noteId &&
-            (!change.note || change.note.revision > current.current.revision)) selectionAbort.current?.abort();
+        const currentNote = current.current;
+        const draft = drafts.current.get(change.noteId);
+        if (currentNote?.id === change.noteId && (!change.note || change.note.revision > currentNote.revision)) {
+          selectionAbort.current?.abort();
+        }
         if (change.note) {
           mirror.current.set(change.noteId, change.note);
-          if (current.current?.id === change.noteId && !drafts.current.has(change.noteId) &&
-              change.note.revision > current.current.revision) show(change.note);
+          if (draft && draft.note.revision === change.note.revision && draft.note.position !== change.note.position) {
+            const next: Draft = { ...draft, note: { ...draft.note, position: change.note.position } };
+            drafts.current.set(change.noteId, next);
+            void persist(change.noteId, next).catch(() => undefined);
+            if (currentNote?.id === change.noteId) show(next.note);
+          } else if (currentNote?.id === change.noteId && !draft) {
+            if (change.note.revision > currentNote.revision) show(change.note);
+            else if (change.note.revision === currentNote.revision && change.note.position !== currentNote.position) {
+              show({ ...currentNote, position: change.note.position });
+            }
+          }
         } else {
           mirror.current.delete(change.noteId);
-          if (current.current?.id === change.noteId && !drafts.current.has(change.noteId)) show(null);
+          if (currentNote?.id === change.noteId && !draft) show(null);
         }
       }
       cursor = page.cursor;
@@ -240,7 +279,7 @@ export function useNotebook(session: Session) {
       setOnline(true);
       setOfflineCount(mirror.current.size);
     }
-  }, [cacheReferencedFiles, show, userId]);
+  }, [cacheReferencedFiles, persist, show, userId]);
 
   const syncOnlineChanges = useCallback(async (signal?: AbortSignal) => {
     if (onlineCursor.current === null) {
@@ -263,24 +302,68 @@ export function useNotebook(session: Session) {
     }
     const data = await api.tags(view, signal);
     if (!alive.current) return;
-    onlineCursor.current = cursor;
 
     for (const change of changes) {
-      if (current.current?.id !== change.noteId || drafts.current.has(change.noteId)) continue;
+      const draft = drafts.current.get(change.noteId);
+      if (draft) {
+        if (change.note && draft.note.revision === change.note.revision && draft.note.position !== change.note.position) {
+          const next: Draft = { ...draft, note: { ...draft.note, position: change.note.position } };
+          drafts.current.set(change.noteId, next);
+          void persist(change.noteId, next).catch(() => undefined);
+          if (current.current?.id === change.noteId) show(next.note);
+        }
+        continue;
+      }
+      if (current.current?.id !== change.noteId) continue;
       selectionAbort.current?.abort();
       if (!change.note) show(null);
       else if (change.note.revision > current.current.revision) show(change.note);
+      else if (change.note.revision === current.current.revision && change.note.position !== current.current.position) {
+        show({ ...current.current, position: change.note.position });
+      }
     }
-    if (generation !== listGeneration.current) return;
+    if (generation !== listGeneration.current) {
+      onlineCursor.current = cursor;
+      return;
+    }
 
-    const updated = new Map(notesRef.current.map((item) => [item.id, item]));
+    const loaded = notesRef.current;
+    // A paginated manual folder list cannot be patched in place after a remote reorder: the
+    // stale loaded objects no longer form the first page, so the next append would skip the note
+    // that slid in from the old boundary. Rebuild the loaded prefix from offset 0 instead.
+    if (manualOrder && nextOffset !== null) {
+      const rebuilt: NoteSummary[] = [];
+      let offset = 0;
+      let rebuiltNextOffset: number | null = null;
+      while (rebuilt.length < loaded.length) {
+        const page = await api.list({
+          q: query, view, tag, folder: folder ?? '', offset, sort: 'manual',
+        }, signal);
+        rebuilt.push(...page.notes);
+        rebuiltNextOffset = page.nextOffset;
+        if (page.nextOffset === null || page.notes.length === 0) break;
+        offset = page.nextOffset;
+      }
+      if (!alive.current) return;
+      if (generation === listGeneration.current) {
+        notesRef.current = rebuilt;
+        setNotes(rebuilt);
+        setNextOffset(rebuiltNextOffset);
+        const custom = loadCustomTags(userId);
+        setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
+      }
+      onlineCursor.current = cursor;
+      return;
+    }
+
+    const updated = new Map(loaded.map((item) => [item.id, item]));
     for (const change of changes) {
       const item = change.note;
       const inView = item && (view === 'trash'
         ? item.deletedAt !== null
         : item.deletedAt === null && item.archived === (view === 'archive'));
       const matches = inView && (!tag || item.tags.includes(tag)) &&
-        (!folder || (item.folderId ?? null) === folder) &&
+        inFolder(item, folder) &&
         (!query || `${item.title} ${item.content}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
       if (!item || !matches) updated.delete(change.noteId);
       else {
@@ -288,13 +371,14 @@ export function useNotebook(session: Session) {
         updated.set(item.id, { ...summary, excerpt: noteExcerpt(content, query) });
       }
     }
-    const values = [...updated.values()].sort(compareNoteOrder);
+    const values = [...updated.values()].sort(orderFor(manualOrder));
     notesRef.current = values;
     setNotes(values);
     setNextOffset((value) => value === null ? null : values.length);
     const custom = loadCustomTags(userId);
     setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
-  }, [folder, query, show, tag, userId, view]);
+    onlineCursor.current = cursor;
+  }, [folder, manualOrder, nextOffset, persist, query, show, tag, userId, view]);
   const syncOnlineRef = useRef(syncOnlineChanges);
   syncOnlineRef.current = syncOnlineChanges;
 
@@ -306,7 +390,10 @@ export function useNotebook(session: Session) {
       return;
     }
     // Tags do not depend on the list result, so fetch both in parallel.
-    const listRequest = api.list({ q: query, view, tag, folder: folder ?? '', offset: append ? nextOffset ?? 0 : 0 }, signal);
+    const listRequest = api.list({
+      q: query, view, tag, folder: folder ?? '', offset: append ? nextOffset ?? 0 : 0,
+      sort: manualOrder ? 'manual' : 'recent',
+    }, signal);
     // Early returns below never await this, so mark it handled; the awaited copy still throws.
     const tagsRequest = api.tags(view, signal);
     tagsRequest.catch(() => undefined);
@@ -336,7 +423,7 @@ export function useNotebook(session: Session) {
     if (alive.current && generation === listGeneration.current) {
       setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     }
-  }, [folder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
+  }, [folder, manualOrder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -371,6 +458,8 @@ export function useNotebook(session: Session) {
         try {
           if (draft) await persist(id, draft);
           const operationId = draft?.operationId ?? crypto.randomUUID();
+          const beforeCommitPosition = target.position;
+          const beforeSync = offlineLibraryRef.current ? mirror.current.get(id) : notesRef.current.find((item) => item.id === id);
           const { note: saved } = await api.save(
             id,
             noteInput(target),
@@ -383,17 +472,31 @@ export function useNotebook(session: Session) {
           const previousFailure = retryable.current.get(id);
           retryable.current.delete(id);
           if (previousFailure) setError((value) => value === previousFailure.message ? '' : value);
-          if (offlineLibraryRef.current) mirror.current.set(saved.id, saved);
           const latest = drafts.current.get(id);
+          const synced = offlineLibraryRef.current ? mirror.current.get(id) : notesRef.current.find((item) => item.id === id);
+          // A sync received during this request can carry a newer order than its saved response.
+          let position = saved.position;
+          if (latest && latest.note.position !== beforeCommitPosition) {
+            position = latest.note.position;
+          } else if (synced && synced.revision === saved.revision && synced.position !== beforeSync?.position) {
+            position = synced.position;
+          }
+          const resolved: Note = position === saved.position ? saved : { ...saved, position };
+          if (offlineLibraryRef.current) mirror.current.set(resolved.id, resolved);
           if (latest?.operationId === operationId) {
             drafts.current.delete(id);
-            if (current.current?.id === id) show(saved);
+            if (current.current?.id === id) show(resolved);
             await persist(id, null);
           } else if (latest) {
             const updated: Draft = {
               ...latest,
-              note: { ...latest.note, revision: saved.revision, createdAt: saved.createdAt },
-              base: saved,
+              note: {
+                ...latest.note,
+                revision: resolved.revision,
+                createdAt: resolved.createdAt,
+                position: resolved.position,
+              },
+              base: resolved,
             };
             drafts.current.set(id, updated);
             if (current.current?.id === id) show(updated.note);
@@ -401,7 +504,7 @@ export function useNotebook(session: Session) {
           }
           if (offlineLibraryRef.current) {
             renderMirror();
-            await cacheMirroredNote(userId, saved);
+            await cacheMirroredNote(userId, resolved);
           }
           contentSaved = true;
           if (createVersion && draft) {
@@ -614,7 +717,7 @@ export function useNotebook(session: Session) {
       }
       const newNote: Note = {
         id: crypto.randomUUID(), title: '', content: '', tags: [], pinned: false, archived: false, deletedAt: null,
-        createdAt: Date.now(), updatedAt: Date.now(), revision: 0, ...input, folderId: input.folderId ?? null,
+        position: 0, createdAt: Date.now(), updatedAt: Date.now(), revision: 0, ...input, folderId: input.folderId ?? null,
       };
       open(newNote);
       edit({}, newNote);
@@ -785,7 +888,7 @@ export function useNotebook(session: Session) {
     const result = await api.folders();
     if (!alive.current) return;
     setFolders(result.folders);
-    setFolder((current) => current && !result.folders.some((item) => item.id === current) ? null : current);
+    setFolder((current) => current && current !== 'root' && !result.folders.some((item) => item.id === current) ? null : current);
     if (offlineLibraryRef.current) await cacheMirroredFolders(userId, result.folders);
   }, [session.offline, userId]);
 
@@ -798,7 +901,7 @@ export function useNotebook(session: Session) {
   const createFolder = async (name: string, parentId: string | null): Promise<Folder> => {
     const { folder: created } = await api.createFolder({ id: crypto.randomUUID(), name, parentId });
     applyFolders([...folders.filter((item) => item.id !== created.id), created]
-      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')));
+      .sort(compareFolders));
     return created;
   };
 
@@ -807,9 +910,11 @@ export function useNotebook(session: Session) {
     applyFolders(folders.map((item) => item.id === id ? renamed : item));
   };
 
-  const moveFolder = async (id: string, parentId: string | null): Promise<void> => {
-    const { folder: moved } = await api.moveFolder(id, parentId);
+  const moveFolder = async (id: string, parentId: string | null, anchor: { afterId?: string; beforeId?: string } = {}): Promise<void> => {
+    const { folder: moved } = await api.moveFolder(id, parentId, anchor);
     applyFolders(folders.map((item) => item.id === id ? moved : item));
+    // Landing in a full gap renumbers the siblings, so take their new keys too.
+    await loadFolders();
   };
 
   const deleteFolder = async (id: string): Promise<void> => {
@@ -820,6 +925,34 @@ export function useNotebook(session: Session) {
 
   const moveNotes = (ids: string[], target: string | null): Promise<number> =>
     bulkUpdate(ids, () => ({ folderId: target }));
+
+  // Metadata-only reorder: the server writes position, so drafts, revisions and history stay put.
+  const reorderNotes = async (ids: string[], afterId: string | null, beforeId: string | null): Promise<void> => {
+    const { notes: updated } = await api.orderNotes(ids, { afterId, beforeId });
+    if (!alive.current) return;
+    const positions = new Map(updated.map((item) => [item.id, item.position]));
+    for (const item of updated) {
+      if (offlineLibraryRef.current) {
+        const existing = mirror.current.get(item.id);
+        if (existing) {
+          const next = { ...existing, position: item.position };
+          mirror.current.set(item.id, next);
+          void cacheMirroredNote(userId, next).catch(() => undefined);
+        }
+      }
+      const draft = drafts.current.get(item.id);
+      if (draft) {
+        const next: Draft = { ...draft, note: { ...draft.note, position: item.position } };
+        drafts.current.set(item.id, next);
+        void persist(item.id, next).catch(() => undefined);
+      }
+      if (current.current?.id === item.id) show({ ...current.current, position: item.position });
+    }
+    const patch = <T extends { id: string; position: number }>(item: T): T =>
+      positions.has(item.id) ? { ...item, position: positions.get(item.id)! } : item;
+    setNotes((prev) => prev.map(patch).sort(orderFor(manualOrder)));
+    notify();
+  };
 
   // Copies keep the source folder and include unsynced draft content.
   const copyNote = async (id: string): Promise<Note> => {
@@ -1134,7 +1267,7 @@ export function useNotebook(session: Session) {
   for (const local of pending) {
     if (!visible.some((item) => item.id === local.id)) visible.unshift({ ...local, excerpt: noteExcerpt(local.content, query) });
   }
-  visible.sort(compareNoteOrder);
+  visible.sort(orderFor(manualOrder));
   const filtered = visible.filter((item) => {
     if (view === 'trash') {
       if (item.deletedAt === null) return false;
@@ -1142,7 +1275,7 @@ export function useNotebook(session: Session) {
       if (item.deletedAt !== null || item.archived !== (view === 'archive')) return false;
     }
     if (tag && !item.tags.includes(tag)) return false;
-    if (folder && (item.folderId ?? null) !== folder) return false;
+    if (!inFolder(item, folder)) return false;
     return !query || `${item.title} ${item.excerpt}`.toLocaleLowerCase().includes(query.toLocaleLowerCase());
   });
   const status = !online ? '仅保存在本机' : note && running.current.has(note.id) ? '正在保存' :
@@ -1151,6 +1284,7 @@ export function useNotebook(session: Session) {
   return {
     note, notes: filtered, tags, view, query, tag, setView, setQuery, setTag,
     folders, folder, setFolder, createFolder, renameFolder, moveFolder, deleteFolder, moveNotes, copyNote,
+    reorderNotes, folderOrder, setFolderOrder,
     nextOffset, loading, error, setError, conflict, setConflict, status, pending,
     online, offlineLibrary, offlineCount,
     busy: running.current.size > 0, select, clearSelection, create, edit, append, save: () => note ? save(note.id) : Promise.resolve(true),

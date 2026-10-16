@@ -1729,7 +1729,45 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 /* Hidden until hover so the 200px sidebar keeps the folder name readable at depth 5. */
 .folder-actions { display: none; gap: 0; }
 .folder-row:hover .folder-actions, .folder-row:focus-within .folder-actions { display: inline-flex; }
-.folder-row .folder-action { width: 18px; height: 18px; flex: 0 0 18px; }
+/* nav button sets min-height 35px, which made the hovered row jump 5px taller. */
+.folder-row .folder-action { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; }
+/* Keep action tooltips inside the 200px sidebar; centered ones were clipped at the right edge. */
+.folder-actions .folder-action[data-tooltip]::after { left: auto; right: 0; transform: translate(0, -2px); }
+.folder-actions .folder-action[data-tooltip]:focus-visible::after { transform: translate(0, 0); }
+@media (hover: hover) and (min-width: 641px) {
+  .folder-actions .folder-action[data-tooltip]:hover::after { transform: translate(0, 0); }
+}
+
+/* Drag and drop: a line marks the inserted slot, a filled row marks "drop inside". */
+.note-row.drop-before::before, .note-row.drop-after::before,
+.folder-row.drop-before::before, .folder-row.drop-after::before {
+  content: ''; position: absolute; left: 4px; right: 4px; height: 2px;
+  border-radius: 2px; background: var(--accent);
+}
+.note-row.drop-before::before { top: 0; }
+.note-row.drop-after::before { bottom: 0; }
+/* .folder-row is a flex row; the insert lines above need it positioned. */
+.folder-row { position: relative; }
+.folder-row.drop-before::before { top: 0; }
+.folder-row.drop-after::before { bottom: 0; }
+.folder-row.drop-inside { background: var(--accent-soft); border-radius: 7px; }
+.folder-drop-root {
+  display: flex; align-items: center; gap: 7px; min-height: 30px;
+  margin: 2px 0; padding: 4px 8px; border: 1px dashed var(--line); border-radius: 7px;
+  color: var(--muted); font-size: 13px;
+}
+.folder-drop-root.drop-inside { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+
+/* Folder views switch between the manual order and last-modified. */
+.sort-toggle {
+  display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+  padding: 4px 8px; min-height: 26px; border: 1px solid var(--line); border-radius: 7px;
+  background: transparent; color: var(--muted); font-size: 12px; white-space: nowrap; box-shadow: none;
+}
+.sort-toggle:hover { background: var(--hover); color: var(--ink); }
+@media (max-width: 640px) {
+  .sort-toggle span { display: none; }
+}
 
 /* Note and folder context menus */
 .note-context-menu, .folder-context-menu {

@@ -724,6 +724,13 @@ export const translations: { zh: Record<string, string>; en: Record<string, stri
     '目录名必须为 1-64 个字符。': '目录名必须为 1-64 个字符。',
     '同一层已存在同名目录。': '同一层已存在同名目录。',
     '只能删除空目录；含子目录或笔记（包括回收站）时不可删除。': '只能删除空目录；含子目录或笔记（包括回收站）时不可删除。',
+    '手动排序': '手动排序',
+    '最近修改': '最近修改',
+    '排序方式': '排序方式',
+    '已调整顺序': '已调整顺序',
+    '移到根目录': '移到根目录',
+    '不能把目录移动到它自己的子目录里。': '不能把目录移动到它自己的子目录里。',
+    '目录内调整笔记顺序': '目录内调整笔记顺序',
   },
   en: {
     // Semantic keys
@@ -1433,6 +1440,13 @@ export const translations: { zh: Record<string, string>; en: Record<string, stri
     '目录名必须为 1-64 个字符。': 'Folder name must be 1-64 characters.',
     '同一层已存在同名目录。': 'A folder with this name already exists at this level.',
     '只能删除空目录；含子目录或笔记（包括回收站）时不可删除。': 'Only empty folders can be deleted; subfolders and notes (including trash) must be removed first.',
+    '手动排序': 'Manual order',
+    '最近修改': 'Last modified',
+    '排序方式': 'Sort order',
+    '已调整顺序': 'Order updated',
+    '移到根目录': 'Move to Root',
+    '不能把目录移动到它自己的子目录里。': 'A folder cannot be moved into its own subfolder.',
+    '目录内调整笔记顺序': 'Reorder notes in a folder',
   },
 };
 

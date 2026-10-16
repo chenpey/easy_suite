@@ -1,3 +1,4 @@
+import { compareFolders, placePositions } from '../shared/order';
 import { idPattern, MAX_FOLDER_DEPTH, MAX_FOLDERS, type Folder } from '../shared/types';
 import type { Identity } from './auth';
 import { ApiError, json, readJson, type Env } from './core';
@@ -8,12 +9,14 @@ export interface FolderRow {
   user_id: string;
   parent_id: string | null;
   name: string;
+  position: number;
   created_at: number;
   updated_at: number;
 }
 
 export const toFolder = (row: FolderRow): Folder => ({
-  id: row.id, name: row.name, parentId: row.parent_id, createdAt: row.created_at, updatedAt: row.updated_at,
+  id: row.id, name: row.name, parentId: row.parent_id, position: row.position,
+  createdAt: row.created_at, updatedAt: row.updated_at,
 });
 
 export async function loadFolder(env: Env, userId: string, id: string): Promise<FolderRow | null> {
@@ -77,6 +80,13 @@ function parentId(value: unknown): string | null {
   return value;
 }
 
+// Null means "no anchor", which appends the folder behind its new siblings.
+function anchorId(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !idPattern.test(value)) throw new ApiError(400, 'Invalid anchor folder ID.');
+  return value;
+}
+
 function onlyKeys(data: Record<string, unknown>, keys: string[]): void {
   if (Object.keys(data).some((key) => !keys.includes(key))) throw new ApiError(400, 'Invalid folder fields.');
 }
@@ -88,9 +98,9 @@ export async function folderRoutes(
   path: string,
 ): Promise<Response | null> {
   if (path === '/api/folders' && request.method === 'GET') {
-    const rows = await env.DB.prepare('SELECT * FROM folders WHERE user_id=? ORDER BY name,id')
+    const rows = await env.DB.prepare('SELECT * FROM folders WHERE user_id=? ORDER BY position,name,id')
       .bind(user.id).all<FolderRow>();
-    return json({ folders: rows.results.map(toFolder) });
+    return json({ folders: rows.results.map(toFolder).sort(compareFolders) });
   }
   if (path === '/api/folders' && request.method === 'POST') {
     const data = await readJson(request, 2048);
@@ -137,14 +147,18 @@ export async function folderRoutes(
   if (!idPattern.test(id)) throw new ApiError(404, 'Folder not found.');
   if (request.method === 'PATCH') {
     const data = await readJson(request, 1024);
-    onlyKeys(data, ['name', 'parentId']);
+    onlyKeys(data, ['name', 'parentId', 'afterId', 'beforeId']);
     const rename = Object.hasOwn(data, 'name');
     const move = Object.hasOwn(data, 'parentId');
-    if (!rename && !move) throw new ApiError(400, 'Invalid folder fields.');
+    const afterId = anchorId(data.afterId);
+    const beforeId = anchorId(data.beforeId);
+    if (!rename && !move && !afterId && !beforeId) throw new ApiError(400, 'Invalid folder fields.');
+    if (afterId && beforeId) throw new ApiError(400, 'Provide at most one anchor folder.');
     const existing = await loadFolder(env, user.id, id);
     if (!existing) throw new ApiError(404, 'Folder not found.');
     const name = rename ? folderName(data.name) : existing.name;
     const parent = move ? parentId(data.parentId) : existing.parent_id;
+    if (afterId === id || beforeId === id) throw new ApiError(400, 'A folder cannot be anchored to itself.');
     if (move && parent !== existing.parent_id) {
       const depths = await subtreeDepths(env, user.id, id);
       if (!depths) throw new ApiError(404, 'Folder not found.');
@@ -158,9 +172,27 @@ export async function folderRoutes(
       }
       if (depth + height > MAX_FOLDER_DEPTH) throw new ApiError(400, `Folders support at most ${MAX_FOLDER_DEPTH} levels.`);
     }
+    // Only a real reparenting or an explicit anchor moves the folder inside its sibling list;
+    // a plain rename keeps the current slot.
+    const reorder = !!afterId || !!beforeId || parent !== existing.parent_id;
+    const siblings = reorder
+      ? (await env.DB.prepare('SELECT id,name,position FROM folders WHERE user_id=? AND parent_id IS ? AND id<>?')
+          .bind(user.id, parent, id).all<{ id: string; name: string; position: number }>()).results.sort(compareFolders)
+      : [];
+    let index = siblings.length;
+    if (afterId || beforeId) {
+      const at = siblings.findIndex((row) => row.id === (afterId ?? beforeId));
+      if (at < 0) throw new ApiError(400, 'Anchor folder not found in the target folder.');
+      index = afterId ? at + 1 : at;
+    }
+    const positions = reorder ? placePositions(siblings, [id], index) : new Map<string, number>();
+    const statements = [...positions]
+      .filter(([folderId]) => folderId !== id)
+      .map(([folderId, position]) => env.DB.prepare('UPDATE folders SET position=? WHERE id=? AND user_id=?')
+        .bind(position, folderId, user.id));
     // Rename and move share one atomic statement: a concurrent writer cannot slip a sibling
     // duplicate, a foreign parent or a cycle in between the checks above and this update.
-    const written = await env.DB.prepare(`UPDATE folders AS target SET name=?,parent_id=?,updated_at=?
+    statements.push(env.DB.prepare(`UPDATE folders AS target SET name=?,parent_id=?,position=?,updated_at=?
       WHERE target.id=? AND target.user_id=?
       AND (? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))
       AND NOT EXISTS(SELECT 1 FROM folders WHERE user_id=? AND parent_id IS ? AND name=? AND id<>?)
@@ -171,8 +203,10 @@ export async function folderRoutes(
           WHERE parent.parent_id IS NOT NULL AND ancestors.depth<${MAX_FOLDER_DEPTH}
         ) SELECT 1 FROM ancestors WHERE id=?
       )) RETURNING *`)
-      .bind(name, parent, Date.now(), id, user.id, parent, parent, user.id, user.id, parent, name, id, parent, parent, id)
-      .first<FolderRow>();
+      .bind(name, parent, positions.get(id) ?? existing.position, Date.now(), id, user.id,
+        parent, parent, user.id, user.id, parent, name, id, parent, parent, id));
+    const results = await env.DB.batch(statements);
+    const written = (results.at(-1)!.results as FolderRow[])[0];
     if (!written) {
       if (!await loadFolder(env, user.id, id)) throw new ApiError(404, 'Folder not found.');
       if (parent !== null && await folderDepth(env, user.id, parent) === null) throw new ApiError(400, 'Parent folder not found.');

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, ArchiveRestore, ArrowLeft, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowLeft, ArrowUpDown, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Clock, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
 import type { Folder, ManagedNoteShare, Note, NoteInput, NoteSummary, NoteTask, Session, SharedNote, Version } from '../shared/types';
+import { compareFolders } from '../shared/order';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
 import { AiAccess } from './AiAccess';
@@ -84,6 +85,7 @@ function PdfPagePreview({ pages, progress, error }: { pages: Blob[]; progress: s
 }
 
 function moveButtonFocus(event: ReactKeyboardEvent<HTMLElement>, selector: string) {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(selector)]
     .filter((button) => !button.disabled);
@@ -641,6 +643,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [noteTagQuery, setNoteTagQuery] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Active drag plus the row the pointer is over; `mode` is the drop slot on that row.
+  const [drag, setDrag] = useState<{ kind: 'note' | 'folder'; ids: string[] } | null>(null);
+  const [drop, setDrop] = useState<{ key: string; mode: 'before' | 'after' | 'inside' } | null>(null);
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [bulkTag, setBulkTag] = useState('');
   const [versionList, setVersionList] = useState<Version[] | null>(null);
@@ -827,7 +832,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     try { await action(); } catch (e) { book.setError(String(e)); }
   };
   const createNote = () => run(async () => {
-    await book.create({ folderId: book.folder });
+    // "root" is the view of unfiled notes; it is not a real folder ID.
+    await book.create({ folderId: book.folder === 'root' ? null : book.folder });
     setMobileNavigation(false);
     setMobileNoteActions(false);
     setMobileNote(true);
@@ -870,7 +876,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   };
   const folderChildren = (parentId: string | null) =>
     book.folders.filter((item) => item.parentId === parentId)
-      .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+      // Server order is the manual position; untouched libraries all share position 0.
+      .sort(compareFolders);
   const chooseFolder = (id: string | null) => {
     book.setFolder(id);
     book.setView('all');
@@ -1223,6 +1230,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   }, [inspector, note?.id, note?.revision, book.offlineLibrary]);
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && drag) { endDrag(); return; }
       if (event.defaultPrevented || event.isComposing || event.altKey || event.repeat) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (!modifier || document.querySelector('dialog[open]')) return;
@@ -1468,8 +1476,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
-  const activeView = book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
-    : book.tag ? `${viewName} · #${book.tag}` : viewName;
+  const activeView = book.folder === 'root' ? t('根目录')
+    : book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
+      : book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
   const renderFolderTree = (parentId: string | null, depth: number, actions: boolean): ReactNode =>
     folderChildren(parentId).map((folder) => {
@@ -1477,7 +1486,41 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       const collapsed = collapsedFolders.has(folder.id);
       return (
         <div key={folder.id} className="folder-node">
-          <div className="folder-row" style={{ paddingLeft: depth * 12 }}>
+          <div className={`folder-row ${drop?.key === folder.id ? `drop-${drop.mode}` : ''}`} style={{ paddingLeft: depth * 12 }}
+            draggable={actions && canDrag}
+            onDragStart={(event) => {
+              setDrag({ kind: 'folder', ids: [folder.id] });
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', folder.id);
+            }}
+            onDragEnd={endDrag}
+            onDragOver={(event) => {
+              if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              const offset = (event.clientY - rect.top) / rect.height;
+              // The top and bottom edges insert beside the row; the middle drops inside it.
+              const inside = drag.kind === 'note' || (offset >= 0.25 && offset <= 0.75);
+              setDrop({ key: folder.id, mode: inside ? 'inside' : offset < 0.25 ? 'before' : 'after' });
+              scheduleExpand(folder.id, collapsed, children.length > 0);
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+              clearHoverExpand();
+              setDrop((value) => value?.key === folder.id ? null : value);
+            }}
+            onDrop={(event) => {
+              if (!drag || (drag.kind === 'folder' && folderSubtree(drag.ids[0]).has(folder.id))) return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (drag.kind === 'note') { moveDraggedNotes(folder.id); return; }
+              const rect = event.currentTarget.getBoundingClientRect();
+              const offset = (event.clientY - rect.top) / rect.height;
+              if (offset < 0.25) moveDraggedFolder(folder.parentId, { beforeId: folder.id });
+              else if (offset > 0.75) moveDraggedFolder(folder.parentId, { afterId: folder.id });
+              else moveDraggedFolder(folder.id);
+            }}>
             {children.length ? (
               <button type="button" className="folder-chevron" aria-label={collapsed ? t('展开目录') : t('收起目录')}
                 onClick={() => setCollapsedFolders((current) => {
@@ -1487,6 +1530,21 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                 })}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</button>
             ) : <span className="folder-chevron" />}
             <button type="button" className={`folder-name ${book.folder === folder.id ? 'active' : ''}`}
+              onKeyDown={(event) => {
+                if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (!canDrag) return;
+                const siblings = folderChildren(folder.parentId);
+                const delta = event.key === 'ArrowUp' ? -1 : 1;
+                const anchor = siblings[siblings.findIndex((item) => item.id === folder.id) + delta];
+                const button = event.currentTarget;
+                if (anchor) void run(async () => {
+                  await book.moveFolder(folder.id, folder.parentId,
+                    delta < 0 ? { beforeId: anchor.id } : { afterId: anchor.id });
+                  button.focus();
+                });
+              }}
               onClick={() => chooseFolder(folder.id)}><FolderIcon size={14} /><span>{folder.name}</span></button>
             {actions && <span className="folder-actions">
               <IconButton label="新建子目录" className="folder-action" disabled={depth >= 4 || !book.online || !!session.offline} onClick={() => setFolderDialog({ mode: 'create', parentId: folder.id })}><FolderPlus size={13} /></IconButton>
@@ -1530,6 +1588,94 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         {renderMoveTargets(folder.id, depth + 1, onPick, exclude)}
       </div>
     ));
+  // Drag and drop uses HTML5 drag events only, so touch devices keep the existing menu path.
+  const hoverExpand = useRef(0);
+  const hoverFolder = useRef<string | null>(null);
+  const clearHoverExpand = () => { window.clearTimeout(hoverExpand.current); hoverFolder.current = null; };
+  const endDrag = () => { clearHoverExpand(); setDrag(null); setDrop(null); };
+  const canDrag = book.online && !session.offline && book.view !== 'trash';
+  // Holding a folder opens it, so a collapsed parent can still receive a nested drop.
+  const scheduleExpand = (id: string, collapsed: boolean, hasChildren: boolean) => {
+    if (hoverFolder.current === id) return;
+    clearHoverExpand();
+    if (!collapsed || !hasChildren) return;
+    hoverFolder.current = id;
+    hoverExpand.current = window.setTimeout(() => {
+      setCollapsedFolders((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }, 600);
+  };
+  // Dragging near an edge of a scrolling list continues the scroll.
+  const edgeScroll = (event: { currentTarget: HTMLElement; clientY: number }) => {
+    const box = event.currentTarget;
+    const rect = box.getBoundingClientRect();
+    const margin = 26;
+    if (event.clientY < rect.top + margin) box.scrollBy({ top: -10 });
+    else if (event.clientY > rect.bottom - margin) box.scrollBy({ top: 10 });
+  };
+  const moveDraggedNotes = (folderId: string | null) => {
+    if (!drag || drag.kind !== 'note') return;
+    const ids = drag.ids;
+    endDrag();
+    void run(async () => {
+      await book.moveNotes(ids, folderId);
+      await book.reorderNotes(ids, null, null);
+      showNotice(t('已移动 {0} 篇笔记', ids.length));
+      setSelected(new Set());
+      setSelectionMode(false);
+    });
+  };
+  const moveDraggedFolder = (parentId: string | null, anchor: { afterId?: string; beforeId?: string } = {}) => {
+    if (!drag || drag.kind !== 'folder') return;
+    const id = drag.ids[0];
+    const moving = book.folders.find((item) => item.id === id);
+    endDrag();
+    if (!moving) return;
+    if (parentId !== null && folderSubtree(id).has(parentId)) {
+      book.setError(t('不能把目录移动到它自己的子目录里。'));
+      return;
+    }
+    void run(async () => {
+      if (moving.parentId === parentId && !anchor.afterId && !anchor.beforeId) return;
+      if (book.folders.some((item) => item.parentId === parentId && item.name === moving.name && item.id !== id)) {
+        throw new Error(t('同一层已存在同名目录。'));
+      }
+      await book.moveFolder(id, parentId, anchor);
+      showNotice(t('已移动目录'));
+    });
+  };
+  // Multi-selection keeps its display order, which is the order the server writes back.
+  const draggedIds = (id: string) => {
+    const wanted = selected.has(id) && selected.size > 1 ? selected : new Set([id]);
+    return book.notes.filter((item) => wanted.has(item.id)).map((item) => item.id);
+  };
+  const reorderable = canDrag && book.folder !== null && book.folderOrder === 'manual' && book.view === 'all' && !book.query && !book.tag;
+  const reorderTo = (key: string, mode: 'before' | 'after') => {
+    if (!drag || drag.kind !== 'note') return;
+    const ids = drag.ids;
+    endDrag();
+    void run(async () => {
+      await book.reorderNotes(ids, mode === 'after' ? key : null, mode === 'before' ? key : null);
+      showNotice(t('已调整顺序'));
+    });
+  };
+  // Alt+Arrow moves the focused note, or the whole selection, one slot in the manual order.
+  const keyboardReorder = (id: string, delta: -1 | 1) => {
+    if (!reorderable) return;
+    const ids = draggedIds(id);
+    const moving = new Set(ids);
+    const indexes = book.notes.map((item, index) => moving.has(item.id) ? index : -1).filter((index) => index >= 0);
+    const anchor = book.notes[delta < 0 ? indexes[0] - 1 : indexes[indexes.length - 1] + 1];
+    if (!indexes.length || !anchor) return;
+    const button = document.activeElement;
+    void run(async () => {
+      await book.reorderNotes(ids, delta > 0 ? anchor.id : null, delta < 0 ? anchor.id : null);
+      if (button instanceof HTMLElement) button.focus();
+    });
+  };
   const commandMatch = (...labels: string[]) => {
     const query = commandQuery.trim().toLocaleLowerCase();
     return !query || labels.some((label) => label.toLocaleLowerCase().includes(query));
@@ -1640,7 +1786,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <IconButton label="收起侧栏" onClick={() => setSidebar(false)}><PanelLeftClose size={16} /></IconButton>
       </div>
       <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
-      <nav className="folder-nav" aria-label={t('note_categories')}>
+      <nav className="folder-nav" aria-label={t('note_categories')} onDragOverCapture={edgeScroll}>
         <button ref={allNotesRef} className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}
           onContextMenu={(event) => { event.preventDefault(); openFolderMenu(event.clientX, event.clientY); }}
           onKeyDown={(event) => {
@@ -1650,6 +1796,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             openFolderMenu(rect.left, rect.bottom);
           }}><FileText size={17} />{t('all_notes')}</button>
         {renderFolderTree(null, 0, true)}
+        <button type="button" className={`folder-drop-root ${book.folder === 'root' ? 'active' : ''} ${drop?.key === 'root' ? 'drop-inside' : ''}`}
+          onClick={() => chooseFolder('root')}
+          onDragOver={(event) => { if (!drag) return; event.preventDefault(); clearHoverExpand(); setDrop({ key: 'root', mode: 'inside' }); }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+            setDrop((value) => value?.key === 'root' ? null : value);
+          }}
+          onDrop={(event) => {
+            if (!drag) return;
+            event.preventDefault();
+            if (drag.kind === 'folder') moveDraggedFolder(null);
+            else moveDraggedNotes(null);
+          }}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
         <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -1680,6 +1839,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             if (selectionMode) exitSelectionMode();
             else setSelectionMode(true);
           }}>{selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}</IconButton>}
+          {book.folder !== null && book.view === 'all' && !book.query && !book.tag && <button type="button" className="sort-toggle" aria-label={t('排序方式')} title={t('排序方式')}
+            onClick={() => book.setFolderOrder(book.folderOrder === 'manual' ? 'recent' : 'manual')}>
+            {book.folderOrder === 'manual' ? <ArrowUpDown size={14} /> : <Clock size={14} />}
+            <span>{book.folderOrder === 'manual' ? t('手动排序') : t('最近修改')}</span>
+          </button>}
           <IconButton label={syncing ? '正在同步全部' : '同步全部'} className="icon-button list-sync-action" onClick={() => void syncNow(false)} disabled={book.busy || syncing}>{syncing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}</IconButton>
           {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
             <IconButton label="全部永久删除" className="icon-button danger-icon list-purge-action" onClick={() => setConfirmAction('purge-all')} disabled={disabled || book.pending.length > 0}><Trash2 size={17} /></IconButton>}
@@ -1744,12 +1908,39 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           )}
         </div>
       </header>
-      <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')}>
+      <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')} onDragOverCapture={edgeScroll}>
         {book.loading ? <div className="empty-state">{t('loading')}</div> : !book.notes.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleNotes.map((item) =>
-          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''}`} data-note-row data-note-id={item.id} key={item.id}
+          <button className={`note-row ${item.id === note?.id ? 'selected' : ''} ${selected.has(item.id) ? 'checked' : ''} ${drop?.key === item.id ? `drop-${drop.mode}` : ''}`} data-note-row data-note-id={item.id} key={item.id}
             title={t('双击在独立窗口中打开阅读')}
             aria-label={`${item.title || t('untitled_note')}，${new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}`}
             aria-pressed={selectionMode ? selected.has(item.id) : undefined}
+            draggable={canDrag}
+            onDragStart={(event) => {
+              const ids = draggedIds(item.id);
+              setDrag({ kind: 'note', ids });
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', ids.join('\n'));
+            }}
+            onDragEnd={endDrag}
+            onDragOver={(event) => {
+              // Rows inside the dragged selection already sit in the gap, so they take no drop.
+              if (!reorderable || !drag || drag.kind !== 'note' || drag.ids.includes(item.id)) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              setDrop({ key: item.id, mode: event.clientY < rect.top + rect.height / 2 ? 'before' : 'after' });
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+              setDrop((value) => value?.key === item.id ? null : value);
+            }}
+            onDrop={(event) => {
+              if (!reorderable || !drag || drag.kind !== 'note' || drag.ids.includes(item.id)) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              reorderTo(item.id, event.clientY < rect.top + rect.height / 2 ? 'before' : 'after');
+            }}
             onClick={(event) => {
               if (event.detail >= 2) return;
               if (selectionMode) toggleSelected(item.id);
@@ -1761,6 +1952,12 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               openNoteMenu(item.id, item.deletedAt !== null, event.clientX, event.clientY);
             }}
             onKeyDown={(event) => {
+              if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                event.preventDefault();
+                event.stopPropagation();
+                keyboardReorder(item.id, event.key === 'ArrowUp' ? -1 : 1);
+                return;
+              }
               if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                 event.preventDefault();
                 const rect = event.currentTarget.getBoundingClientRect();
@@ -2022,6 +2219,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
       <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
         <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
+        <button className={!shareManagement && book.folder === 'root' ? 'active' : ''} onClick={() => chooseFolder('root')}><FolderIcon size={18} />{t('根目录')}</button>
         {renderFolderTree(null, 0, false)}
         <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>
@@ -2207,6 +2405,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <div><span>{t('快捷键帮助')}</span><kbd>Cmd/Ctrl+/</kbd></div>
         <div><span>{t('关闭弹窗')}</span><kbd>Esc</kbd></div>
         <div><span>{t('命令或笔记列表导航')}</span><kbd>↑ / ↓</kbd></div>
+        <div><span>{t('目录内调整笔记顺序')}</span><kbd>Alt+↑ / Alt+↓</kbd></div>
       </div>
     </Modal>}
     {linkPicker && <Modal title="插入内部链接" close={() => {

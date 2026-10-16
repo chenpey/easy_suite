@@ -10,7 +10,7 @@ Easy Suite is a multi-project repository containing four independent tools for f
 | Project | Current Version |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.3.1` |
-| [EasyNote](easynote/) | `1.0.0` |
+| [EasyNote](easynote/) | `1.1.0` |
 | [EasyMac](easymac/) | `0.4.4` |
 | [EasyTest](easytest/) | `0.4.1` |
 <!-- versions:end -->
@@ -33,7 +33,7 @@ See [EasyDrop README](easydrop/README.md) for details.
 
 EasyNote is a self-hosted web application for writing, organizing, searching, and sharing Markdown notes across devices. It is designed for individuals and small teams, with a separate data space for every account.
 
-Its main capabilities include autosave, a task center, Obsidian/Markdown import, PDF export with page-by-page preview, time-limited or permanent read-only sharing, private images, full-text search, trash, version history, a complete offline notebook, and concurrent conflict protection. Administrators can manage users and approve registrations, while notes, attachments, offline caches, and AI tokens remain isolated by user.
+Its main capabilities include autosave, a folder tree with desktop drag-and-drop organization, manual note ordering within folders, a task center, Obsidian/Markdown import, PDF export with page-by-page preview, time-limited or permanent read-only sharing, private images, full-text search, trash, version history, a complete offline notebook, and concurrent conflict protection. Administrators can manage users and approve registrations, while notes, attachments, offline caches, and AI tokens remain isolated by user.
 
 Tech Stack: React, TypeScript, CodeMirror, pdfmake, PDF.js, Cloudflare Workers, D1, R2.
 

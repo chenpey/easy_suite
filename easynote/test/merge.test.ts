@@ -12,6 +12,7 @@ const baseNote = (patch: Partial<Note> = {}): Note => ({
   archived: false,
   deletedAt: null,
   folderId: null,
+  position: 0,
   createdAt: 1,
   updatedAt: 1,
   revision: 1,
@@ -96,4 +97,14 @@ test('folder moves merge with content edits and conflicting moves stay explicit'
   assert.deepEqual(merged.conflicts, []);
   const conflict = mergeNoteChanges(base, local, { ...base, folderId: 'remote-folder' });
   assert.deepEqual(conflict.conflicts, ['folderId']);
+});
+
+test('a merge keeps the server position so another device cannot reset the manual order', () => {
+  const base = baseNote({ position: 0 });
+  const local = { ...base, content: 'local edit' };
+  const remote = { ...base, position: 2048, updatedAt: 5 };
+  const merged = mergeNoteChanges(base, local, remote);
+  assert.equal(merged.note.position, 2048);
+  assert.equal(merged.note.content, 'local edit');
+  assert.deepEqual(merged.conflicts, []);
 });

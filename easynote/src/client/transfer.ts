@@ -98,6 +98,8 @@ function download(name: string, bytes: Uint8Array): void {
 
 export async function exportArchive(progress: (text: string) => void): Promise<void> {
   const files: Record<string, Uint8Array> = {};
+  // shortcut: the archive keeps folderId/name/parentId only, so a restore rebuilds folders and
+  // notes in name / last-modified order; add an explicit position field when restore must keep it.
   const manifest: Manifest = { format: 'easynote', version: 2, notes: [], files: [], folders: [] };
   let total = 0;
   const add = (path: string, bytes: Uint8Array) => {

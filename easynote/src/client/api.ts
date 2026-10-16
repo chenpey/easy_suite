@@ -119,8 +119,11 @@ export const api = {
   deleteUser: (id: string) => request<{ ok: true }>(`/api/admin/users/${id}`, 'DELETE', {}),
   setRegistration: (enabled: boolean) =>
     request<{ registrationEnabled: boolean }>('/api/admin/settings/registration', 'PATCH', { enabled }),
-  list: (query: { q?: string; view?: string; tag?: string; folder?: string; offset?: number } = {}, signal?: AbortSignal) =>
+  list: (query: { q?: string; view?: string; tag?: string; folder?: string; offset?: number; sort?: string } = {}, signal?: AbortSignal) =>
     request<{ notes: NoteSummary[]; nextOffset: number | null }>(`/api/notes?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`, 'GET', undefined, signal),
+  // Manual ordering writes position only; drafts, revisions and history stay untouched.
+  orderNotes: (ids: string[], anchor: { afterId?: string | null; beforeId?: string | null }) =>
+    request<{ notes: Array<{ id: string; position: number }> }>('/api/notes/order', 'PATCH', { ids, ...anchor }),
   tags: (view: string, signal?: AbortSignal) =>
     request<{ tags: string[] }>(`/api/tags?${new URLSearchParams({ view })}`, 'GET', undefined, signal),
   folders: () => request<{ folders: Folder[] }>('/api/folders'),
@@ -128,8 +131,8 @@ export const api = {
     request<{ folder: Folder }>('/api/folders', 'POST', folder),
   renameFolder: (id: string, name: string) =>
     request<{ folder: Folder }>(`/api/folders/${id}`, 'PATCH', { name }),
-  moveFolder: (id: string, parentId: string | null) =>
-    request<{ folder: Folder }>(`/api/folders/${id}`, 'PATCH', { parentId }),
+  moveFolder: (id: string, parentId: string | null, anchor: { afterId?: string; beforeId?: string } = {}) =>
+    request<{ folder: Folder }>(`/api/folders/${id}`, 'PATCH', { parentId, ...anchor }),
   deleteFolder: (id: string) => request<{ ok: true }>(`/api/folders/${id}`, 'DELETE', {}),
   blank: (folder: string | null = null) =>
     request<{ note: Note | null }>(`/api/notes/blank?folder=${encodeURIComponent(folder ?? 'root')}`),

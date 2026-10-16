@@ -7,6 +7,8 @@ export interface Note {
   archived: boolean;
   deletedAt: number | null;
   folderId: string | null;
+  // Manual order key inside folderId; 0 means "not positioned yet".
+  position: number;
   createdAt: number;
   updatedAt: number;
   revision: number;
@@ -39,6 +41,7 @@ export interface Folder {
   id: string;
   name: string;
   parentId: string | null;
+  position: number;
   createdAt: number;
   updatedAt: number;
 }

@@ -2,9 +2,18 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.0.0`
+Current Version: `1.1.0`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.1.0 Release Notes (2026-10-16)
+
+- On desktop, drag folders to reorder siblings or move them into another folder, and drag a selection of notes into a folder or Root. Folder depth, sibling-name uniqueness and cycle checks remain enforced.
+- Root stays visible. Each folder can independently use Manual order or Last modified, with preferences stored per account in the current browser. Manual order supports dragging and Alt+Up / Alt+Down; search, tag and All Notes lists retain last-modified ordering.
+- Reordering notes changes only their positions, preserving content, revisions and modification times. Cross-device position updates retain unsaved drafts and rebuild pagination in manually ordered lists.
+- Upgrading to 1.1.0 requires `0004_order.sql`, which adds note and folder positions and a sorting index. The existing deployment script applies migrations before publishing code. ZIP restores preserve folders but not manual order. Mobile continues to use action menus; moving and reordering require a connection.
+- Fix web ChatGPT MCP authorization: PWA navigation no longer intercepts OAuth, discovery metadata, MCP or share paths. Consent submissions strictly validate a same-origin Origin, falling back to a same-origin Referer only when Origin is absent, allowing popup cross-site markers and Referer-only submissions.
+- Fix MCP search results being rejected when internal sorting fields are present. Upgrades from older versions must also have `0002_oauth.sql` applied; the deployment script checks and applies all pending migrations.
 
 ## 1.0.0 Release Notes (2026-10-16)
 
@@ -116,7 +125,7 @@ easynote/
 │   └── shared/types.ts
 ├── docs/AI_INTEGRATION.md     # User and AI integration guide
 ├── docs/DISASTER_RECOVERY.md  # Backup and disaster recovery procedures
-├── migrations/                # D1 schema baseline
+├── migrations/                # Initial D1 schema and incremental upgrades
 ├── scripts/                   # Setup, maintenance, Cloudflare API, deployment
 ├── test/                      # Integration and UI tests
 ├── setup.sh                  # Prepare local dependencies and admin
@@ -384,4 +393,6 @@ Folder names must be unique within the same level; creating, renaming, moving an
 
 Right-click a note to duplicate, edit, move to trash, or move to a folder/root. Shift+F10 opens the menu, arrow keys navigate, and Escape closes it. Mobile users can duplicate and move from the note actions menu. Cached folders and notes work offline; folder structure changes require a connection.
 
-ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`; the existing deployment script applies migrations. Upgrading from 0.11.0 to 1.0.0 requires no new migration.
+On desktop, drag folders to reorder siblings or move them into a target folder. Drag selected notes as a group into a folder or the permanent Root entry. In a folder, use Sort order to switch between Manual order and Last modified; each folder's preference is stored per account in the current browser. Manual order supports note dragging and Alt+Up / Alt+Down. Search, tag and All Notes lists keep last-modified ordering. Moving and reordering require a connection, and mobile continues to use note action menus. Reordering leaves content, revisions and modification times unchanged.
+
+ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`; the existing deployment script applies migrations. Manual ordering also requires `0004_order.sql`, applied automatically by the existing deployment script. ZIP restores do not retain manual order.

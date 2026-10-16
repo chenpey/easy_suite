@@ -2,8 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import MarkdownIt from 'markdown-it';
 import { markdownMath } from '../src/client/math';
+import { ORDER_STEP, placePositions } from '../src/shared/order';
 
 const md = new MarkdownIt().use(markdownMath);
+type Row = { id: string; position: number };
+const rowsOf = (...positions: number[]): Row[] => positions.map((position, index) => ({ id: `n${index}`, position }));
+// Re-orders like the server does, keeping the previous display order for equal keys.
+const applied = (rows: Row[], updates: Map<string, number>, order: string[]): string[] => {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  return rows.map((row) => ({ ...row, position: updates.get(row.id) ?? row.position }))
+    .sort((left, right) => left.position - right.position || rank.get(left.id)! - rank.get(right.id)!)
+    .map((row) => row.id);
+};
 const formulas = (source: string) => md.parse(source, {}).flatMap((token) =>
   token.type === 'math_block' ? [token] : (token.children ?? []).filter((item) => item.type === 'math_inline'));
 
@@ -63,4 +73,33 @@ test('block and inline formulas share the same size limit', () => {
   assert.equal(formulas(`$${content}$`).length, 0);
   assert.equal(formulas(`$$\n${content}\n$$`).length, 0);
   assert.equal(formulas('$$\nx^2\n$$')[0].content, 'x^2');
+});
+
+test('a first drag between untouched notes keeps the order and gives a real key', () => {
+  const rows = rowsOf(0, 0, 0, 0);
+  const updates = placePositions(rows, ['n3'], 0);
+  assert.equal(updates.size, 1);
+  assert.equal(updates.get('n3'), -ORDER_STEP);
+  assert.deepEqual(applied(rows, updates, ['n0', 'n1', 'n2', 'n3']), ['n3', 'n0', 'n1', 'n2']);
+});
+
+test('a drop between two close notes renumbers the group and lands in place', () => {
+  const rows = rowsOf(ORDER_STEP, ORDER_STEP + 1, 3 * ORDER_STEP);
+  const updates = placePositions(rows, ['n2'], 1);
+  assert.deepEqual([...updates], [['n2', 2 * ORDER_STEP], ['n1', 3 * ORDER_STEP]]);
+  assert.deepEqual(applied(rows, updates, ['n0', 'n1', 'n2']), ['n0', 'n2', 'n1']);
+});
+
+test('dropping a selection keeps the dragged order at the head, middle and end', () => {
+  const rows = rowsOf(0, 0, 0);
+  const head = placePositions(rows, ['n2', 'n1'], 0);
+  assert.deepEqual(applied(rows, head, ['n0', 'n1', 'n2']), ['n2', 'n1', 'n0']);
+
+  const spread = rowsOf(ORDER_STEP, 2 * ORDER_STEP, 3 * ORDER_STEP);
+  const middle = placePositions(spread, ['n2'], 1);
+  assert.equal(middle.get('n2'), 1.5 * ORDER_STEP);
+  assert.deepEqual(applied(spread, middle, ['n0', 'n1', 'n2']), ['n0', 'n2', 'n1']);
+
+  const end = placePositions(spread, ['n0', 'n1'], 1);
+  assert.deepEqual(applied(spread, end, ['n0', 'n1', 'n2']), ['n2', 'n0', 'n1']);
 });

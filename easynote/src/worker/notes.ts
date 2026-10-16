@@ -13,12 +13,13 @@ import {
 } from '../shared/types';
 import { ApiError, clientConfig, digest, json, numberSetting, readJson, type Env } from './core';
 import type { Identity } from './auth';
+import { placePositions } from '../shared/order';
 import { publishNoteChanges } from './events';
 
 export interface NoteRow {
   id: string; user_id: string; title: string; content: string; tags: string; pinned: number; archived: number;
   deleted_at: number | null; folder_id: string | null; created_at: number; updated_at: number; revision: number;
-  dedup_hash: string; mutation_id: string; mutation_hash: string;
+  position: number; dedup_hash: string; mutation_id: string; mutation_hash: string;
 }
 interface VersionInputRow {
   title: string; content: string; tags: string; pinned: number; archived: number; deleted_at: number | null;
@@ -28,7 +29,8 @@ type NoteSaveInput = Omit<NoteInput, 'folderId'> & { folderId: string | null | u
 export const toNote = (row: NoteRow): Note => ({
   id: row.id, title: row.title, content: row.content, tags: JSON.parse(row.tags),
   pinned: !!row.pinned, archived: !!row.archived, deletedAt: row.deleted_at,
-  folderId: row.folder_id ?? null, createdAt: row.created_at, updatedAt: row.updated_at, revision: row.revision,
+  folderId: row.folder_id ?? null, position: row.position,
+  createdAt: row.created_at, updatedAt: row.updated_at, revision: row.revision,
 });
 const versionInput = (row: VersionInputRow): NoteInput => ({
   title: row.title, content: row.content, tags: JSON.parse(row.tags),
@@ -184,10 +186,15 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
         AND (SELECT COUNT(*) FROM notes WHERE user_id=?)<? RETURNING *`)
       .bind(id, user.id, ...fields, time, time, revision, mutation, hash, ...readyBinds, ...folderBinds, id, user.id, numberSetting(env, 'MAX_NOTES', 1, 10000)));
   } else {
+    // A note that changes folder is appended to the target, so it never carries a key that
+    // belonged to the old folder's ordering.
     statements.push(env.DB.prepare(`UPDATE OR IGNORE notes SET title=?,content=?,dedup_hash=?,tags=?,pinned=?,archived=?,deleted_at=?,
-      folder_id=?,updated_at=?,revision=?,mutation_id=?,mutation_hash=?
+      folder_id=?,position=CASE WHEN COALESCE(folder_id,'')=COALESCE(?,'') THEN position
+        ELSE (SELECT COALESCE(MAX(position),0)+1 FROM notes WHERE user_id=? AND deleted_at IS NULL
+          AND COALESCE(folder_id,'')=COALESCE(?,'')) END,
+      updated_at=?,revision=?,mutation_id=?,mutation_hash=?
       WHERE id=? AND user_id=? AND revision=? AND ${readyCondition} AND ${folderCondition} RETURNING *`)
-      .bind(...fields, time, revision, mutation, hash, id, user.id, data.revision, ...readyBinds, ...folderBinds));
+      .bind(...fields, folderId, user.id, folderId, time, revision, mutation, hash, id, user.id, data.revision, ...readyBinds, ...folderBinds));
   }
   const guard = 'EXISTS(SELECT 1 FROM notes WHERE id=? AND user_id=? AND revision=? AND mutation_id=?)';
   const guardBinds = [id, user.id, revision, mutation];
@@ -245,6 +252,74 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   return json({ note: toNote(written) }, create ? 201 : 200);
 }
 
+// Display order of one folder's notes; the key the manual list order sorts by.
+async function orderedNotes(env: Env, userId: string, folderId: string | null): Promise<Array<{ id: string; position: number }>> {
+  const rows = await env.DB.prepare(`SELECT id,position FROM notes
+    WHERE user_id=? AND deleted_at IS NULL AND folder_id IS ?
+    ORDER BY pinned DESC,position ASC,updated_at DESC,id ASC`)
+    .bind(userId, folderId).all<{ id: string; position: number }>();
+  return rows.results;
+}
+
+// Reordering is metadata only: content, revision and updated_at stay untouched, so drafts and
+// optimistic concurrency keep working while other devices pick the order up through sync.
+async function orderNotes(request: Request, env: Env, user: Identity): Promise<Response> {
+  // A multi-selection can cover an entire library, so size the body for MAX_NOTES IDs.
+  const data = await readJson(request, 1024 * 1024);
+  if (Object.keys(data).some((key) => !['ids', 'afterId', 'beforeId'].includes(key))) throw new ApiError(400, 'Invalid order fields.');
+  const ids = data.ids;
+  if (!Array.isArray(ids) || !ids.length || ids.length > numberSetting(env, 'MAX_NOTES', 1, 10000) ||
+      ids.some((id) => typeof id !== 'string' || !idPattern.test(id)) || new Set(ids).size !== ids.length) {
+    throw new ApiError(400, 'Invalid note IDs.');
+  }
+  const anchor = (value: unknown): string | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string' || !idPattern.test(value)) throw new ApiError(400, 'Invalid anchor note ID.');
+    return value;
+  };
+  const afterId = anchor(data.afterId);
+  const beforeId = anchor(data.beforeId);
+  if (afterId && beforeId) throw new ApiError(400, 'Provide at most one anchor note.');
+  const moving = ids as string[];
+  if (moving.includes(afterId ?? '') || moving.includes(beforeId ?? '')) throw new ApiError(400, 'An anchor note cannot be moved.');
+  // One JSON argument keeps the ID list within D1's per-query parameter limit.
+  const idsJson = JSON.stringify(moving);
+  const rows = await env.DB.prepare(`SELECT id,folder_id FROM notes
+    WHERE user_id=? AND id IN (SELECT value FROM json_each(?))`)
+    .bind(user.id, idsJson).all<{ id: string; folder_id: string | null }>();
+  if (rows.results.length !== moving.length) throw new ApiError(404, 'Note not found.');
+  const folderId = rows.results[0].folder_id;
+  if (rows.results.some((row) => (row.folder_id ?? null) !== (folderId ?? null))) {
+    throw new ApiError(400, 'Notes can only be reordered inside their own folder.');
+  }
+  const ordered = await orderedNotes(env, user.id, folderId);
+  const rest = ordered.filter((row) => !moving.includes(row.id));
+  let index = rest.length;
+  if (afterId || beforeId) {
+    const at = rest.findIndex((row) => row.id === (afterId ?? beforeId));
+    if (at < 0) throw new ApiError(400, 'Anchor note not found in this folder.');
+    index = afterId ? at + 1 : at;
+  }
+  const positions = placePositions(ordered, moving, index);
+  // A gap too small renumbers the neighbours as well, so every rewritten key is written,
+  // published and returned; otherwise the client keeps sorting with stale keys.
+  const changed = [...positions.keys()];
+  // Metadata only: the client already holds each note and only needs the new keys.
+  const updatesJson = JSON.stringify(changed.map((id) => ({ id, position: positions.get(id)! })));
+  const time = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE notes SET position=(SELECT json_extract(value,'$.position') FROM json_each(?)
+        WHERE json_extract(value,'$.id')=notes.id)
+      WHERE user_id=? AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?))`)
+      .bind(updatesJson, user.id, updatesJson),
+    env.DB.prepare(`INSERT INTO note_changes(user_id,note_id,changed_at)
+      SELECT ?,id,? FROM notes WHERE user_id=? AND id IN (SELECT json_extract(value,'$.id') FROM json_each(?))`)
+      .bind(user.id, time, user.id, updatesJson),
+  ]);
+  publishNoteChanges(env, user.id, request);
+  return json({ notes: changed.map((id) => ({ id, position: positions.get(id)! })) });
+}
+
 export async function noteRoutes(request: Request, env: Env, user: Identity, path: string): Promise<Response | null> {
   const url = new URL(request.url);
   if (path === '/api/sync/cursor' && request.method === 'GET') {
@@ -299,6 +374,8 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
       filters.push('folder_id=?');
       binds.push(folder);
     }
+    // Manual order only exists inside one folder view; every other list stays last-modified.
+    const manualOrder = url.searchParams.get('sort') === 'manual' && !!folder && view === 'all' && !q && !tag;
     if (ftsQuery) {
       filters.push('notes.rowid IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?)');
       binds.push(ftsQuery);
@@ -311,8 +388,9 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
       ? `(CASE WHEN instr(lower(content),lower(?))>61 THEN '…' ELSE '' END) ||
         substr(content,max(1,instr(lower(content),lower(?))-60),max(180,length(?)+60))`
       : 'substr(content,1,180)';
-    const result = await env.DB.prepare(`SELECT id,title,${excerpt} AS content,tags,pinned,archived,deleted_at,folder_id,created_at,updated_at,revision
-      FROM notes WHERE ${filters.join(' AND ')} ORDER BY pinned DESC,updated_at DESC,id ASC LIMIT ? OFFSET ?`)
+    const result = await env.DB.prepare(`SELECT id,title,${excerpt} AS content,tags,pinned,archived,deleted_at,folder_id,position,created_at,updated_at,revision
+      FROM notes WHERE ${filters.join(' AND ')}
+      ORDER BY pinned DESC,${manualOrder ? 'position ASC,' : ''}updated_at DESC,id ASC LIMIT ? OFFSET ?`)
       .bind(...(q ? [q, q, q] : []), ...binds, limit + 1, offset).all<NoteRow>();
     const notes = result.results.slice(0, limit).map((row) => {
       const { content, ...note } = toNote(row);
@@ -391,6 +469,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
     const row = await loadBlank(env, user.id, folder === null || folder === 'root' ? null : folder);
     return json({ note: row ? toNote(row) : null });
   }
+  if (path === '/api/notes/order' && request.method === 'PATCH') return orderNotes(request, env, user);
   const match = /^\/api\/notes\/([^/]+)(?:\/(versions|backlinks))?$/.exec(path);
   if (!match) return null;
   const id = match[1];
@@ -400,7 +479,7 @@ export async function noteRoutes(request: Request, env: Env, user: Identity, pat
     if (match[2] === 'backlinks') {
       const escaped = id.replace(/[\\%_]/g, '\\$&');
       const rows = await env.DB.prepare(`SELECT id,title,substr(content,1,180) AS content,tags,pinned,archived,
-        deleted_at,folder_id,created_at,updated_at,revision FROM notes
+        deleted_at,folder_id,position,created_at,updated_at,revision FROM notes
         WHERE user_id=? AND deleted_at IS NULL AND content LIKE ? ESCAPE '\\'
         ORDER BY updated_at DESC,id ASC LIMIT 200`).bind(user.id, `%[[${escaped}|%`).all<NoteRow>();
       return json({
