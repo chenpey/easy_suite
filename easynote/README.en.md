@@ -2,9 +2,16 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.0`
+Current Version: `1.3.1`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.1 Release Notes (2026-10-16)
+
+- The plus button in the list toolbar no longer shows a "New" hover tooltip, which duplicated the creation menu underneath it.
+- Tighten the list creation menu and the note and folder context menus with smaller padding, row height and corner radius; mobile keeps 36px touch rows.
+- Restyle the sorting control from an outlined box into the borderless pill already used for sidebar active states, aligned with the toolbar icon height; narrow screens show the icon only.
+- A visual-detail release. No new database migration is required.
 
 ## 1.3.0 Release Notes (2026-10-16)
 

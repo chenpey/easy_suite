@@ -31,10 +31,9 @@ interface InstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-function IconButton({ label, children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  const tooltip = t(label);
+function IconButton({ label, tooltip = t(label), children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; tooltip?: string | false }) {
   const resolvedClass = className ? (className.includes('icon-button') ? className : `icon-button ${className}`) : 'icon-button';
-  return <button className={resolvedClass} data-tooltip={tooltip} aria-label={tooltip} {...props}>{children}</button>;
+  return <button className={resolvedClass} data-tooltip={tooltip || undefined} aria-label={t(label)} {...props}>{children}</button>;
 }
 
 function BrandIcon({ size }: { size: number }) {
@@ -1765,7 +1764,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <IconButton label={syncing ? '正在同步全部' : '同步全部'} className="icon-button list-sync-action" onClick={() => void syncNow(false)} disabled={book.busy || syncing}>{syncing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}</IconButton>
           {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
             <IconButton label="全部永久删除" className="icon-button danger-icon list-purge-action" onClick={() => setConfirmAction('purge-all')} disabled={disabled || book.pending.length > 0}><Trash2 size={17} /></IconButton>}
-          <IconButton label="新建" className="icon-button list-create-action" aria-haspopup="menu" aria-controls="folder-menu"
+          <IconButton label="新建" tooltip={false} className="icon-button list-create-action" aria-haspopup="menu" aria-controls="folder-menu"
             aria-expanded={!!folderContextMenu && !folderContextMenu.folder} disabled={!!transfer || book.loading}
             onClick={(event) => {
               if (folderContextMenu && !folderContextMenu.folder) { closeFolderMenu(); return; }

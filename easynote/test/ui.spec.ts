@@ -3044,6 +3044,7 @@ test('the create menu creates root folders, child folders and notes with keyboar
   await expect(page.locator('.sidebar [data-folder-id], .sidebar .folder-row')).toHaveCount(0);
   const trigger = page.locator('.list-create-action');
   await expect(trigger).toBeEnabled();
+  await expect(trigger).not.toHaveAttribute('data-tooltip', /./);
   await trigger.focus();
   await trigger.press('ArrowDown');
   await expect(page.getByRole('menuitem', { name: '新建笔记', exact: true })).toBeFocused();
