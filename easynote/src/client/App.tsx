@@ -832,8 +832,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     try { await action(); } catch (e) { book.setError(String(e)); }
   };
   const createNote = () => run(async () => {
-    // "root" is the view of unfiled notes; it is not a real folder ID.
-    await book.create({ folderId: book.folder === 'root' ? null : book.folder });
+    await book.create({ folderId: book.folder });
     setMobileNavigation(false);
     setMobileNoteActions(false);
     setMobileNote(true);
@@ -1476,9 +1475,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
   const viewName = book.view === 'trash' ? t('trash') : book.view === 'archive' ? t('归档笔记') : t('all_notes');
-  const activeView = book.folder === 'root' ? t('根目录')
-    : book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
-      : book.tag ? `${viewName} · #${book.tag}` : viewName;
+  const activeView = book.folder ? book.folders.find((item) => item.id === book.folder)?.name ?? viewName
+    : book.tag ? `${viewName} · #${book.tag}` : viewName;
   const disabled = !!transfer || uploading || book.busy || syncing;
   const renderFolderTree = (parentId: string | null, depth: number, actions: boolean): ReactNode =>
     folderChildren(parentId).map((folder) => {
@@ -1787,17 +1785,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
       <button className="new-note" disabled={!!transfer || book.loading} onClick={() => void createNote()}><Plus size={17} />{t('new_note')}</button>
       <nav className="folder-nav" aria-label={t('note_categories')} onDragOverCapture={edgeScroll}>
-        <button ref={allNotesRef} className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}
-          onContextMenu={(event) => { event.preventDefault(); openFolderMenu(event.clientX, event.clientY); }}
-          onKeyDown={(event) => {
-            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-            event.preventDefault();
-            const rect = event.currentTarget.getBoundingClientRect();
-            openFolderMenu(rect.left, rect.bottom);
-          }}><FileText size={17} />{t('all_notes')}</button>
-        {renderFolderTree(null, 0, true)}
-        <button type="button" className={`folder-drop-root ${book.folder === 'root' ? 'active' : ''} ${drop?.key === 'root' ? 'drop-inside' : ''}`}
-          onClick={() => chooseFolder('root')}
+        <button ref={allNotesRef} className={`${!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} ${drop?.key === 'root' ? 'drop-inside' : ''}`} onClick={() => chooseView('all')}
           onDragOver={(event) => { if (!drag) return; event.preventDefault(); clearHoverExpand(); setDrop({ key: 'root', mode: 'inside' }); }}
           onDragLeave={(event) => {
             if (event.currentTarget.contains(event.relatedTarget as Node)) return;
@@ -1808,7 +1796,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             event.preventDefault();
             if (drag.kind === 'folder') moveDraggedFolder(null);
             else moveDraggedNotes(null);
-          }}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
+          }}
+          onContextMenu={(event) => { event.preventDefault(); openFolderMenu(event.clientX, event.clientY); }}
+          onKeyDown={(event) => {
+            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+            event.preventDefault();
+            const rect = event.currentTarget.getBoundingClientRect();
+            openFolderMenu(rect.left, rect.bottom);
+          }}><FileText size={17} />{t('all_notes')}</button>
+        {renderFolderTree(null, 0, true)}
         <button onClick={() => void openTaskCenter()}><ClipboardList size={17} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={17} />{t('archive')}</button>
         <button className={shareManagement ? 'active' : ''} disabled={!book.online || !!session.offline}
@@ -2219,7 +2215,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {mobileNavigation && <Modal title="EasyNote" className="mobile-navigation-dialog" close={() => setMobileNavigation(false)}>
       <nav className="mobile-navigation-list" aria-label={t('移动端笔记分类')}>
         <button className={!shareManagement && book.view === 'all' && !book.tag && !book.folder ? 'active' : ''} onClick={() => chooseView('all')}><FileText size={18} />{t('all_notes')}</button>
-        <button className={!shareManagement && book.folder === 'root' ? 'active' : ''} onClick={() => chooseFolder('root')}><FolderIcon size={18} />{t('根目录')}</button>
         {renderFolderTree(null, 0, false)}
         <button onClick={() => { setMobileNavigation(false); void openTaskCenter(); }}><ClipboardList size={18} />{t('task_center')}</button>
         <button className={!shareManagement && book.view === 'archive' ? 'active' : ''} onClick={() => chooseView('archive')}><Archive size={18} />{t('archive')}</button>

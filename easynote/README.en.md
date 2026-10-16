@@ -2,9 +2,14 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.1.0`
+Current Version: `1.1.1`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.1.1 Release Notes (2026-10-16)
+
+- Remove the duplicate Root entry from desktop and mobile navigation, using All Notes as the single entry. All Notes continues to list notes across folders.
+- On desktop, drop notes or subfolders onto All Notes to move them back to the root level. Drop highlighting, folder creation and keyboard menus remain available. This update requires no new database migration.
 
 ## 1.1.0 Release Notes (2026-10-16)
 
@@ -393,6 +398,6 @@ Folder names must be unique within the same level; creating, renaming, moving an
 
 Right-click a note to duplicate, edit, move to trash, or move to a folder/root. Shift+F10 opens the menu, arrow keys navigate, and Escape closes it. Mobile users can duplicate and move from the note actions menu. Cached folders and notes work offline; folder structure changes require a connection.
 
-On desktop, drag folders to reorder siblings or move them into a target folder. Drag selected notes as a group into a folder or the permanent Root entry. In a folder, use Sort order to switch between Manual order and Last modified; each folder's preference is stored per account in the current browser. Manual order supports note dragging and Alt+Up / Alt+Down. Search, tag and All Notes lists keep last-modified ordering. Moving and reordering require a connection, and mobile continues to use note action menus. Reordering leaves content, revisions and modification times unchanged.
+On desktop, drag folders to reorder siblings or move them into a target folder. Drag selected notes as a group into a folder, or onto All Notes to move them back to the root level. All Notes still lists notes across folders; desktop and mobile navigation no longer have a separate Root entry. In a folder, use Sort order to switch between Manual order and Last modified; each folder's preference is stored per account in the current browser. Manual order supports note dragging and Alt+Up / Alt+Down. Search, tag and All Notes lists keep last-modified ordering. Moving and reordering require a connection, and mobile continues to use note action menus. Reordering notes leaves content, revisions and modification times unchanged.
 
 ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`; the existing deployment script applies migrations. Manual ordering also requires `0004_order.sql`, applied automatically by the existing deployment script. ZIP restores do not retain manual order.

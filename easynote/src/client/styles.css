@@ -1751,12 +1751,9 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .folder-row.drop-before::before { top: 0; }
 .folder-row.drop-after::before { bottom: 0; }
 .folder-row.drop-inside { background: var(--accent-soft); border-radius: 7px; }
-.folder-drop-root {
-  display: flex; align-items: center; gap: 7px; min-height: 30px;
-  margin: 2px 0; padding: 4px 8px; border: 1px dashed var(--line); border-radius: 7px;
-  color: var(--muted); font-size: 13px;
+.folder-nav > button.drop-inside {
+  background: var(--accent-soft); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent);
 }
-.folder-drop-root.drop-inside { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 
 /* Folder views switch between the manual order and last-modified. */
 .sort-toggle {

@@ -468,7 +468,7 @@ test('a note share can be created, extended and cancelled from share management'
   await page.goto('/');
   await newNote(page, title, content);
   expect(await page.getByRole('navigation', { name: '笔记分类' }).getByRole('button').allTextContents())
-    .toEqual(['全部笔记', '根目录', '任务中心', '归档', '分享', '回收站']);
+    .toEqual(['全部笔记', '任务中心', '归档', '分享', '回收站']);
   await page.getByRole('button', { name: '只读分享', exact: true }).click();
   await expect(page.getByLabel('有效期').locator('option[value="permanent"]')).toHaveText('永久');
   await page.getByLabel('有效期').selectOption('24');
@@ -1195,7 +1195,7 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   await expect(page.getByRole('button').filter({ hasText: title })).toBeHidden();
   let navigation = await openMobileNavigation(page);
   expect(await navigation.getByRole('navigation', { name: '移动端笔记分类' }).getByRole('button').allTextContents())
-    .toEqual(['全部笔记', '根目录', '任务中心', '归档', '分享', '回收站']);
+    .toEqual(['全部笔记', '任务中心', '归档', '分享', '回收站']);
   await expect(navigation.getByRole('button', { name: '同步全部', exact: true })).toBeVisible();
   await expect(navigation.getByRole('button', { name: '同步并更新历史版本', exact: true })).toHaveCount(0);
   await navigation.screenshot({ path: 'test-results/mobile-navigation.png' });
@@ -3278,16 +3278,19 @@ async function storedOrderNote(page: Page, id: string, store: 'notes' | 'drafts'
   }, { id, store, userId: testUserId });
 }
 
-test('root is permanent on desktop and mobile and folder sort preferences are independent', async ({ page, context }) => {
+test('all notes is the only root entry on desktop and mobile and folder sort preferences are independent', async ({ page, context }) => {
   const a = await seedOrderFolder(page);
   const b = await seedOrderFolder(page);
   await page.goto('/');
   const nav = page.locator('.sidebar nav.folder-nav');
   const sort = page.getByRole('button', { name: '排序方式', exact: true });
-  const root = nav.getByRole('button', { name: '根目录', exact: true });
-  await root.focus();
-  await root.press('Enter');
-  await expect(sort).toHaveText('手动排序');
+  await expect(nav.getByRole('button', { name: '根目录', exact: true })).toHaveCount(0);
+  const allNotes = nav.getByRole('button', { name: '全部笔记', exact: true });
+  await allNotes.focus();
+  await allNotes.press('Enter');
+  await expect(sort).toHaveCount(0);
+  await expect(page.locator(`[data-note-id="${a.ids[0]}"]`)).toBeVisible();
+  await expect(page.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
   await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
   const title = `未分类-${randomUUID()}`;
   await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
@@ -3316,9 +3319,29 @@ test('root is permanent on desktop and mobile and folder sort preferences are in
   expect(await page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id')))).toEqual(b.ids);
   await page.setViewportSize({ width: 390, height: 844 });
   const navigation = await openMobileNavigation(page);
-  await navigation.getByRole('button', { name: '根目录', exact: true }).click();
+  await expect(navigation.getByRole('button', { name: '根目录', exact: true })).toHaveCount(0);
+  await navigation.getByRole('button', { name: '全部笔记', exact: true }).click();
   await expect(page.locator('[data-note-row]').filter({ hasText: title })).toBeVisible();
   await context.setOffline(false);
+});
+
+test('all notes accepts folder drops back to the root level', async ({ page }) => {
+  const parent = await seedOrderFolder(page, 0);
+  const child = randomUUID();
+  expect((await page.request.post('/api/folders', {
+    headers, data: { id: child, name: child, parentId: parent.folderId },
+  })).status()).toBe(201);
+  await page.goto('/');
+  const nav = page.locator('.sidebar nav.folder-nav');
+  await nav.locator('.folder-row').filter({ hasText: child })
+    .dragTo(nav.getByRole('button', { name: '全部笔记', exact: true }));
+  await expect.poll(async () => {
+    const { folders } = await (await page.request.get('/api/folders')).json();
+    return folders.find((folder: { id: string }) => folder.id === child)?.parentId;
+  }).toBeNull();
+  await page.reload();
+  await expect(nav.getByRole('button', { name: child, exact: true })).toBeVisible();
+  await expect(nav.getByRole('button', { name: '根目录', exact: true })).toHaveCount(0);
 });
 
 test('folder search stays recent and forbids list sorting while allowing folder drops', async ({ page }) => {
@@ -3382,9 +3405,9 @@ test('multi-note folder drops append the entire stable selection including resid
   // Dropping a note in its current folder is still an append, even though no content save is needed.
   await page.locator(`[data-note-id="${b.ids[1]}"]`).dragTo(nav.locator('.folder-row').filter({ hasText: b.folderId }));
   await expect.poll(() => ordered(b.folderId)).toEqual([b.ids[2], ...selectedIds, b.ids[1]]);
-  await page.locator(`[data-note-id="${b.ids[1]}"]`).dragTo(nav.getByRole('button', { name: '根目录', exact: true }));
+  await page.locator(`[data-note-id="${b.ids[1]}"]`).dragTo(nav.getByRole('button', { name: '全部笔记', exact: true }));
   await expect.poll(async () => (await (await page.request.get(`/api/notes/${b.ids[1]}`)).json()).note.folderId).toBeNull();
-  await nav.getByRole('button', { name: '根目录', exact: true }).click();
+  await nav.getByRole('button', { name: '全部笔记', exact: true }).click();
   await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill(`${b.folderId}-1`);
   await expect(page.locator(`[data-note-id="${b.ids[1]}"]`)).toBeVisible();
 });
