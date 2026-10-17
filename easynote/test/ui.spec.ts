@@ -449,6 +449,39 @@ test('task center opens the source note at the unfinished task', async ({ page }
   await expect.poll(() => editor.locator('.cm-line').allTextContents()).toContain('定位：- [ ] 精准定位');
 });
 
+test('online task center loads cursor pages on demand, including empty pages, without duplicate tasks', async ({ page }) => {
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  const firstId = randomUUID(), secondId = randomUUID();
+  const first = { noteId: firstId, noteTitle: '第一页', text: '第一项分页待办', line: 1, offset: 0, archived: false };
+  const second = { ...first, noteId: secondId, noteTitle: '第二页', text: '第二项分页待办' };
+  const cursors = [`2:${firstId}`, `1:${secondId}`];
+  const requests: Array<string | null> = [];
+  await page.route('**/api/tasks?*', async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor');
+    requests.push(cursor);
+    const body = cursor === null ? { tasks: [], nextCursor: cursors[0] }
+      : cursor === cursors[0] ? { tasks: [first], nextCursor: cursors[1] }
+      : { tasks: [first, second], nextCursor: null };
+    await route.fulfill({ json: body });
+  });
+  await page.getByRole('button', { name: '任务中心', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const more = dialog.getByRole('button', { name: '加载更多', exact: true });
+  await expect(more).toBeEnabled();
+  await expect(dialog.getByText('没有未完成的待办事项')).toHaveCount(0);
+  expect(requests).toEqual([null]);
+  await more.click();
+  await expect(dialog.getByText(first.text, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(second.text, { exact: true })).toHaveCount(0);
+  expect(requests).toEqual([null, cursors[0]]);
+  await more.click();
+  await expect(dialog.getByText(second.text, { exact: true })).toBeVisible();
+  await expect(dialog.getByText(first.text, { exact: true })).toHaveCount(1);
+  await expect(more).toHaveCount(0);
+  expect(requests).toEqual([null, ...cursors]);
+});
+
 for (const hint of [true, false]) {
   test(`task center includes unsynced drafts when navigator.onLine is ${hint}`, async ({ page }) => {
     await page.addInitScript((online) => {
@@ -1139,10 +1172,10 @@ test('images render, export includes bytes, and import creates a readable copy',
   expect(path).toBeTruthy();
   const archive = unzipSync(new Uint8Array(await readFile(path!)));
   const manifest = JSON.parse(strFromU8(archive['manifest.json']));
-  expect(manifest.version).toBe(2);
+  expect(manifest.version).toBe(3);
   expect(manifest.notes.find((entry: { title: string }) => entry.title === title)).toMatchObject({
     path: `notes/${title}.md`,
-    pinned: false, archived: true, deletedAt: null,
+    pinned: false, archived: true, deletedAt: null, position: expect.any(Number),
   });
   expect(manifest.notes.find((entry: { id: string }) => entry.id === untitledId).path)
     .toBe('notes/未命名.md');

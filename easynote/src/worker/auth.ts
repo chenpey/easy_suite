@@ -403,22 +403,29 @@ export async function verifyLogin(env: Env, username: string, password: string):
   return user && matches ? user : null;
 }
 
+async function countLoginAttempt(env: Env, key: string, limit: number): Promise<void> {
+  const window = numberSetting(env, 'LOGIN_WINDOW_SECONDS', 60, 86400) * 1000;
+  const now = Date.now();
+  const count = await env.DB.prepare(`INSERT INTO login_attempts(key,started_at,attempts) VALUES(?,?,1)
+    ON CONFLICT(key) DO UPDATE SET
+      attempts=CASE WHEN started_at<=? THEN 1 ELSE MIN(attempts+1,?) END,
+      started_at=CASE WHEN started_at<=? THEN excluded.started_at ELSE started_at END
+    RETURNING attempts`).bind(key, now, now - window, limit + 1, now - window).first<{ attempts: number }>();
+  if (!count || count.attempts > limit) throw new ApiError(429, 'Too many login attempts. Try again later.');
+}
+
+// Per-IP budget. This is the only check that runs before a password is verified, so it throttles
+// brute force without letting one attacker spend a shared budget and block every account.
 export async function limitLogin(request: Request, env: Env): Promise<void> {
   const ip = request.headers.get('CF-Connecting-IP') ?? (localHttp(request, env) ? 'local' : null);
   if (!ip) throw new ApiError(503, 'Client address is unavailable.');
-  const window = numberSetting(env, 'LOGIN_WINDOW_SECONDS', 60, 86400) * 1000;
-  for (const [key, limit] of [
-    [`ip:${await digest(ip)}`, numberSetting(env, 'LOGIN_IP_LIMIT', 1, 1000)],
-    ['global', numberSetting(env, 'LOGIN_GLOBAL_LIMIT', 1, 10000)],
-  ] as const) {
-    const now = Date.now();
-    const count = await env.DB.prepare(`INSERT INTO login_attempts(key,started_at,attempts) VALUES(?,?,1)
-      ON CONFLICT(key) DO UPDATE SET
-        attempts=CASE WHEN started_at<=? THEN 1 ELSE MIN(attempts+1,?) END,
-        started_at=CASE WHEN started_at<=? THEN excluded.started_at ELSE started_at END
-      RETURNING attempts`).bind(key, now, now - window, limit + 1, now - window).first<{ attempts: number }>();
-    if (!count || count.attempts > limit) throw new ApiError(429, 'Too many login attempts. Try again later.');
-  }
+  await countLoginAttempt(env, `ip:${await digest(ip)}`, numberSetting(env, 'LOGIN_IP_LIMIT', 1, 1000));
+}
+
+// Instance-wide budget for rejected passwords only: a correct password must never be refused
+// because someone else exhausted the shared counter.
+export async function recordLoginFailure(env: Env): Promise<void> {
+  await countLoginAttempt(env, 'global', numberSetting(env, 'LOGIN_GLOBAL_LIMIT', 1, 10000));
 }
 
 export async function authRoute(request: Request, env: Env, path: string): Promise<Response | null> {
@@ -450,7 +457,10 @@ export async function authRoute(request: Request, env: Env, path: string): Promi
     }
     await limitLogin(request, env);
     const user = await verifyLogin(env, data.username, data.password);
-    if (!user) throw new ApiError(401, 'Incorrect username or password.');
+    if (!user) {
+      await recordLoginFailure(env);
+      throw new ApiError(401, 'Incorrect username or password.');
+    }
     return createSession(request, env, user);
   }
   if (path === '/api/logout' && request.method === 'POST') {

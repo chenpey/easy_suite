@@ -121,6 +121,8 @@ export async function cleanup(env: Env): Promise<void> {
       AND NOT EXISTS(SELECT 1 FROM integration_tokens WHERE integration_tokens.client_id=oauth_clients.client_id)`)
       .bind(Date.now() - 30 * 86400_000),
     env.DB.prepare('DELETE FROM account_attempts WHERE started_at<?').bind(Date.now() - 86400_000),
+    // Tombstones are retained for 30 days; older ZIPs can recreate a purged ID after cleanup.
+    env.DB.prepare('DELETE FROM purged_notes WHERE purged_at<?').bind(Date.now() - 30 * 86400_000),
     env.DB.prepare('DELETE FROM note_shares WHERE expires_at<?').bind(Date.now()),
     env.DB.prepare(`DELETE FROM integration_tokens
       WHERE (expires_at IS NOT NULL AND expires_at<?) OR (revoked_at IS NOT NULL AND revoked_at<?)`)

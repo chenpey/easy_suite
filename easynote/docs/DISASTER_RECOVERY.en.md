@@ -12,6 +12,8 @@
 
 Web ZIPs are designed for note migration. Complete account states, sessions, AI token hashes, version history, and deletion tombstones are backed up via `backup.sh`.
 
+Deletion tombstones are retained for 30 days and then removed by scheduled cleanup; backups contain only tombstones still present at snapshot time. Updates (PUT) to purged notes still return `410`, but after tombstone cleanup an old ZIP import or revision-zero copy can recreate the original ID. Offline mirrors and ZIPs can persist indefinitely, so tombstones cannot prevent resurrection beyond this window. Before restoring or migrating an old backup, check for sensitive content that was permanently deleted later.
+
 ## Remote Authorization
 
 All commands using `--remote` (backup, preflight check, restore, and password reset) require an interactive terminal and read an invisible Cloudflare custom API Token on each run. Scoped permissions required on the target account include Workers Scripts (Edit), D1 (Edit), and Workers R2 Storage (Edit); initial automated deployments also require Account Settings (Read) to discover accounts, and Custom Domains require Zone (Read) and Workers Routes (Read) on the target Zone.

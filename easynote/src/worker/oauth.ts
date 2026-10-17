@@ -1,4 +1,4 @@
-import { ensureOwner, limitAccountAction, limitLogin, verifyLogin } from './auth';
+import { ensureOwner, limitAccountAction, limitLogin, recordLoginFailure, verifyLogin } from './auth';
 import { ApiError, digest, json, readBytes, readJson, token, type Env } from './core';
 
 // OAuth 2.1 authorization code + PKCE for remote MCP clients (for example ChatGPT).
@@ -189,6 +189,7 @@ async function authorizeSubmitUnsafe(request: Request, env: Env): Promise<Respon
   await limitLogin(request, env);
   const user = await verifyLogin(env, fields.username ?? '', fields.password ?? '');
   if (!user) {
+    await recordLoginFailure(env);
     return consentPage(ctx, { username: fields.username, access, error: 'Incorrect username or password.' }, 401);
   }
   const code = token();

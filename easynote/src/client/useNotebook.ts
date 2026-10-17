@@ -1050,9 +1050,12 @@ export function useNotebook(session: Session) {
       .map(({ content, ...item }) => ({ ...item, excerpt: content.slice(0, 180) }));
   };
 
-  const tasks = async () => {
-    if (!offlineLibraryRef.current) return (await api.tasks()).tasks;
-    return (await allAvailableNotes()).flatMap(unfinishedTasks);
+  // Online pages are requested on demand; the offline library already holds every body locally.
+  const tasks = async (cursor: string | null = null) => {
+    if (offlineLibraryRef.current) {
+      return { tasks: (await allAvailableNotes()).flatMap(unfinishedTasks), nextCursor: null };
+    }
+    return api.tasks(cursor);
   };
 
   const configureOffline = async (enabled: boolean): Promise<void> => {

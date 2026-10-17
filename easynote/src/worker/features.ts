@@ -6,6 +6,9 @@ import { loadNote, toNote, type NoteRow } from './notes';
 import type { StoredFileRow } from './images';
 
 const shareTokenPattern = /^[a-f0-9]{64}$/;
+// At most TASKS_PAGE + 1 candidate bodies (one lookahead) are loaded per request;
+// parsed tasks and the JSON response need additional memory.
+const TASKS_PAGE = 50;
 const isImage = (mime: string) => ['image/jpeg', 'image/png', 'image/webp'].includes(mime);
 
 function shareExpiryHours(data: Record<string, unknown>): number | null {
@@ -25,9 +28,32 @@ export async function featureRoutes(
   path: string,
 ): Promise<Response | null> {
   if (path === '/api/tasks' && request.method === 'GET') {
-    const rows = await env.DB.prepare(`SELECT * FROM notes
-      WHERE user_id=? AND deleted_at IS NULL ORDER BY updated_at DESC,id`).bind(user.id).all<NoteRow>();
-    return json({ tasks: rows.results.flatMap((row) => unfinishedTasks(toNote(row))) });
+    const url = new URL(request.url);
+    const rawCursor = url.searchParams.get('cursor');
+    const cursor = rawCursor === null ? null : /^(\d+):(.+)$/.exec(rawCursor);
+    const limit = Number(url.searchParams.get('limit') ?? TASKS_PAGE);
+    if (rawCursor !== null && (!cursor || !Number.isSafeInteger(Number(cursor[1])) || !idPattern.test(cursor[2])) ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > TASKS_PAGE) {
+      throw new ApiError(400, 'Invalid task scan cursor or limit.');
+    }
+    // Only a note body that can hold an unchecked task is worth loading. The SQL filter must cover
+    // every form unfinishedTasks() accepts: "- [ ]" and the "- []" shorthand.
+    // The upper bound lets notes_tasks seek into the index rather than scan past previous pages.
+    const after = cursor ? ' AND updated_at<=? AND (updated_at<? OR (updated_at=? AND id>?))' : '';
+    const rows = await env.DB.prepare(`SELECT id,title,content,archived,deleted_at,updated_at FROM notes
+      WHERE user_id=? AND deleted_at IS NULL AND (instr(content,'[ ]')>0 OR instr(content,'[]')>0)
+      ${after} ORDER BY updated_at DESC,id LIMIT ?`)
+      .bind(user.id, ...(cursor ? [Number(cursor[1]), Number(cursor[1]), Number(cursor[1]), cursor[2]] : []), limit + 1)
+      .all<Pick<NoteRow, 'id' | 'title' | 'content' | 'archived' | 'deleted_at' | 'updated_at'>>();
+    const page = rows.results.slice(0, limit);
+    const last = page.at(-1);
+    return json({
+      tasks: page.flatMap((row) => unfinishedTasks({
+        id: row.id, title: row.title, content: row.content,
+        archived: !!row.archived, deletedAt: row.deleted_at,
+      })),
+      nextCursor: rows.results.length > limit && last ? `${last.updated_at}:${last.id}` : null,
+    });
   }
 
   if (path === '/api/shares' && request.method === 'GET') {

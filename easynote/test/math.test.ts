@@ -3,7 +3,7 @@ import test from 'node:test';
 import MarkdownIt from 'markdown-it';
 import { markdownMath } from '../src/client/math';
 import { ORDER_STEP, mixFolderEntries, placePositions } from '../src/shared/order';
-import type { Folder, NoteSummary } from '../src/shared/types';
+import { MAX_POSITION, validPosition, type Folder, type NoteSummary } from '../src/shared/types';
 
 const md = new MarkdownIt().use(markdownMath);
 type Row = { id: string; position: number };
@@ -111,6 +111,15 @@ test('block and inline formulas share the same size limit', () => {
   assert.equal(formulas('$$\nx^2\n$$')[0].content, 'x^2');
 });
 
+test('manual order accepts bounded signed integers only', () => {
+  for (const value of [-MAX_POSITION, -ORDER_STEP, 0, ORDER_STEP, MAX_POSITION]) {
+    assert.equal(validPosition(value), true, String(value));
+  }
+  for (const value of [-MAX_POSITION - 1, MAX_POSITION + 1, 0.5, NaN, Infinity, '-1024', null, undefined]) {
+    assert.equal(validPosition(value), false, String(value));
+  }
+});
+
 test('a first drag between untouched notes keeps the order and gives a real key', () => {
   const rows = rowsOf(0, 0, 0, 0);
   const updates = placePositions(rows, ['n3'], 0);
@@ -124,6 +133,23 @@ test('a drop between two close notes renumbers the group and lands in place', ()
   const updates = placePositions(rows, ['n2'], 1);
   assert.deepEqual([...updates], [['n2', 2 * ORDER_STEP], ['n1', 3 * ORDER_STEP]]);
   assert.deepEqual(applied(rows, updates, ['n0', 'n1', 'n2']), ['n0', 'n2', 'n1']);
+});
+
+test('drops beyond either signed position bound renumber every affected row', () => {
+  const cases = [
+    { rows: rowsOf(0, MAX_POSITION - ORDER_STEP, MAX_POSITION), moving: 'n0', index: 2, order: ['n1', 'n2', 'n0'] },
+    { rows: rowsOf(-MAX_POSITION, -MAX_POSITION + ORDER_STEP, 0), moving: 'n2', index: 0, order: ['n2', 'n0', 'n1'] },
+  ];
+  for (const { rows, moving, index, order } of cases) {
+    const updates = placePositions(rows, [moving], index);
+    assert.equal(updates.size, rows.length);
+    assert.ok([...updates.values()].every(validPosition));
+    assert.deepEqual(applied(rows, updates, rows.map((row) => row.id)), order);
+    assert.deepEqual(order.map((id) => updates.get(id)), [ORDER_STEP, 2 * ORDER_STEP, 3 * ORDER_STEP]);
+  }
+  // A folder entering a new parent is not yet part of that parent's sibling list.
+  assert.deepEqual(placePositions([{ id: 'anchor', position: MAX_POSITION }], ['moving'], 1),
+    new Map([['anchor', ORDER_STEP], ['moving', 2 * ORDER_STEP]]));
 });
 
 test('dropping a selection keeps the dragged order at the head, middle and end', () => {

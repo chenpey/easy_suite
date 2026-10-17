@@ -12,6 +12,8 @@
 
 网页 ZIP 用于笔记迁移；完整账号、会话、AI 令牌哈希、历史版本和删除墓碑由 `backup.sh` 备份。
 
+删除墓碑保留 30 天，之后由定时清理移除，备份只包含快照时尚存的墓碑。永久删除后的旧修订更新（PUT）仍返回 `410`；但墓碑清理后，旧 ZIP 导入或 revision 为 0 的旧副本可以原 ID 重新创建笔记。离线镜像和 ZIP 可能长期保留，不能依赖墓碑阻止超过窗口的旧内容复活。恢复或迁移旧备份前，应核对其中是否含已永久删除的敏感内容。
+
 ## 远程授权
 
 所有带 `--remote` 的备份、预检、恢复和密码重置命令都要求交互式终端，并在每次运行时隐藏输入 Cloudflare 自定义 API Token。目标账号范围内需要 Workers Scripts (Edit)、D1 (Edit) 和 Workers R2 Storage (Edit)；首次自动部署还需要 Account Settings (Read) 以发现目标账号，使用 Custom Domain 时再添加目标 Zone 的 Zone (Read) 和 Workers Routes (Read)。

@@ -1,6 +1,7 @@
 import {
   fingerprintPattern,
   idPattern,
+  validPosition,
   noteFingerprint,
   noteInput,
   sameNoteInput,
@@ -86,6 +87,11 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
       data.createVersion !== undefined && typeof data.createVersion !== 'boolean' ||
       (create && data.revision !== 0) || (!create && data.revision === 0)) {
     throw new ApiError(400, 'Invalid revision or operation ID.');
+  }
+  // Only a create may carry an explicit order key; an update keeps the key the server computed, so a
+  // stale client cannot reorder the list through a save.
+  if (!(data.position === undefined || validPosition(data.position))) {
+    throw new ApiError(400, 'Invalid note position.');
   }
   const createVersion = user.actorType === 'ai' || data.createVersion === true;
   const dedupHash = await noteFingerprint(input.title, input.content);
@@ -178,13 +184,13 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   const statements: D1PreparedStatement[] = [];
   if (create) {
     statements.push(env.DB.prepare(`INSERT OR IGNORE INTO notes
-      (id,user_id,title,content,dedup_hash,tags,pinned,archived,deleted_at,folder_id,created_at,updated_at,revision,mutation_id,mutation_hash)
-      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      (id,user_id,title,content,dedup_hash,tags,pinned,archived,deleted_at,folder_id,position,created_at,updated_at,revision,mutation_id,mutation_hash)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
       WHERE ${readyCondition}
         AND ${folderCondition}
         AND NOT EXISTS(SELECT 1 FROM purged_notes WHERE id=?)
         AND (SELECT COUNT(*) FROM notes WHERE user_id=?)<? RETURNING *`)
-      .bind(id, user.id, ...fields, time, time, revision, mutation, hash, ...readyBinds, ...folderBinds, id, user.id, numberSetting(env, 'MAX_NOTES', 1, 10000)));
+      .bind(id, user.id, ...fields, data.position ?? 0, time, time, revision, mutation, hash, ...readyBinds, ...folderBinds, id, user.id, numberSetting(env, 'MAX_NOTES', 1, 10000)));
   } else {
     // A note that changes folder is appended to the target, so it never carries a key that
     // belonged to the old folder's ordering.

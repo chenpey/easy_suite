@@ -5,7 +5,7 @@ import { createRuntime, testCsrf, testToken, testUserId, testPassword } from './
 import { digest } from '../src/worker/core';
 import { cleanup } from '../src/worker/images';
 import { passwordVerifier } from '../src/worker/auth';
-import { MAX_FOLDERS, noteFingerprint } from '../src/shared/types';
+import { MAX_FOLDERS, MAX_POSITION, noteFingerprint, validPosition } from '../src/shared/types';
 
 let instance: Awaited<ReturnType<typeof createRuntime>>;
 const origin = 'https://easynote.example.test';
@@ -64,6 +64,26 @@ test('login uses HttpOnly secure cookie; logout revokes the session', async () =
   assert.equal((await request('/api/logout', 'POST', {}, { Cookie: cookie.split(';')[0], 'X-CSRF-Token': data.csrf })).status, 200);
   assert.equal((await request('/api/notes', 'GET', undefined, { Cookie: cookie.split(';')[0] })).status, 401);
   assert.equal((await (await request('/api/session', 'GET', undefined, { Cookie: cookie.split(';')[0] })).json() as any).expiresAt, null);
+});
+
+test('exhausted global login failures allow correct passwords while the per-IP limit still blocks', async () => {
+  const ip = '198.51.100.77';
+  const ipKey = `ip:${await digest(ip)}`;
+  const previous = await instance.db.prepare("SELECT started_at,attempts FROM login_attempts WHERE key='global'")
+    .first<{ started_at: number; attempts: number }>();
+  try {
+    await instance.db.prepare("INSERT OR REPLACE INTO login_attempts VALUES('global',?,10001)").bind(Date.now()).run();
+    const login = (password: string) => request('/api/login', 'POST', { username: 'tester', password }, { 'CF-Connecting-IP': ip });
+    assert.equal((await login('wrong')).status, 429);
+    assert.equal((await login(testPassword)).status, 200);
+    await instance.db.prepare('INSERT OR REPLACE INTO login_attempts VALUES(?,?,1001)').bind(ipKey, Date.now()).run();
+    assert.equal((await login(testPassword)).status, 429);
+  } finally {
+    await instance.db.prepare("DELETE FROM login_attempts WHERE key IN ('global',?)").bind(ipKey).run();
+    if (previous) {
+      await instance.db.prepare("INSERT INTO login_attempts VALUES('global',?,?)").bind(previous.started_at, previous.attempts).run();
+    }
+  }
 });
 
 test('session bootstrap preserves authenticated, anonymous and first-install behavior', async () => {
@@ -428,6 +448,18 @@ test('trash, restore, permanent deletion and purge tombstones protect old device
   assert.equal((await request(`/api/notes/${note.id}`, 'DELETE', { revision: 4 })).status, 200);
   assert.equal((await request(`/api/notes/${note.id}`)).status, 404);
   assert.equal((await save(note.id, 0)).status, 410);
+  // Cleanup keeps a fresh tombstone (an old device is still answered) and drops aged ones so
+  // purged_notes cannot grow without bound.
+  const env = { DB: instance.db, IMAGES: instance.bucket, IMAGE_GRACE_HOURS: '24' } as any;
+  await cleanup(env);
+  assert.ok(await instance.db.prepare('SELECT id FROM purged_notes WHERE id=?').bind(note.id).first());
+  assert.equal((await save(note.id, 0)).status, 410);
+  await instance.db.prepare('UPDATE purged_notes SET purged_at=? WHERE id=?').bind(Date.now() - 31 * 86400_000, note.id).run();
+  await cleanup(env);
+  assert.equal(await instance.db.prepare('SELECT id FROM purged_notes WHERE id=?').bind(note.id).first(), null);
+  // Updates still fail after expiry, but a revision-zero create can reuse the old ID.
+  assert.equal((await save(note.id, 4)).status, 410);
+  assert.equal((await save(note.id, 0)).status, 201);
 });
 
 test('all trash notes can be permanently deleted in one operation', async () => {
@@ -691,6 +723,52 @@ test('task center aggregates unfinished tasks with source positions', async () =
   assert.deepEqual(firstTasks.map((item: any) => item.line), [1, 6]);
   assert.equal(firstTasks[1].offset, first.content.lastIndexOf('- []'));
   assert.equal(tasks.find((item: any) => item.noteId === archived.id).archived, true);
+  // The scan is paged because it must read note bodies: pages must not overlap or drop tasks.
+  const paged = await (await request('/api/tasks?limit=1')).json() as any;
+  assert.deepEqual(Object.keys(paged).sort(), ['nextCursor', 'tasks']);
+  assert.ok(paged.tasks.length >= 1);
+  assert.equal(typeof paged.nextCursor, 'string');
+  const rest = await (await request(`/api/tasks?limit=50&cursor=${encodeURIComponent(paged.nextCursor)}`)).json() as any;
+  assert.equal(rest.nextCursor, null);
+  const pagedTasks = [...paged.tasks, ...rest.tasks];
+  const keys = pagedTasks.map((item: any) => `${item.noteId}:${item.line}`);
+  assert.equal(new Set(keys).size, keys.length);
+  assert.equal(pagedTasks.filter((item: any) => item.noteId === first.id).length, 2);
+  assert.equal(pagedTasks.filter((item: any) => item.noteId === archived.id).length, 1);
+  assert.equal((await request('/api/tasks?limit=0')).status, 400);
+  assert.equal((await request('/api/tasks?limit=51')).status, 400);
+  assert.equal((await request('/api/tasks?limit=200')).status, 400);
+  for (const cursor of ['', 'bad', `-1:${first.id}`, `1:bad`, `${Number.MAX_SAFE_INTEGER + 1}:${first.id}`]) {
+    assert.equal((await request(`/api/tasks?cursor=${encodeURIComponent(cursor)}`)).status, 400);
+  }
+});
+
+test('task cursors retain tied rows and do not shift after edits or trashing a read row', async () => {
+  const notes: Array<{ id: string }> = [];
+  const time = Date.now() + 60_000;
+  for (let index = 0; index < 5; index++) {
+    const note = await create({ title: `分页任务 ${index}`, content: `- [ ] 任务 ${index}` });
+    // Ties span pages, so the cursor must include the ID as well as the timestamp.
+    await instance.db.prepare('UPDATE notes SET updated_at=? WHERE id=?').bind(time, note.id).run();
+    notes.push(note);
+  }
+  notes.sort((a, b) => a.id.localeCompare(b.id));
+  const first = await (await request('/api/tasks?limit=2')).json() as any;
+  assert.deepEqual(first.tasks.map((task: any) => task.noteId), notes.slice(0, 2).map((note) => note.id));
+  assert.equal((await save(notes[0].id, 1, { content: '- [ ] 已删除', deletedAt: Date.now() })).status, 200);
+  assert.equal((await save(notes[1].id, 1, { content: '- [ ] 已编辑' })).status, 200);
+  await instance.db.prepare('UPDATE notes SET updated_at=? WHERE id=?').bind(time + 1, notes[1].id).run();
+  const tasks = [...first.tasks];
+  let cursor = first.nextCursor;
+  for (let page = 0; cursor !== null; page++) {
+    assert.ok(page < 100, 'task scan failed to terminate');
+    const next = await (await request(`/api/tasks?limit=2&cursor=${encodeURIComponent(cursor)}`)).json() as any;
+    tasks.push(...next.tasks);
+    cursor = next.nextCursor;
+  }
+  const ids = tasks.filter((task: any) => notes.some((note) => note.id === task.noteId)).map((task: any) => task.noteId);
+  assert.deepEqual(ids, notes.map((note) => note.id));
+  assert.equal(new Set(ids).size, ids.length);
 });
 
 test('read-only note shares can be listed, extended, made permanent and revoked', async () => {
@@ -981,6 +1059,56 @@ test('blank-note moves never overwrite another blank and account deletion cascad
   assert.equal(await instance.db.prepare('SELECT id FROM folders WHERE user_id=?').bind(userId).first(), null);
 });
 
+test('note and folder creates preserve signed order keys and reject invalid positions', async () => {
+  for (const position of [-MAX_POSITION, -1024, 0, MAX_POSITION]) {
+    const folderId = randomUUID();
+    const created = await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null, position });
+    assert.equal(created.status, 201, await created.clone().text());
+    assert.equal((await created.json() as any).folder.position, position);
+    const note = await create({ title: `顺序 ${position}`, folderId, position });
+    assert.equal(note.position, position);
+    const updated = await save(note.id, 1, { title: '编辑保留位置', folderId, position: 1234 });
+    assert.equal(updated.status, 200);
+    assert.equal((await updated.json() as any).note.position, position);
+  }
+  for (const position of [-MAX_POSITION - 1, MAX_POSITION + 1, 1.5, '-1024', null]) {
+    const folderId = randomUUID();
+    assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null, position })).status, 400);
+    const note = await save(randomUUID(), 0, { position });
+    assert.equal(note.status, 400);
+    assert.equal((await note.json() as any).error.message, 'Invalid note position.');
+  }
+});
+
+test('note and folder drops at signed bounds renumber siblings into the archive range', async () => {
+  for (const position of [MAX_POSITION, -MAX_POSITION]) {
+    const parentId = randomUUID(), anchorId = randomUUID(), movingId = randomUUID();
+    assert.equal((await request('/api/folders', 'POST', { id: parentId, name: parentId, parentId: null })).status, 201);
+    for (const [id, key] of [[anchorId, position], [movingId, 0]] as const) {
+      assert.equal((await request('/api/folders', 'POST', { id, name: id, parentId, position: key })).status, 201);
+    }
+    const anchor = await create({ title: '边界锚点', folderId: parentId, position });
+    const moving = await create({ title: '移动笔记', folderId: parentId });
+    const folderAnchor = position > 0 ? { afterId: anchorId } : { beforeId: anchorId };
+    const noteAnchor = position > 0 ? { afterId: anchor.id } : { beforeId: anchor.id };
+    const movedFolder = await request(`/api/folders/${movingId}`, 'PATCH', { parentId, ...folderAnchor });
+    assert.equal(movedFolder.status, 200, await movedFolder.clone().text());
+    const movedNotes = await request('/api/notes/order', 'PATCH', { ids: [moving.id], ...noteAnchor });
+    assert.equal(movedNotes.status, 200, await movedNotes.clone().text());
+    assert.equal((await movedNotes.json() as any).notes.length, 2);
+    const folders = ((await (await request('/api/folders')).json() as any).folders as any[])
+      .filter((folder) => folder.parentId === parentId);
+    const notes = (await (await request(`/api/notes?folder=${parentId}&sort=manual`)).json() as any).notes as any[];
+    for (const items of [folders, notes]) {
+      assert.ok(items.every((item) => validPosition(item.position)));
+      assert.deepEqual(items.map((item) => item.position), [1024, 2048]);
+    }
+    assert.deepEqual(folders.map((folder) => folder.id), position > 0 ? [anchorId, movingId] : [movingId, anchorId]);
+    assert.deepEqual(notes.map((note) => note.id), position > 0 ? [anchor.id, moving.id] : [moving.id, anchor.id]);
+    assert.ok(notes.every((note) => note.revision === 1));
+  }
+});
+
 test('manual note order writes only the position and never bumps a revision', async () => {
   const folderId = randomUUID();
   assert.equal((await request('/api/folders', 'POST', { id: folderId, name: folderId, parentId: null })).status, 201);
@@ -995,6 +1123,7 @@ test('manual note order writes only the position and never bumps a revision', as
   const moved = await request('/api/notes/order', 'PATCH', { ids: [last], beforeId: before[0] });
   assert.equal(moved.status, 200, await moved.clone().text());
   const movedNote = (await moved.json() as any).notes[0];
+  assert.ok(movedNote.position < 0);
   const reordered = (await (await request(`/api/notes?folder=${folderId}&sort=manual`)).json() as any).notes
     .map((item: any) => item.id) as string[];
   assert.deepEqual(reordered, [last, ...before.filter((id) => id !== last)]);

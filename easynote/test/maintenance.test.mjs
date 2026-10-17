@@ -11,9 +11,9 @@ const project = resolve(new URL('..', import.meta.url).pathname);
 const maintenance = join(project, 'scripts/maintenance.mjs');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-async function migrationsFixture(beforeFolders = false) {
+async function migrationsFixture(before = '') {
   const directory = join(project, 'migrations');
-  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql') && (!beforeFolders || name < '0003_folders.sql')).sort();
+  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql') && (!before || name < before)).sort();
   const hash = createHash('sha256');
   const contents = [];
   for (const name of names) {
@@ -307,20 +307,28 @@ exit [lindex $result 3]
   }
 });
 
-test('pre-folder disaster recovery backups remain verifiable', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'easynote-legacy-backup-'));
-  try {
-    const migrations = await migrationsFixture(true);
-    await writeFile(join(directory, 'database.sql'), migrations.bytes);
-    await writeFile(join(directory, 'manifest.json'), JSON.stringify({
-      format: 'easynote-disaster-recovery', version: 1,
-      database: { file: 'database.sql', size: migrations.bytes.length, sha256: sha256(migrations.bytes) },
-      migrationsSha256: migrations.sha256, objects: [],
-    }));
-    const result = run(['verify', directory]);
-    assert.equal(result.status, 0, result.stderr);
-  } finally { await rm(directory, { recursive: true, force: true }); }
-});
+for (const before of ['0003_folders.sql', '0005_tasks.sql']) {
+  test(`disaster recovery backups before ${before} remain verifiable`, async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'easynote-legacy-backup-'));
+    try {
+      const migrations = await migrationsFixture(before);
+      await writeFile(join(directory, 'database.sql'), migrations.bytes);
+      await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+        format: 'easynote-disaster-recovery', version: 1,
+        database: { file: 'database.sql', size: migrations.bytes.length, sha256: sha256(migrations.bytes) },
+        migrationsSha256: migrations.sha256, objects: [],
+      }));
+      const result = run(['verify', directory]);
+      assert.equal(result.status, 0, result.stderr);
+      const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
+      manifest.migrationsSha256 = '0'.repeat(64);
+      await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
+      const mismatched = run(['verify', directory]);
+      assert.notEqual(mismatched.status, 0);
+      assert.match(mismatched.stderr, before === '0003_folders.sql' ? /does not contain table folders/ : /Backup schema differs/);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+}
 
 test('restore verification refuses duplicate sibling folder names', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'easynote-folder-dup-'));

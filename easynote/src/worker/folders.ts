@@ -1,5 +1,5 @@
 import { compareFolders, placePositions } from '../shared/order';
-import { idPattern, MAX_FOLDER_DEPTH, MAX_FOLDERS, type Folder } from '../shared/types';
+import { idPattern, MAX_FOLDER_DEPTH, MAX_FOLDERS, validPosition, type Folder } from '../shared/types';
 import type { Identity } from './auth';
 import { ApiError, json, readJson, type Env } from './core';
 import { publishNoteChanges } from './events';
@@ -104,9 +104,12 @@ export async function folderRoutes(
   }
   if (path === '/api/folders' && request.method === 'POST') {
     const data = await readJson(request, 2048);
-    onlyKeys(data, ['id', 'name', 'parentId']);
+    onlyKeys(data, ['id', 'name', 'parentId', 'position']);
     const id = data.id;
     if (typeof id !== 'string' || !idPattern.test(id)) throw new ApiError(400, 'Invalid folder ID.');
+    // Only a create may carry an explicit order key; a move computes its own key so the archive order
+    // is restored without letting a stale client drop a folder into an arbitrary slot.
+    if (!(data.position === undefined || validPosition(data.position))) throw new ApiError(400, 'Invalid folder position.');
     const name = folderName(data.name);
     const parent = parentId(data.parentId);
     const existing = await loadFolder(env, user.id, id);
@@ -122,12 +125,12 @@ export async function folderRoutes(
     const time = Date.now();
     // Guard and insert in one statement so a concurrent sibling with the same name cannot double-write.
     // The primary key is global, so an ID owned by another account must conflict instead of failing on UNIQUE.
-    const written = await env.DB.prepare(`INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at)
-      SELECT ?,?,?,?,?,? WHERE (? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))
+    const written = await env.DB.prepare(`INSERT INTO folders(id,user_id,parent_id,name,position,created_at,updated_at)
+      SELECT ?,?,?,?,?,?,? WHERE (? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))
       AND NOT EXISTS(SELECT 1 FROM folders WHERE id=?)
       AND (SELECT COUNT(*) FROM folders WHERE user_id=?)<${MAX_FOLDERS}
       AND NOT EXISTS(SELECT 1 FROM folders WHERE user_id=? AND parent_id IS ? AND name=?) RETURNING *`)
-      .bind(id, user.id, parent, name, time, time, parent, parent, user.id, id, user.id, user.id, parent, name).first<FolderRow>();
+      .bind(id, user.id, parent, name, data.position ?? 0, time, time, parent, parent, user.id, id, user.id, user.id, parent, name).first<FolderRow>();
     if (!written) {
       if (await env.DB.prepare('SELECT user_id FROM folders WHERE id=?').bind(id).first()) {
         throw new ApiError(409, 'Folder ID already used by another folder.');

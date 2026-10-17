@@ -19,12 +19,12 @@ const applicationTables = [
   'folders', 'notes', 'note_versions', 'note_changes', 'note_shares', 'images', 'image_refs', 'purged_notes',
 ];
 
-async function migrationsSha256(beforeFolders = false) {
+async function migrationsSha256(before = '') {
   const directory = new URL('../migrations/', import.meta.url);
   const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
   const hash = createHash('sha256');
   for (const name of names) {
-    if (beforeFolders && name >= '0003_folders.sql') break;
+    if (before && name >= before) break;
     hash.update(name).update('\0').update(await readFile(new URL(name, directory))).update('\0');
   }
   return hash.digest('hex');
@@ -277,7 +277,7 @@ async function verifyBackup(path) {
     if (siblingKeys.has(key)) fail(`database.sql contains duplicate folder name ${JSON.stringify(folder.name)} under the same parent.`);
     siblingKeys.add(key);
   }
-  const legacy = !scanned.tables.has('folders') && manifest.migrationsSha256 === await migrationsSha256(true);
+  const legacy = !scanned.tables.has('folders') && manifest.migrationsSha256 === await migrationsSha256('0003_folders.sql');
   for (const table of applicationTables) {
     if (legacy && table === 'folders') continue;
     if (!scanned.tables.has(table)) fail(`database.sql does not contain table ${table}.`);
@@ -294,7 +294,9 @@ async function verifyBackup(path) {
     const actual = await fileMetadata(objectPath);
     if (actual.size !== object.size || actual.sha256 !== object.sha256) fail(`R2 object checksum mismatch for ${object.key}.`);
   }
-  if (!legacy && manifest.migrationsSha256 !== await migrationsSha256()) {
+  // 0005 adds only an index; restoring rows from the preceding schema remains compatible.
+  if (!legacy && manifest.migrationsSha256 !== await migrationsSha256() &&
+      manifest.migrationsSha256 !== await migrationsSha256('0005_tasks.sql')) {
     fail('Backup schema differs from the current EasyNote migrations.');
   }
   return { directory, manifest, databasePath };

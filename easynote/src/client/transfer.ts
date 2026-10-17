@@ -1,5 +1,5 @@
 import { zip, unzip, strToU8, strFromU8 } from 'fflate';
-import { filePath, folderDepth, idPattern, imagePath, MAX_FOLDER_DEPTH, MAX_FOLDERS, noteFingerprint, storedFileIds, type ClientConfig } from '../shared/types';
+import { filePath, folderDepth, idPattern, imagePath, MAX_FOLDER_DEPTH, MAX_FOLDERS, validPosition, noteFingerprint, storedFileIds, type ClientConfig } from '../shared/types';
 import { api, uploadAttachment, uploadImage } from './api';
 import { loadCachedFile, loadDrafts } from './drafts';
 
@@ -19,12 +19,13 @@ const ATTACHMENT_MIMES: Record<string, string> = {
   csv: 'text/csv',
   json: 'application/json',
 };
+// v3 adds the manual order key; a v2 archive stays readable and just restores as position 0.
 interface Manifest {
   format: 'easynote';
-  version: 2;
-  notes: Array<{ id: string; path: string; title: string; tags: string[]; pinned: boolean; archived: boolean; deletedAt: number | null; folderId?: string | null }>;
+  version: 2 | 3;
+  notes: Array<{ id: string; path: string; title: string; tags: string[]; pinned: boolean; archived: boolean; deletedAt: number | null; folderId?: string | null; position?: number }>;
   files: Array<{ id: string; path: string; mime: string; filename: string; sha256: string }>;
-  folders?: Array<{ id: string; name: string; parentId: string | null }>;
+  folders?: Array<{ id: string; name: string; parentId: string | null; position?: number }>;
 }
 export interface ImportResult {
   imported: number;
@@ -98,9 +99,9 @@ function download(name: string, bytes: Uint8Array): void {
 
 export async function exportArchive(progress: (text: string) => void): Promise<void> {
   const files: Record<string, Uint8Array> = {};
-  // shortcut: the archive keeps folderId/name/parentId only, so a restore rebuilds folders and
-  // notes in name / last-modified order; add an explicit position field when restore must keep it.
-  const manifest: Manifest = { format: 'easynote', version: 2, notes: [], files: [], folders: [] };
+  // v3 records the manual order key, so a restore rebuilds the same order instead of falling back
+  // to name / last-modified sorting.
+  const manifest: Manifest = { format: 'easynote', version: 3, notes: [], files: [], folders: [] };
   let total = 0;
   const add = (path: string, bytes: Uint8Array) => {
     total += bytes.byteLength;
@@ -119,7 +120,7 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
   const folderResult = await api.folders();
   if (folderResult.folders.length > MAX_FOLDERS) throw new Error('目录数量超过导出上限 1200 个。');
   manifest.folders = folderResult.folders.map((folder) => ({
-    id: folder.id, name: folder.name, parentId: folder.parentId,
+    id: folder.id, name: folder.name, parentId: folder.parentId, position: folder.position,
   }));
   for (const id of ids) {
     const { note } = await api.note(id);
@@ -128,7 +129,7 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
     manifest.notes.push({
       id, path, title: note.title, tags: note.tags,
       pinned: note.pinned, archived: note.archived, deletedAt: note.deletedAt,
-      folderId: note.folderId ?? null,
+      folderId: note.folderId ?? null, position: note.position,
     });
     storedFileIds(note.content).forEach((file) => storedFiles.add(file));
     progress(`导出笔记 ${manifest.notes.length}/${ids.size}`);
@@ -536,7 +537,7 @@ export async function importArchive(
       findDuplicates,
     );
   }
-  if (manifest.version !== 2 || !Array.isArray(manifest.notes) || !Array.isArray(manifest.files)) {
+  if ((manifest.version !== 2 && manifest.version !== 3) || !Array.isArray(manifest.notes) || !Array.isArray(manifest.files)) {
     throw new Error('不支持的备份格式。');
   }
   const folderIds = new Set<string>();
@@ -547,7 +548,8 @@ export async function importArchive(
     for (const folder of manifest.folders) {
       if (!folder || typeof folder.id !== 'string' || !idPattern.test(folder.id) || folderIds.has(folder.id) ||
           typeof folder.name !== 'string' || !folder.name.trim() || folder.name.length > 64 || /[\u0000-\u001f]/.test(folder.name) ||
-          !(folder.parentId === null || typeof folder.parentId === 'string' && idPattern.test(folder.parentId))) {
+          !(folder.parentId === null || typeof folder.parentId === 'string' && idPattern.test(folder.parentId)) ||
+          !(folder.position === undefined || validPosition(folder.position))) {
         throw new Error('目录清单无效。');
       }
       folderIds.add(folder.id);
@@ -582,7 +584,8 @@ export async function importArchive(
         typeof entry.pinned !== 'boolean' || typeof entry.archived !== 'boolean' ||
         !(entry.folderId === undefined || entry.folderId === null ||
           (typeof entry.folderId === 'string' && idPattern.test(entry.folderId) && (!hasFolders || folderIds.has(entry.folderId)))) ||
-        !(entry.deletedAt === null || Number.isSafeInteger(entry.deletedAt) && entry.deletedAt > 0)) {
+        !(entry.deletedAt === null || Number.isSafeInteger(entry.deletedAt) && entry.deletedAt > 0) ||
+        !(entry.position === undefined || validPosition(entry.position))) {
       throw new Error('笔记清单无效或正文缺失。');
     }
     planned.add(entry.id);
@@ -634,7 +637,11 @@ export async function importArchive(
         // IDs owned by other accounts are invisible here, so never reuse an archived ID; a retry reuses by parent and name.
         const targetId = reusable ?? crypto.randomUUID();
         if (!reusable) {
-          available.push((await api.createFolder({ id: targetId, name, parentId })).folder);
+          // The exported order key rides along so a restore keeps the manual order.
+          available.push((await api.createFolder({
+            id: targetId, name, parentId,
+            ...(group[0].position === undefined ? {} : { position: group[0].position }),
+          })).folder);
         }
         for (const folder of group) {
           const id = folderRemap.get(folder.id) ?? targetId;
@@ -672,7 +679,7 @@ export async function importArchive(
         title: entry.title, content, tags: entry.tags, pinned: entry.pinned,
         archived: entry.archived, deletedAt: entry.deletedAt,
         folderId: entry.folderId ? folderRemap.get(entry.folderId) ?? null : null,
-      }, 0, crypto.randomUUID());
+      }, 0, crypto.randomUUID(), false, entry.position);
       imported++;
       progress(`恢复笔记 ${imported}/${unique.length}`);
     }

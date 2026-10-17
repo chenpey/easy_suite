@@ -127,7 +127,7 @@ export const api = {
   tags: (view: string, signal?: AbortSignal) =>
     request<{ tags: string[] }>(`/api/tags?${new URLSearchParams({ view })}`, 'GET', undefined, signal),
   folders: () => request<{ folders: Folder[] }>('/api/folders'),
-  createFolder: (folder: { id: string; name: string; parentId: string | null }) =>
+  createFolder: (folder: { id: string; name: string; parentId: string | null; position?: number }) =>
     request<{ folder: Folder }>('/api/folders', 'POST', folder),
   renameFolder: (id: string, name: string) =>
     request<{ folder: Folder }>(`/api/folders/${id}`, 'PATCH', { name }),
@@ -141,15 +141,17 @@ export const api = {
   existingNotes: (ids: string[]) =>
     request<{ ids: string[] }>('/api/notes/existing', 'POST', { ids }),
   note: (id: string, signal?: AbortSignal) => request<{ note: Note }>(`/api/notes/${id}`, 'GET', undefined, signal),
-  save: (id: string, input: NoteInput, revision: number, operationId: string, createVersion = false) =>
+  // position is honoured on create only, so restoring an archive keeps the exported manual order.
+  save: (id: string, input: NoteInput, revision: number, operationId: string, createVersion = false, position?: number) =>
     request<{ note: Note; unchanged?: boolean }>(`/api/notes/${id}`, revision === 0 ? 'POST' : 'PUT', {
-      ...input, revision, operationId, createVersion,
+      ...input, revision, operationId, createVersion, ...(position === undefined ? {} : { position }),
     }),
   purge: (note: Note) => request(`/api/notes/${note.id}`, 'DELETE', { revision: note.revision }),
   purgeTrash: () => request<{ deleted: number }>('/api/notes/trash', 'DELETE', {}),
   versions: (id: string) => request<{ versions: Version[] }>(`/api/notes/${id}/versions`),
   backlinks: (id: string) => request<{ notes: NoteSummary[] }>(`/api/notes/${id}/backlinks`),
-  tasks: () => request<{ tasks: NoteTask[] }>('/api/tasks'),
+  tasks: (cursor: string | null = null) =>
+    request<{ tasks: NoteTask[]; nextCursor: string | null }>(`/api/tasks?${new URLSearchParams({ limit: '50', ...(cursor === null ? {} : { cursor }) })}`),
   noteShares: () => request<{ shares: ManagedNoteShare[] }>('/api/shares'),
   noteShare: (id: string) => request<{ share: NoteShare | null }>(`/api/notes/${id}/share`),
   createNoteShare: (id: string, expiresInHours: number | null) =>

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { strToU8, zipSync } from 'fflate';
-import { filePath, imagePath, noteFingerprint } from '../src/shared/types';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { filePath, imagePath, MAX_POSITION, noteFingerprint } from '../src/shared/types';
+import { placePositions } from '../src/shared/order';
 import { exportArchive, importArchive, importExternalFiles, missingCachedFileIds } from '../src/client/transfer';
 
 const config = {
@@ -299,3 +300,90 @@ test('export refuses more folders than the archive limit', async () => {
     await assert.rejects(exportArchive(() => {}), /目录数量/);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+for (const position of [3072, -1024, MAX_POSITION, -MAX_POSITION]) {
+  test(`archives restore manual order key ${position}`, async () => {
+    const folderId = randomUUID();
+    const noteId = randomUUID();
+    const topPosition = placePositions([{ id: folderId, position: 0 }, { id: noteId, position: 0 }], [noteId], 0).get(noteId)!;
+    assert.ok(topPosition < 0);
+    const notePosition = position === -1024 ? topPosition : position;
+    const folderPosition = position === 3072 ? 2048 : notePosition;
+    const folder = { id: folderId, name: '顺序目录', parentId: null, position: folderPosition, createdAt: 1, updatedAt: 1 };
+    const note = {
+      id: noteId, title: '顺序笔记', content: '正文', tags: [], pinned: false, archived: false,
+      deletedAt: null, folderId, position: notePosition, createdAt: 1, updatedAt: 2, revision: 1,
+    };
+    const created: Array<{ url: string; body: Record<string, unknown> }> = [];
+    let freshLibrary = false;
+    let archive: Blob | null = null;
+    const originalFetch = globalThis.fetch;
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalDocument = (globalThis as { document?: unknown }).document;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+      if (url === '/api/folders' && init?.method === 'GET') return json({ folders: freshLibrary ? [] : [folder] });
+      if (url === '/api/notes?view=export&offset=0') return json({ notes: [{ ...note, content: undefined, excerpt: '正文' }], nextOffset: null });
+      if (url === `/api/notes/${noteId}` && init?.method === 'GET') return json({ note });
+      if (init?.method === 'POST' && (url === '/api/folders' || url.startsWith('/api/notes/'))) {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        created.push({ url, body });
+        return json(url.startsWith('/api/notes/') ? { note: { ...body, revision: 1 } } : { folder: body }, 201);
+      }
+      throw new Error(`Unexpected ${init?.method ?? 'GET'} ${url}`);
+    }) as typeof fetch;
+    URL.createObjectURL = (blob: Blob) => { archive = blob; return 'blob:archive'; };
+    URL.revokeObjectURL = () => undefined;
+    // The download helper only needs a clickable anchor; the archive is captured through createObjectURL.
+    (globalThis as { document?: unknown }).document = { createElement: () => ({ click() { /* capture only */ } }) };
+    // Drop the 10s revoke timer (fflate's scheduler uses queueMicrotask, so nothing else depends on it).
+    globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+    try {
+      await exportArchive(() => {});
+      assert.ok(archive, 'export did not produce an archive');
+      const bytes = new Uint8Array(await (archive as Blob).arrayBuffer());
+      const entries = unzipSync(bytes);
+      const manifest = JSON.parse(strFromU8(entries['manifest.json'])) as {
+        version: number;
+        notes: Array<{ position?: number }>;
+        folders?: Array<{ position?: number }>;
+      };
+      assert.equal(manifest.version, 3);
+      assert.equal(manifest.notes[0].position, notePosition);
+      assert.equal(manifest.folders?.[0].position, folderPosition);
+
+      // Restore into an empty library: both order keys must reach the server.
+      freshLibrary = true;
+      assert.deepEqual(
+        await importArchive(new File([bytes], 'easynote.zip'), config, () => {}, async () => new Map()),
+        { imported: 1, skipped: 0 },
+      );
+      assert.equal(created.find((item) => item.url === '/api/folders')?.body.position, folderPosition);
+      assert.equal(created.find((item) => item.url.startsWith('/api/notes/'))?.body.position, notePosition);
+
+      // A v2 archive has no order keys, still imports, and leaves the server default in place.
+      const { position: _folderPosition, ...legacyFolder } = folder;
+      const { position: _notePosition, ...legacyNote } = note;
+      const legacy = new File([new Uint8Array(zipSync({
+        'manifest.json': strToU8(JSON.stringify({
+          format: 'easynote', version: 2, files: [], folders: [legacyFolder],
+          notes: [{ ...legacyNote, path: 'notes/legacy.md' }],
+        })),
+        'notes/legacy.md': strToU8('legacy body'),
+      }))], 'legacy.zip');
+      created.length = 0;
+      assert.deepEqual(await importArchive(legacy, config, () => {}, async () => new Map()), { imported: 1, skipped: 0 });
+      assert.equal(created.find((item) => item.url.startsWith('/api/notes/'))?.body.position, undefined);
+    } finally {
+      globalThis.fetch = originalFetch;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+      globalThis.setTimeout = originalSetTimeout;
+      if (originalDocument === undefined) delete (globalThis as { document?: unknown }).document;
+      else (globalThis as { document?: unknown }).document = originalDocument;
+    }
+  });
+}

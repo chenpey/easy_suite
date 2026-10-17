@@ -51,6 +51,12 @@ export const MAX_FOLDER_DEPTH = 5;
 // Clients cap ZIP entries at 1200, so the server keeps folders within the same budget
 // and a full library always stays exportable.
 export const MAX_FOLDERS = 1200;
+// Manual order keys are opaque signed integers. An imported archive writes its exported keys
+// back verbatim, so the API accepts any value in this range instead of forcing everything to 0.
+export const MAX_POSITION = 2 ** 31;
+// A drop before an untouched first row (position 0) produces a legitimate negative key.
+export const validPosition = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && Math.abs(value as number) <= MAX_POSITION;
 
 export function folderDepth(folders: Pick<Folder, 'id' | 'parentId'>[], id: string): number | null {
   let depth = 0;

@@ -611,6 +611,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [taskCenter, setTaskCenter] = useState(false);
   const [tasks, setTasks] = useState<NoteTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksCursor, setTasksCursor] = useState<string | null>(null);
   const [shareManagement, setShareManagement] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [commandPalette, setCommandPalette] = useState(false);
@@ -1090,12 +1091,25 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       book.edit({ content: newContent }, activePopoutNote);
     }
   };
-  const openTaskCenter = async () => {
-    setTaskCenter(true);
+  const loadTasks = async (append = false) => {
     setTasksLoading(true);
-    try { setTasks(await book.tasks()); }
+    try {
+      const page = await book.tasks(append ? tasksCursor : null);
+      setTasks((previous) => {
+        if (!append) return page.tasks;
+        const keys = new Set(previous.map((task) => `${task.noteId}:${task.offset}`));
+        return [...previous, ...page.tasks.filter((task) => !keys.has(`${task.noteId}:${task.offset}`))];
+      });
+      setTasksCursor(page.nextCursor);
+    }
     catch (error) { book.setError(String(error)); }
     finally { setTasksLoading(false); }
+  };
+  const openTaskCenter = async () => {
+    setTaskCenter(true);
+    setTasks([]);
+    setTasksCursor(null);
+    await loadTasks();
   };
   const openTask = async (task: NoteTask) => {
     if (note?.id === task.noteId && layout === 'edit') {
@@ -2377,7 +2391,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <p><code>manifest.json</code> {uiLanguage() === 'en' ? 'Example:' : '示例：'}</p>
         <pre>{uiLanguage() === 'en' ? `{
   "format": "easynote",
-  "version": 2,
+  "version": 3,
   "notes": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -2386,13 +2400,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       "tags": ["sample"],
       "pinned": false,
       "archived": false,
-      "deletedAt": null
+      "deletedAt": null,
+      "position": 0
     }
   ],
   "files": []
 }` : `{
   "format": "easynote",
-  "version": 2,
+  "version": 3,
   "notes": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -2401,7 +2416,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       "tags": ["示例"],
       "pinned": false,
       "archived": false,
-      "deletedAt": null
+      "deletedAt": null,
+      "position": 0
     }
   ],
   "files": []
@@ -2427,7 +2443,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {taskCenter && <Modal title="任务中心" close={() => setTaskCenter(false)}>
       <div className="task-center">
-        {tasksLoading ? <div className="panel-empty">{t('正在汇总待办…')}</div> : !tasks.length
+        {tasksLoading && !tasks.length ? <div className="panel-empty">{t('正在汇总待办…')}</div> : !tasks.length && tasksCursor === null
           ? <div className="panel-empty">{t('没有未完成的待办事项')}</div>
           : tasks.map((task) => <button key={`${task.noteId}:${task.offset}`} onClick={() => void openTask(task)}>
             <span className="task-center-copy">
@@ -2436,6 +2452,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             </span>
             <ChevronRight size={16} aria-hidden="true" />
           </button>)}
+        {tasksCursor !== null && <button className="load-more" disabled={tasksLoading} onClick={() => void loadTasks(true)}>
+          {tasksLoading ? t('正在汇总待办…') : t('加载更多')}
+        </button>}
       </div>
     </Modal>}
     {shareManagement && <Modal title="分享管理" className="share-management-dialog" close={() => setShareManagement(false)}>

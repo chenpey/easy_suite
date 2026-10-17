@@ -2,9 +2,18 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`1.3.5`
+当前版本：`1.3.6`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 1.3.6 更新说明（2026-10-17）
+
+- 收紧桌面与手机的侧栏、笔记列表和编辑工具栏间距；笔记摘要与时间并排显示，目录行与操作按钮保持对齐。
+- ZIP 清单升级为 v3，导入导出保留笔记与目录的手动排序键，继续兼容 v2 备份；统一支持合法负键，拖拽生成超出范围的键时重编号同组条目，避免导出的备份无法恢复。
+- 在线任务中心改用修改时间与 ID 游标，按需“加载更多”；每页最多处理 50 篇候选笔记，另读取 1 篇判断下一页，并防止重复显示。分页不是固定快照，加载期间移到游标前的笔记需重新打开任务中心查看；离线模式仍汇总本机镜像和草稿。
+- 登录与 OAuth 授权仅对失败密码计入全局预算，正确密码不被他人耗尽该预算阻塞；派生前仍按 IP 限流，全局失败预算不限制分布式请求的密码派生 CPU 开销。
+- 删除墓碑保留 30 天并由定时清理移除；旧修订更新仍返回 `410`，但墓碑清理后的旧 ZIP 或 revision 为 0 的副本可以重新创建原 ID。中英文灾备说明同步明确此限制。
+- 升级需应用新增迁移 `0005_tasks.sql`，为任务扫描建立索引，现有部署脚本会在发布前执行；灾备校验继续接受新增索引前的兼容备份。补充排序边界、归档往返、任务分页及登录预算回归测试。
 
 ## 1.3.5 更新说明（2026-10-17）
 
@@ -132,7 +141,7 @@
 - KaTeX 数学公式：行内 `$x^2$`，独立公式块 `$$…$$`；支持离线预览、独立阅读、分享和 PDF 导出，代码及普通金额保持原样。
 - JPEG / PNG / WebP 图片选择、粘贴、拖入；PDF、Markdown、TXT、CSV、JSON 私有附件；文件按光标位置插入。
 - PDF 导出支持真实逐页预览、A4/Letter、横竖方向和缩放；桌面端下载，iOS/Android 使用系统分享。
-- 回收站、恢复、单篇或全部永久删除，以及防止旧设备重建已清除笔记的墓碑记录；永久删除均需二次确认。
+- 回收站、恢复、单篇或全部永久删除，以及保留 30 天、防止旧设备重建已清除笔记的墓碑记录；永久删除均需二次确认。
 - 修订号并发保护、基于编辑起点的三方合并、重叠冲突人工选择与冲突副本、幂等重试、手动保存历史、AI 写入历史和版本恢复。
 - 默认开启的完整离线笔记库：IndexedDB 镜像正文、私有文件、全文搜索和待同步草稿，恢复联网后自动提交。
 - 按账号隔离的 Durable Object WebSocket 实时通知新增、更新和删除，客户端收到通知后拉取权威数据；前台轮询、切回页面和恢复联网继续作为断线兜底。
@@ -484,7 +493,7 @@ cd easynote
 bash deploy.sh
 ```
 
-部署脚本会构建并检查项目，按顺序应用 `migrations/` 中尚未执行的数据库迁移，然后更新 Worker。`0001_initial.sql` 定义初始结构，后续迁移补充 OAuth、目录和手动排序；升级到 1.1.0 需包含 `0004_order.sql`。分享数据只使用 `note_shares` 表。按终端提示输入 Cloudflare API Token，并使用 `deploy <Worker 名称>` 确认即可。
+部署脚本会构建并检查项目，按顺序应用 `migrations/` 中尚未执行的数据库迁移，然后更新 Worker。`0001_initial.sql` 定义初始结构，后续迁移补充 OAuth、目录和手动排序；升级到 1.1.0 需包含 `0004_order.sql`，升级到 1.3.6 还需 `0005_tasks.sql` 为任务游标扫描建立索引。分享数据只使用 `note_shares` 表。按终端提示输入 Cloudflare API Token，并使用 `deploy <Worker 名称>` 确认即可。
 
 官方参考：[Wrangler API Token 环境变量](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/)、[Workers 权限](https://developers.cloudflare.com/workers/authorization/)、[创建 API Token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)、[创建 D1 API](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/create/)、[创建 R2 bucket API](https://developers.cloudflare.com/api/resources/r2/subresources/buckets/methods/create/)、[workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)、[Worker Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)、[List Routes API](https://developers.cloudflare.com/api/resources/workers/subresources/routes/methods/list/)。
 
@@ -498,7 +507,7 @@ bash deploy.sh
 
 “全部笔记”只显示未归档内容，并继续将置顶笔记排在前面；归档笔记仅在“归档笔记”视图中出现。置顶和归档是彼此独立的属性。
 
-请求期间继续输入会生成下一份草稿，不能被较早的保存响应清空。当前修订冲突返回 `409` 和服务器版本；本地草稿仍保留，用户可创建新的“冲突副本”，原云端笔记不被覆盖。永久删除后的旧设备保存返回 `410`。
+请求期间继续输入会生成下一份草稿，不能被较早的保存响应清空。当前修订冲突返回 `409` 和服务器版本；本地草稿仍保留，用户可创建新的“冲突副本”，原云端笔记不被覆盖。永久删除后的旧修订更新（PUT）返回 `410`。删除墓碑保留 30 天，由定时清理移除；墓碑存在时，同 ID 的新建请求也返回 `410`。清理后，旧 ZIP 导入或 revision 为 0 的旧副本可用原 ID 重新创建笔记。离线镜像和导出的 ZIP 可能长期保留，不受此窗口限制，因此永久删除不等于擦除所有历史副本。
 
 同一个浏览器配置文件、同一账号只允许一个编辑标签页，使用 Web Locks 防止两个页面覆盖同一份本地草稿。原编辑窗口关闭后，等待中的页面自动恢复。已安装 PWA 在进入前台时自动接管编辑锁；普通浏览器标签页仍可点击“重新打开”主动接管。跨设备、跨浏览器的并发由服务端修订号处理。
 
@@ -547,6 +556,8 @@ bash deploy.sh
 ```
 
 侧栏“任务中心”汇总当前租户全部未删除笔记中的未完成事项，包括归档笔记，并忽略 fenced code block 中的示例语法。每项显示来源笔记和源码行号，点击后切换到编辑模式并将 CodeMirror 光标定位到对应列表行。
+
+关闭离线笔记库时，任务中心按修改时间和笔记 ID 使用游标分页，每页处理最多 50 篇候选笔记，另读取 1 篇判断是否还有下一页，点击“加载更多”继续；升级需应用 `0005_tasks.sql` 中的扫描索引，部署脚本会自动执行迁移。分页不是固定快照，加载期间被编辑并移到游标之前的笔记需要重新打开任务中心查看。启用离线笔记库时，仍一次汇总本机镜像和未同步草稿。
 
 ### GFM 表格
 
@@ -641,7 +652,7 @@ HTML block 可直接写入 Markdown，通过 DOMPurify 进行安全过滤。放�
 
 ### 导出与导入
 
-ZIP v2 包含 `manifest.json`、`notes/*.md` 和所引用的 `files/*`。Markdown 图片和附件引用转换为相对路径，解压后可直接阅读。笔记文件优先使用标题命名；无标题时使用 `未命名.md`，重名时自动追加序号，稳定 ID 仅保留在清单中。
+ZIP v3 包含 `manifest.json`、`notes/*.md` 和所引用的 `files/*`，清单同时记录笔记与目录的手动排序键（`position`），恢复后顺序与导出前一致；v2 旧备份仍可导入，只是按默认排序规则重建顺序。Markdown 图片和附件引用转换为相对路径，解压后可直接阅读。笔记文件优先使用标题命名；无标题时使用 `未命名.md`，重名时自动追加序号，稳定 ID 仅保留在清单中。
 
 单篇笔记可通过工具栏按钮或 `Cmd/Ctrl+P` 导出 PDF。导出窗口提供最终文件的逐页预览，并支持调整文件名、A4/Letter 纸张、横竖方向和缩放比例；设置变化后会按实际 PDF 重新分页。应用通过结构化排版生成文字可搜索、可复制的 PDF，不使用整页截图或浏览器打印，因此不会附带笔记标题、更新时间、标签以及浏览器生成的日期、URL、页码。桌面端直接下载，iOS 和 Android 优先打开系统保存/分享面板，不支持文件分享时回退为浏览器下载。
 
@@ -675,7 +686,7 @@ ZIP v2 包含 `manifest.json`、`notes/*.md` 和所引用的 `files/*`。Markdow
 | `POLL_SECONDS` | 30 | 前台同步检查间隔 |
 | `LOGIN_WINDOW_SECONDS` | 900 | 登录尝试计数窗口 |
 | `LOGIN_IP_LIMIT` | 20 | 每 IP 窗口内登录预算 |
-| `LOGIN_GLOBAL_LIMIT` | 200 | 实例窗口内登录预算 |
+| `LOGIN_GLOBAL_LIMIT` | 200 | 实例窗口内**失败**登录预算（正确密码不受他人耗尽该预算的影响）；校验后计数，不限制密码派生 CPU 开销，派生前仅按 IP 限流 |
 | `ACCOUNT_WINDOW_SECONDS` | 900 | 注册和恢复请求计数窗口 |
 | `REGISTRATION_IP_LIMIT` | 5 | 每 IP 窗口内注册预算 |
 | `REGISTRATION_GLOBAL_LIMIT` | 50 | 实例窗口内注册预算 |
@@ -706,7 +717,7 @@ ZIP v2 包含 `manifest.json`、`notes/*.md` 和所引用的 `files/*`。Markdow
 | `GET /api/events` | 同源 WebSocket，接收当前账号的笔记变更信号 |
 | `GET /api/sync` | 按单调序号增量同步完整笔记和删除记录 |
 | `GET /api/sync/cursor` | 获取当前账号的最新同步游标 |
-| `GET /api/tasks` | 汇总未完成 TODO 及源码位置 |
+| `GET /api/tasks` | 汇总未完成 TODO 及源码位置；用 `cursor`（`updated_at:id`）/`limit`（默认及上限均为 50）分页，首次省略 `cursor`，后续传入响应的 `nextCursor`；`nextCursor` 为 `null` 时结束 |
 | `GET /api/notes` | 列表、搜索、视图、标签筛选，50 条分页 |
 | `POST /api/notes/duplicates` | 批量查询当前账号已有的笔记内容指纹 |
 | `POST /api/notes/:id` | 创建笔记，revision 必须为 0；`createVersion` 控制是否记录历史 |
@@ -774,4 +785,4 @@ API 测试使用内存 D1 / R2；浏览器测试自动在 `127.0.0.1:8792` 启�
 
 桌面可将笔记或目录拖入列表中的目录，拖到目录路径中的上级或“全部笔记”则移回对应层级。跨目录的多选笔记可通过批量工具栏“移动笔记”选择目标；手动排序时可拖拽同类条目或用 Alt+↑ / Alt+↓ 调整顺序。点击“排序方式”切换手动排序与最近修改，根层和各目录的偏好按账号保存在当前浏览器；根层默认最近修改，具体目录默认手动排序。搜索、标签、归档和回收站按最近修改排序。移动和排序需要联网，手机通过操作菜单移动笔记。调整笔记顺序不改变正文、内容版本或修改时间。
 
-ZIP 导入导出和灾备备份保留目录结构；旧 ZIP 和添加目录功能前的灾备备份仍可导入/恢复。从 0.11.0 之前的版本升级时需应用 `0003_folders.sql` 迁移（现有部署脚本会应用迁移）；手动顺序还需 `0004_order.sql`，现有部署脚本会自动应用；ZIP 恢复不保留手动顺序。
+ZIP 导入导出和灾备备份保留目录结构；旧 ZIP 和添加目录功能前的灾备备份仍可导入/恢复。从 0.11.0 之前的版本升级时需应用 `0003_folders.sql`，手动顺序需 `0004_order.sql`，1.3.6 的任务扫描索引需 `0005_tasks.sql`，现有部署脚本会自动应用。ZIP v3 恢复笔记和目录的手动排序键；v2 备份不含排序键，导入时使用默认值。

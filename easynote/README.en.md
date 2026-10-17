@@ -2,9 +2,18 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.5`
+Current Version: `1.3.6`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.6 Release Notes (2026-10-17)
+
+- Tighten sidebar, note-list and editor-toolbar spacing on desktop and mobile. Place note excerpts beside timestamps and keep folder rows aligned with their action buttons.
+- Upgrade ZIP manifests to v3 to preserve note and folder manual order while retaining v2 import compatibility. Accept valid negative keys and renumber siblings when a drop would exceed the supported range, keeping exported backups restorable.
+- Use modification-time and ID cursors with on-demand "Load More" in the online task center. Process at most 50 candidate notes plus one lookahead note per page and suppress duplicate entries. Pages are live rather than a fixed snapshot; reopen the task center to see notes edited ahead of the cursor. Offline mode still collects mirrored notes and drafts locally.
+- Count only rejected passwords against the global login budget for both login and OAuth consent, so other users cannot exhaust it to block correct passwords. Per-IP throttling still runs before verification; the global failure budget does not cap password derivation CPU from distributed requests.
+- Retain deletion tombstones for 30 days before scheduled cleanup. Old-revision updates still return `410`, but an old ZIP or revision-zero copy can recreate the original ID after cleanup. Document this limitation in both disaster recovery guides.
+- Apply the new `0005_tasks.sql` task-scan index when upgrading; the existing deployment script runs it before publishing. Disaster recovery verification still accepts compatible backups from before the index. Add regressions for order bounds, archive round trips, task pagination and login budgets.
 
 ## 1.3.5 Release Notes (2026-10-17)
 
@@ -132,7 +141,7 @@ A self-hosted Markdown note-taking application for individuals or small teams. R
 - KaTeX math: `$x^2$` inline and `$$…$$` display formulas, including offline previews, separate readers, shares, and PDF exports. Code and ordinary currency remain literal.
 - Image pasting, drag-and-drop, and file selection (JPEG, PNG, WebP); private attachments (PDF, Markdown, TXT, CSV, JSON); inserted at cursor position.
 - PDF export with authentic paginated preview, A4/Letter formats, portrait/landscape orientation, and scaling; direct download on desktop, system share sheet on iOS/Android.
-- Trash bin, restore, permanent deletion, and tombstone records preventing stale devices from resurrecting purged notes.
+- Trash bin, restore, permanent deletion, and tombstone records retained for 30 days to prevent stale devices from resurrecting purged notes.
 - Revision-based concurrency control, 3-way merge from base revisions, manual conflict resolution with conflict copies, idempotent retries, manual snapshot history, and version restore.
 - Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting. Browser connectivity hints do not block requests; temporary network or server save failures get up to two automatic retries before requiring manual sync.
 - Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
@@ -274,6 +283,8 @@ Autosave updates note content with `createVersion: false`. Explicit saves (`Cmd/
 
 Simultaneous edits on different devices are resolved using revision numbers. Conflicts return `409 Conflict`, preserving local drafts and allowing users to branch into conflict copies without overwriting remote data.
 
+Updates (PUT) to a purged note return `410`. Deletion tombstones are retained for 30 days and removed by scheduled cleanup; while present, they also block creates with the same ID. After cleanup, an old ZIP import or a revision-zero copy can recreate that ID. Offline mirrors and exported ZIPs can persist beyond this window, so permanent deletion does not erase every historical copy.
+
 Within one browser profile, Web Locks allow only one editor per account to protect local drafts. Waiting pages resume automatically when the editor closes. An installed PWA automatically takes over when it enters the foreground; browser tabs can request takeover with “Reopen”.
 
 On mobile, opening a note adds an in-app history entry. System Back returns to the note list before leaving the app, and Forward restores the note view.
@@ -319,6 +330,8 @@ Use `- [ ] task` for incomplete items and `- [x] task` for completed items (`- [
 ```
 
 The sidebar "Task Center" aggregates all uncompleted tasks across all non-deleted notes (including archived notes), while ignoring task syntax inside code blocks. Each entry displays its source note and line number, and clicking it jumps directly to that line in edit mode.
+
+With the offline library disabled, the task center uses modification-time and note-ID cursors, processing up to 50 candidate notes per page plus one lookahead note; select "Load More" to continue. `GET /api/tasks` accepts `limit` (default and maximum 50) and `cursor` (`updated_at:id`); omit the cursor initially, then pass the returned `nextCursor` until it is `null`. Apply `0005_tasks.sql` for the scan index when upgrading; the deployment script runs migrations automatically. Pages do not share a fixed snapshot: reopen the task center to see notes edited past the cursor while loading. With the offline library enabled, mirrored notes and unsynced drafts are still collected locally in one pass.
 
 ### GFM Tables
 
@@ -429,7 +442,7 @@ Configured in `wrangler.json` under `vars`:
 | `POLL_SECONDS` | 30 | Foreground sync polling fallback interval |
 | `LOGIN_WINDOW_SECONDS` | 900 | Login attempt rate limit window |
 | `LOGIN_IP_LIMIT` | 20 | Login attempts per IP within window |
-| `LOGIN_GLOBAL_LIMIT` | 200 | Global login attempts within window |
+| `LOGIN_GLOBAL_LIMIT` | 200 | Instance-wide budget for rejected passwords only (a correct password is never blocked); counted after verification, so it does not cap password derivation CPU. Only the per-IP limit runs before derivation. |
 | `ACCOUNT_WINDOW_SECONDS` | 900 | Counting window for registration, recovery and OAuth client registration |
 | `REGISTRATION_IP_LIMIT` | 5 | Registration requests per IP within window |
 | `REGISTRATION_GLOBAL_LIMIT` | 50 | Instance-wide registration budget within window |
@@ -464,4 +477,4 @@ All Notes mixes root-level folders with unfiled notes. Opening a folder mixes it
 
 On desktop, drop notes or folders onto list folders or ancestor breadcrumbs, including All Notes at the root. Use the bulk Move action for selections spanning folders. Manual order supports dragging entries of the same type and Alt+Up / Alt+Down. Sort order switches between Manual order and Last modified, with preferences stored per account in the current browser for the root and each folder. Root defaults to Last modified and folders to Manual order. Search, tags, Archive and Trash retain last-modified ordering. Moving and reordering require a connection, and mobile uses action menus. Reordering notes leaves content, revisions and modification times unchanged.
 
-ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`; the existing deployment script applies migrations. Manual ordering also requires `0004_order.sql`, applied automatically by the existing deployment script. ZIP restores do not retain manual order.
+ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`, manual ordering requires `0004_order.sql`, and the 1.3.6 task-scan index requires `0005_tasks.sql`; the existing deployment script applies migrations automatically. ZIP v3 restores manual order keys for notes and folders. V2 backups lack these keys and use the defaults when imported.
