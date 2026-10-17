@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.10`
+Current Version: `1.3.11`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.11 Release Notes (2026-10-17)
+
+- Arrange bulk actions in two equal-width columns, giving Archive, Add Tag, Move Notes and Delete one cell each without leaving Delete alone on a row or wrapping button labels.
+- Highlight the selected count with a subtle badge and use borderless Select All and Cancel controls. Keep disabled actions neutral, showing the danger color only when Delete is enabled. Wrap selection controls together in narrow lists and retain touch targets at least 44px high on mobile.
+- Add layout regressions in both languages and themes, covering 220/300px desktop lists and 320/390px mobile viewports. Verify button alignment, single-line labels, disabled states and containment. This UI update requires no database migration.
 
 ## 1.3.10 Release Notes (2026-10-17)
 

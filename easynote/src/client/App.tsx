@@ -1877,11 +1877,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>}
         {selectionMode && <div className="bulk-toolbar">
           <div className="bulk-toolbar-header">
-            <span>{uiLanguage() === 'en' ? `${selected.size} selected` : `已选 ${selected.size} 篇`}</span>
-            <button aria-label={allVisibleSelected ? t('clear_selection') : t('select_all')} disabled={!book.notes.length} onClick={toggleSelectAll}>
-              {allVisibleSelected ? <Square size={14} /> : <CheckSquare size={14} />}{allVisibleSelected ? t('clear_selection') : t('select_all')}
-            </button>
-            <button aria-label={t('exit_selection')} onClick={exitSelectionMode}><X size={14} />{t('cancel')}</button>
+            <span aria-live="polite">{uiLanguage() === 'en' ? `${selected.size} selected` : `已选 ${selected.size} 篇`}</span>
+            <div className="bulk-toolbar-selection">
+              <button aria-label={allVisibleSelected ? t('clear_selection') : t('select_all')} disabled={!book.notes.length} onClick={toggleSelectAll}>
+                {allVisibleSelected ? <Square size={14} /> : <CheckSquare size={14} />}{allVisibleSelected ? t('clear_selection') : t('select_all')}
+              </button>
+              <button aria-label={t('exit_selection')} onClick={exitSelectionMode}><X size={14} />{t('cancel')}</button>
+            </div>
           </div>
           <div className="bulk-toolbar-actions">
             <button disabled={!selected.size || disabled} onClick={applyBulkArchive}>{book.view === 'archive' ? <ArchiveRestore size={14} /> : <Archive size={14} />}{book.view === 'archive' ? t('unarchive') : t('archive')}</button>

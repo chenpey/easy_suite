@@ -337,10 +337,22 @@ nav button.active svg { color: var(--accent); }
   color: var(--muted);
   font-size: 12px;
 }
-.bulk-toolbar-header { display: flex; align-items: center; gap: 7px; }
-.bulk-toolbar-header span { flex: 1; }
-.bulk-toolbar-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.bulk-toolbar button { min-height: 28px; padding: 4px 9px; box-shadow: none; }
+.bulk-toolbar-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.bulk-toolbar-header > span {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  white-space: nowrap;
+}
+.bulk-toolbar-selection { display: flex; gap: 2px; margin-left: auto; }
+.bulk-toolbar-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.bulk-toolbar button { min-width: 0; min-height: 32px; padding: 5px 6px; gap: 5px; font-size: 12px; white-space: nowrap; box-shadow: none; }
+.bulk-toolbar button > svg { flex-shrink: 0; }
+.bulk-toolbar-selection button { min-height: 28px; border-color: transparent; background: transparent; }
+.bulk-toolbar-selection button:hover { background: var(--hover); }
+.bulk-toolbar-actions .danger { color: color-mix(in srgb, var(--danger) 80%, var(--ink)); background: color-mix(in srgb, var(--danger) 5%, var(--elevated)); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.bulk-toolbar-actions button:disabled { opacity: 1; color: var(--subtle); border-color: var(--line); background: var(--soft); }
 .search-field {
   display: flex;
   align-items: center;
@@ -1601,6 +1613,7 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   .search-field { display: none; margin-top: 7px; background: var(--soft); }
   .search-field.mobile-open { display: flex; }
   .bulk-toolbar { margin: 8px 0 0; }
+  .bulk-toolbar button { min-height: 44px; }
   .list-scroll { padding: 3px 8px calc(84px + env(safe-area-inset-bottom)); }
   .note-row {
     min-height: 58px;

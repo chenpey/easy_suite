@@ -1513,6 +1513,66 @@ test('mobile bulk selection supports select all and exit while settings owns the
   await page.screenshot({ path: 'test-results/mobile-settings-version.png', fullPage: true });
 });
 
+for (const language of ['zh', 'en']) {
+  test(`bulk toolbar fits narrow lists and mobile in ${language} with both themes`, async ({ page }) => {
+    await page.addInitScript((value) => localStorage.setItem('easynote-language', value), language);
+    const marker = `bulk-layout-${randomUUID().slice(0, 8)}`;
+    for (let index = 0; index < 2; index++) {
+      expect((await page.request.post(`/api/notes/${randomUUID()}`, {
+        headers, data: { title: `${marker}-${index}`, content: `layout ${index}`, tags: [],
+          pinned: false, archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+      })).status()).toBe(201);
+    }
+    await page.goto('/');
+    await page.locator('.search-field input').fill(marker);
+    await expect(page.locator('[data-note-row]')).toHaveCount(2);
+    await page.locator('.list-bulk-action').click();
+    const toolbar = page.locator('.bulk-toolbar');
+    for (const selected of [false, true]) {
+      if (selected) await toolbar.locator('.bulk-toolbar-selection button').first().click();
+      await expect(toolbar.locator('.bulk-toolbar-actions button:disabled')).toHaveCount(selected ? 0 : 4);
+      for (const width of [220, 300, 320, 390]) {
+        const mobile = width === 320 || width === 390;
+        await page.setViewportSize({ width: mobile ? width : 1440, height: 900 });
+        if (!mobile) {
+          const separator = page.locator('.note-list-resizer');
+          if (width === 220) await separator.press('Home');
+          else await separator.dblclick();
+        }
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+          const layout = await toolbar.evaluate((element) => {
+            const bounds = element.getBoundingClientRect();
+            const buttons = [...element.querySelectorAll('button')];
+            const actions = [...element.querySelectorAll('.bulk-toolbar-actions button')].map((button) => button.getBoundingClientRect());
+            return {
+              contained: buttons.every((button) => {
+                const rect = button.getBoundingClientRect();
+                return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 && button.scrollWidth <= button.clientWidth + 1;
+              }),
+              singleLine: buttons.every((button) => [...button.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()).every((node) => {
+                const range = document.createRange();
+                range.selectNodeContents(node);
+                return range.getClientRects().length === 1;
+              })),
+              balanced: Math.abs(actions[0].top - actions[1].top) < 1 && Math.abs(actions[2].top - actions[3].top) < 1 &&
+                actions[2].top > actions[0].bottom && actions.every((rect) => Math.abs(rect.width - actions[0].width) < 1),
+              minHeight: Math.min(...buttons.map((button) => button.getBoundingClientRect().height)),
+            };
+          });
+          expect(layout.contained, `${width}px ${theme} contained`).toBe(true);
+          expect(layout.singleLine, `${width}px ${theme} single line`).toBe(true);
+          expect(layout.balanced, `${width}px ${theme} balanced rows`).toBe(true);
+          expect(layout.minHeight).toBeGreaterThanOrEqual(mobile ? 44 : 28);
+          if (width === 300 || width === 320) {
+            await toolbar.screenshot({ path: `test-results/bulk-toolbar-${language}-${width}-${theme}-${selected ? 'selected' : 'empty'}.png`, animations: 'disabled' });
+          }
+        }
+      }
+    }
+  });
+}
+
 test('search highlights title and a matching excerpt from deep in the note', async ({ page }) => {
   const marker = `高亮词-${randomUUID().slice(0, 6)}`;
   const title = `${marker} 标题`;
