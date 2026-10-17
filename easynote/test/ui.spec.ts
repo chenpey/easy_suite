@@ -65,7 +65,7 @@ async function folderAction(page: Page, nameOrId: string, action: string) {
   const folders = (await (await page.request.get('/api/folders')).json()).folders as import('../src/shared/types').Folder[];
   const folder = folders.find((item) => item.id === nameOrId || item.name === nameOrId)!;
   await openFolder(page, folder.parentId);
-  await page.locator(`[data-folder-id="${folder.id}"]`).getByRole('button', { name: '目录操作', exact: true }).click();
+  await page.locator(`[data-folder-id="${folder.id}"] .folder-open`).press('Shift+F10');
   await page.getByRole('menuitem', { name: action, exact: true }).click();
 }
 async function createRootFolder(page: Page) {
@@ -3207,7 +3207,7 @@ test('folders enforce the fifth level in UI and remain available offline and on 
   await page.goto('/');
   await openFolder(page, `${marker}-4`);
   const fifth = page.locator('.folder-list-entry').filter({ hasText: `${marker}-5` });
-  await fifth.getByRole('button', { name: '目录操作', exact: true }).click();
+  await fifth.locator('.folder-open').click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: '新建子目录' })).toBeDisabled();
   await page.getByRole('menuitem', { name: '重命名目录' }).click();
   await page.getByRole('textbox', { name: '目录名' }).fill(`${marker}-renamed`);
@@ -3243,14 +3243,14 @@ test('folders move from the sidebar and tolerate picking the current parent', as
   }
   await page.goto('/');
   const guestRow = page.locator('.folder-list-entry').filter({ hasText: `客-${marker}` });
-  await guestRow.getByRole('button', { name: '目录操作', exact: true }).click();
+  await guestRow.locator('.folder-open').click({ button: 'right' });
   await page.getByRole('menuitem', { name: '移动目录' }).click();
   // The picker hides the moved folder itself, and picking the current parent closes silently.
   await expect(page.getByRole('dialog').getByRole('button', { name: `客-${marker}`, exact: true })).toHaveCount(0);
   await page.getByRole('dialog').getByRole('button', { name: '根目录', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await guestRow.getByRole('button', { name: '目录操作', exact: true }).click();
+  await guestRow.locator('.folder-open').click({ button: 'right' });
   await page.getByRole('menuitem', { name: '移动目录' }).click();
   await page.getByRole('dialog').getByRole('button', { name: `家-${marker}`, exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -3287,15 +3287,18 @@ test('the create menu creates root folders, child folders and notes with keyboar
   await createRootFolder(page);
   await page.getByRole('textbox', { name: '目录名' }).fill(name);
   await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
-  const more = page.locator('[data-folder-id]').filter({ has: page.getByRole('button', { name, exact: true }) }).getByRole('button', { name: '目录操作' });
-  await more.focus();
-  await more.press('Enter');
+  const row = page.locator('[data-folder-id]').filter({ has: page.getByRole('button', { name, exact: true }) });
+  await expect(row.locator('.folder-more')).toBeHidden();
+  await expect(row.locator('.lucide-chevron-right')).toHaveCount(0);
+  const folderButton = row.locator('.folder-open');
+  await folderButton.focus();
+  await folderButton.press('Shift+F10');
   await page.keyboard.press('Escape');
-  await expect(more).toBeFocused();
-  await more.press('Enter');
+  await expect(folderButton).toBeFocused();
+  await folderButton.press('Shift+F10');
   await page.getByRole('menuitem', { name: '重命名目录', exact: true }).click();
   await page.getByRole('dialog').press('Escape');
-  await expect(more).toBeFocused();
+  await expect(folderButton).toBeFocused();
   await openFolder(page, name);
   const parent = (await (await page.request.get('/api/folders')).json()).folders.find((folder: { name: string }) => folder.name === name);
   await trigger.click();
@@ -3311,7 +3314,7 @@ test('the create menu creates root folders, child folders and notes with keyboar
   await expect.poll(async () => (await (await page.request.get(`/api/notes/${id}`)).json()).note?.folderId).toBe(parent.id);
 });
 
-test('breadcrumbs and back navigation work with the sidebar collapsed and on mobile', async ({ page }, testInfo) => {
+test('breadcrumbs navigate folder levels without a redundant back button on desktop and mobile', async ({ page }, testInfo) => {
   const marker = randomUUID();
   const ids = [randomUUID(), randomUUID(), randomUUID()];
   for (const [index, id] of ids.entries()) expect((await page.request.post('/api/folders', {
@@ -3326,7 +3329,8 @@ test('breadcrumbs and back navigation work with the sidebar collapsed and on mob
   await expect(path).toHaveCSS('flex-direction', 'row');
   expect(await page.locator('.list-heading h1').innerText()).toBe(`${marker}-2`);
   expect(await path.getByRole('button').allTextContents()).toEqual(['全部笔记', ...ids.map((_, index) => `${marker}-${index}`)]);
-  await page.getByRole('button', { name: '返回上一级', exact: true }).click();
+  await expect(page.getByRole('button', { name: '返回上一级', exact: true })).toHaveCount(0);
+  await path.getByRole('button', { name: `${marker}-1`, exact: true }).click();
   await expect(page.getByRole('heading', { name: `${marker}-1`, exact: true })).toBeVisible();
   await path.getByRole('button', { name: `${marker}-0`, exact: true }).click();
   await expect(page.getByRole('heading', { name: `${marker}-0`, exact: true })).toBeVisible();
@@ -3337,14 +3341,20 @@ test('breadcrumbs and back navigation work with the sidebar collapsed and on mob
   await expect(path).toHaveCount(0);
   await expect(page.locator('.list-heading h1')).toHaveText('全部笔记');
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: '展开侧栏', exact: true })).toBeHidden();
+  await expect(page.locator('.list-scroll')).toHaveAttribute('aria-busy', 'false');
+  await page.screenshot({ path: testInfo.outputPath('mobile-folder-list.png') });
   await openFolder(page, ids[2]);
   await path.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
   expect(await path.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: '返回上一级', exact: true })).toBeInViewport();
+  await expect(page.getByRole('button', { name: '返回上一级', exact: true })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('mobile-folder-navigation.png') });
-  await page.getByRole('button', { name: '返回上一级', exact: true }).click();
+  await path.getByRole('button', { name: `${marker}-1`, exact: true }).click();
   await expect(page.getByRole('heading', { name: `${marker}-1`, exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 740 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await path.getByRole('button', { name: '全部笔记', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '全部笔记', exact: true })).toBeVisible();
 });
 
 test('mobile folder actions rename and delete folders while creation follows the current level', async ({ page }) => {

@@ -2,9 +2,16 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.6`
+Current Version: `1.3.7`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.7 Release Notes (2026-10-17)
+
+- Fix a race in folder depth validation. Creation and moves recheck destination ancestors, source subtree height and cycles within the write itself, preventing concurrent changes after preflight from exceeding five levels. Add deterministic regressions for parent moves and subtree growth.
+- Simplify folder rows and breadcrumb navigation. Desktop folder actions use right-click or `Shift+F10`, while mobile retains the action button. Remove the redundant back button, use breadcrumbs to return to ancestors or the root, and enlarge mobile toolbar and folder-action touch targets.
+- Include pending database migrations in deployment confirmation, preventing Wrangler's second prompt from being obscured by progress heartbeats. Add interactive deployment regression coverage and usage notes.
+- No new database migration is required. Upgrades from older versions still apply all pending migrations before deployment.
 
 ## 1.3.6 Release Notes (2026-10-17)
 
@@ -275,6 +282,8 @@ bash deploy.sh
 
 Follow the prompts to enter your API Token, select or confirm resources, and finalize deployment.
 
+Typing `deploy <Worker name>` also authorizes database migrations, so that step does not ask for a second confirmation that could be obscured by heartbeat output. `still running` only means the local subprocess has not exited; it does not report remote migration progress.
+
 ## Key Behaviors
 
 ### Autosave & Conflicts
@@ -465,9 +474,9 @@ npm run test:ui
 
 ### Folders and note actions
 
-Browse folders and notes in the mixed center list; desktop and mobile navigation retain categories and tags. The list's plus button creates a note or folder at the current level. Each folder's action menu supports creating subfolders, renaming, moving and deleting; desktop also supports right-click and Shift+F10. Nesting is limited to five levels, and folder changes require a connection. Moving a folder carries its subfolders and notes along, and cannot move it into its own subtree or past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
+Browse folders and notes in the mixed center list; desktop and mobile navigation retain categories and tags. The list's plus button creates a note or folder at the current level. Folder actions support creating subfolders, renaming, moving and deleting. On desktop, open them with right-click or Shift+F10; on mobile and touch devices, use the folder's action button. Nesting is limited to five levels, and folder changes require a connection. Moving a folder carries its subfolders and notes along, and cannot move it into its own subtree or past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
 
-Back to parent folder and clickable breadcrumbs remain available with the sidebar collapsed. Click an ancestor to return there, or All Notes to return to the root. On mobile the path scrolls horizontally while the back button stays visible. Escape closes creation and folder action menus and restores focus; arrow keys select menu items.
+Clickable breadcrumbs remain available with the sidebar collapsed. Click an ancestor to return there, or All Notes to return to the root. On mobile the path scrolls horizontally. Escape closes creation and folder action menus and restores focus; arrow keys select menu items.
 
 Folder names must be unique within the same level; creating, renaming, moving and importing all enforce this, and same-level folders with the same name are merged into one during import. Accounts are limited to 1200 folders, matching the ZIP import/export budget.
 

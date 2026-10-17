@@ -1846,7 +1846,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
         {/* At the plain root the heading already shows All Notes, so the row would only repeat it. */}
         {book.view === 'all' && (book.folder || book.query || book.tag) && <div className="folder-navigation">
-          <IconButton label="返回上一级" onClick={() => chooseFolder(currentPath.at(-1)?.parentId ?? null)}><ArrowLeft size={16} /></IconButton>
           <nav className="folder-breadcrumbs" aria-label={t('目录路径')}>
           {[null, ...currentPath].map((folder) => <button key={folder?.id ?? 'root'} type="button"
             aria-current={book.folder === (folder?.id ?? null) ? 'page' : undefined}
@@ -1859,7 +1858,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               event.preventDefault();
               if (drag.kind === 'note') moveDraggedNotes(folder?.id ?? null);
               else moveDraggedFolder(folder?.id ?? null);
-            }}>{folder && <ChevronRight size={12} />}{folder?.name ?? t('all_notes')}</button>)}
+            }}>{folder && <ChevronRight size={12} aria-hidden="true" />}<span>{folder?.name ?? t('all_notes')}</span></button>)}
           </nav>
         </div>}
         {selectionMode && <div className="bulk-toolbar">
@@ -1985,8 +1984,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                     button.focus();
                   });
                 }}>
-              <div className="note-row-title"><FolderIcon size={16} /><span>{folder.name}</span><ChevronRight size={14} /></div>
-              <div className="note-excerpt">{t('目录')}</div>
+              <FolderIcon className="folder-icon" size={18} aria-hidden="true" />
+              <div className="note-row-title"><span>{folder.name}</span></div>
               <div className="note-row-meta"><time>{new Date(folder.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time></div>
               </button>
               <IconButton label="目录操作" className="folder-more" aria-haspopup="menu"

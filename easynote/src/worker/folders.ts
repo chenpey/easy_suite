@@ -19,6 +19,21 @@ export const toFolder = (row: FolderRow): Folder => ({
   createdAt: row.created_at, updatedAt: row.updated_at,
 });
 
+// Recheck both sides of the move in the write snapshot; either tree can change after preflight.
+const placementCondition = `(
+  WITH RECURSIVE ancestors(id,parent_id,depth) AS (
+    SELECT id,parent_id,1 FROM folders WHERE id=? AND user_id=?
+    UNION ALL
+    SELECT parent.id,parent.parent_id,ancestors.depth+1 FROM folders parent
+      JOIN ancestors ON parent.id=ancestors.parent_id WHERE ancestors.depth<${MAX_FOLDER_DEPTH}
+  ), descendants(id,depth) AS (
+    SELECT ?,0 UNION ALL
+    SELECT child.id,descendants.depth+1 FROM folders child JOIN descendants ON child.parent_id=descendants.id
+      WHERE descendants.depth<${MAX_FOLDER_DEPTH}
+  ) SELECT COALESCE((SELECT MAX(depth) FROM ancestors),0)+(SELECT MAX(depth) FROM descendants)<${MAX_FOLDER_DEPTH}
+    AND NOT EXISTS(SELECT 1 FROM ancestors WHERE id=?)
+)`;
+
 export async function loadFolder(env: Env, userId: string, id: string): Promise<FolderRow | null> {
   return env.DB.prepare('SELECT * FROM folders WHERE id=? AND user_id=?').bind(id, userId).first<FolderRow>();
 }
@@ -129,13 +144,19 @@ export async function folderRoutes(
       SELECT ?,?,?,?,?,?,? WHERE (? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))
       AND NOT EXISTS(SELECT 1 FROM folders WHERE id=?)
       AND (SELECT COUNT(*) FROM folders WHERE user_id=?)<${MAX_FOLDERS}
-      AND NOT EXISTS(SELECT 1 FROM folders WHERE user_id=? AND parent_id IS ? AND name=?) RETURNING *`)
-      .bind(id, user.id, parent, name, data.position ?? 0, time, time, parent, parent, user.id, id, user.id, user.id, parent, name).first<FolderRow>();
+      AND NOT EXISTS(SELECT 1 FROM folders WHERE user_id=? AND parent_id IS ? AND name=?)
+      AND ${placementCondition} RETURNING *`)
+      .bind(id, user.id, parent, name, data.position ?? 0, time, time, parent, parent, user.id, id, user.id,
+        user.id, parent, name, parent, user.id, id, id).first<FolderRow>();
     if (!written) {
       if (await env.DB.prepare('SELECT user_id FROM folders WHERE id=?').bind(id).first()) {
         throw new ApiError(409, 'Folder ID already used by another folder.');
       }
-      if (parent !== null && await folderDepth(env, user.id, parent) === null) throw new ApiError(400, 'Parent folder not found.');
+      if (parent !== null) {
+        const depth = await folderDepth(env, user.id, parent);
+        if (depth === null) throw new ApiError(400, 'Parent folder not found.');
+        if (depth + 1 > MAX_FOLDER_DEPTH) throw new ApiError(400, `Folders support at most ${MAX_FOLDER_DEPTH} levels.`);
+      }
       const count = await env.DB.prepare('SELECT COUNT(*) AS count FROM folders WHERE user_id=?')
         .bind(user.id).first<{ count: number }>();
       if ((count?.count ?? 0) >= MAX_FOLDERS) throw new ApiError(409, `Folder limit of ${MAX_FOLDERS} reached.`);
@@ -199,22 +220,20 @@ export async function folderRoutes(
       WHERE target.id=? AND target.user_id=?
       AND (? IS NULL OR EXISTS(SELECT 1 FROM folders WHERE id=? AND user_id=?))
       AND NOT EXISTS(SELECT 1 FROM folders WHERE user_id=? AND parent_id IS ? AND name=? AND id<>?)
-      AND (? IS NULL OR NOT EXISTS(
-        WITH RECURSIVE ancestors(id,depth) AS (
-          SELECT ?,0 UNION ALL
-          SELECT parent.parent_id,ancestors.depth+1 FROM folders parent JOIN ancestors ON parent.id=ancestors.id
-          WHERE parent.parent_id IS NOT NULL AND ancestors.depth<${MAX_FOLDER_DEPTH}
-        ) SELECT 1 FROM ancestors WHERE id=?
-      )) RETURNING *`)
+      AND ${placementCondition} RETURNING *`)
       .bind(name, parent, positions.get(id) ?? existing.position, Date.now(), id, user.id,
-        parent, parent, user.id, user.id, parent, name, id, parent, parent, id));
+        parent, parent, user.id, user.id, parent, name, id, parent, user.id, id, id));
     const results = await env.DB.batch(statements);
     const written = (results.at(-1)!.results as FolderRow[])[0];
     if (!written) {
       if (!await loadFolder(env, user.id, id)) throw new ApiError(404, 'Folder not found.');
-      if (parent !== null && await folderDepth(env, user.id, parent) === null) throw new ApiError(400, 'Parent folder not found.');
+      const parentDepth = parent === null ? 0 : await folderDepth(env, user.id, parent);
+      if (parentDepth === null) throw new ApiError(400, 'Parent folder not found.');
       const depths = await subtreeDepths(env, user.id, id);
       if (parent !== null && depths?.has(parent)) throw new ApiError(400, 'A folder cannot be moved into itself or its own subtree.');
+      if (parentDepth + 1 + Math.max(0, ...(depths?.values() ?? [])) > MAX_FOLDER_DEPTH) {
+        throw new ApiError(400, `Folders support at most ${MAX_FOLDER_DEPTH} levels.`);
+      }
       throw new ApiError(409, 'A folder with this name already exists here.');
     }
     publishNoteChanges(env, user.id, request);

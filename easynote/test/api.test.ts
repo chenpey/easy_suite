@@ -1,6 +1,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { build } from 'esbuild';
 import { createRuntime, testCsrf, testToken, testUserId, testPassword } from './runtime';
 import { digest } from '../src/worker/core';
 import { cleanup } from '../src/worker/images';
@@ -981,6 +982,70 @@ test('folder moves carry subtrees and notes, and reject cycles, depth overflow a
   assert.equal((await request(`/api/folders/${middle}`, 'PATCH', { parentId: null })).status, 200);
   assert.equal((await request(`/api/folders/${leaf}`, 'PATCH', { name: '叶改' })).status, 200);
   assert.equal((await request(`/api/folders/${leaf}`, 'PATCH', {})).status, 400);
+});
+
+test('folder writes recheck depth after concurrent parent moves or subtree growth', async (t) => {
+  const bundle = await build({
+    entryPoints: [new URL('../src/worker/folders.ts', import.meta.url).pathname],
+    bundle: true, write: false, format: 'esm', platform: 'node',
+    plugins: [{
+      name: 'skip-notifications',
+      setup(build) {
+        build.onLoad({ filter: /\/worker\/events\.ts$/ }, () => ({ contents: 'export function publishNoteChanges() {}' }));
+      },
+    }],
+  });
+  const { folderRoutes } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`) as
+    typeof import('../src/worker/folders');
+  for (const scenario of ['create after parent move', 'move after parent move', 'move after subtree growth']) {
+    await t.test(scenario, async () => {
+      const [a, b, c, d, source, other] = Array.from({ length: 6 }, () => randomUUID());
+      const growing = scenario === 'move after subtree growth';
+      const creating = scenario === 'create after parent move';
+      await instance.db.batch([[a, null], [b, a], [c, b], [d, c], [source, null], [other, growing ? source : null]]
+        .map(([id, parent]) => instance.db.prepare(`INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at)
+          VALUES(?,?,?,?,1,1)`).bind(id, testUserId, parent, id)));
+      let intervened = false;
+      const intervene = async () => {
+        assert.equal(intervened, false);
+        intervened = true;
+        // Commit another valid write after preflight, before the tested INSERT or UPDATE.
+        if (growing) {
+          await instance.db.prepare(`INSERT INTO folders(id,user_id,parent_id,name,created_at,updated_at)
+            VALUES(?,?,?,?,1,1)`).bind(randomUUID(), testUserId, other, randomUUID()).run();
+        } else {
+          await instance.db.prepare('UPDATE folders SET parent_id=? WHERE id=?').bind(other, a).run();
+        }
+      };
+      const db = new Proxy(instance.db, {
+        get(target, key) {
+          if (key === 'batch') return async (statements: Parameters<typeof target.batch>[0]) => {
+            await intervene();
+            return target.batch(statements);
+          };
+          if (key === 'prepare') return (sql: string) => {
+            const statement = target.prepare(sql);
+            if (!creating || !sql.startsWith('INSERT INTO folders')) return statement;
+            return { bind: (...values: unknown[]) => ({ first: async () => {
+              await intervene();
+              return statement.bind(...values).first();
+            } }) };
+          };
+          return Reflect.get(target, key);
+        },
+      });
+      const id = creating ? randomUUID() : source;
+      const path = creating ? '/api/folders' : `/api/folders/${id}`;
+      await assert.rejects(folderRoutes(new Request(`${origin}${path}`, {
+        method: creating ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...(creating ? { id, name: id } : {}), parentId: growing ? c : d }),
+      }), { DB: db } as any, { id: testUserId } as any, path),
+      (error: any) => error.status === 400 && /at most 5 levels/.test(error.message));
+      assert.equal(intervened, true);
+      const stored = await instance.db.prepare('SELECT parent_id FROM folders WHERE id=?').bind(id).first<{ parent_id: string | null }>();
+      assert.deepEqual(stored, creating ? null : { parent_id: null });
+    });
+  }
 });
 
 test('folder creation stops at the export limit and the database keeps siblings unique', async () => {

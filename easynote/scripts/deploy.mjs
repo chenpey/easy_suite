@@ -226,7 +226,8 @@ async function main() {
   await saveConfig(config);
   await withProgress(
     'Applying remote D1 migrations',
-    () => runWrangler(['d1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.deploy.json'], token, accountId),
+    // The deploy confirmation already authorizes migrations; suppress Wrangler's second prompt.
+    () => runWrangler(['d1', 'migrations', 'apply', 'DB', '--remote', '--config', 'wrangler.deploy.json'], token, accountId, { CI: 'true' }),
   );
   await withProgress(
     'Uploading the Worker',

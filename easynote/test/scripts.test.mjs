@@ -143,6 +143,16 @@ appendFileSync(root + '/calls.jsonl', JSON.stringify({ tool, args, cwd: process.
   logPath: process.env.WRANGLER_LOG_PATH, registryPath: process.env.WRANGLER_REGISTRY_PATH,
   hasApiToken: !!process.env.CLOUDFLARE_API_TOKEN, accountId: process.env.CLOUDFLARE_ACCOUNT_ID }) + '\\n');
 if (process.env.FAKE_FAIL === tool + ':' + args[0]) process.exit(19);
+if (tool === 'wrangler' && args[0] === 'd1' && args[1] === 'migrations' &&
+    process.env.FAKE_MIGRATION_CONFIRM === '1' && process.stdin.isTTY && process.env.CI !== 'true') {
+  console.log('About to apply migrations, continue?');
+  const confirmed = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), 300);
+    process.stdin.once('data', (answer) => { clearTimeout(timer); resolve(String(answer).trim() === 'y'); });
+    process.stdin.resume();
+  });
+  if (!confirmed) process.exit(21);
+}
 if (tool === 'npm' && args[0] === 'ci') {
   mkdirSync(root + '/node_modules/.bin', {recursive:true});
   mkdirSync(root + '/node_modules/wrangler/bin', {recursive:true});
@@ -412,7 +422,8 @@ test('deployment reuses resource IDs, refreshes template settings and preserves 
     ['Custom domain [workers.dev] (Enter keeps it; type a hostname or workers.dev): ', ''],
     ['Confirmation: ', 'easynote'],
     ['Confirmation: ', 'deploy easynote-saved'],
-  ], { FAKE_REMOTE_WORKER: '1', FAKE_EXISTING_RESOURCES: '1' });
+  ], { FAKE_REMOTE_WORKER: '1', FAKE_EXISTING_RESOURCES: '1', FAKE_MIGRATION_CONFIRM: '1', CI: 'false' });
+  assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Remote owner verifier already exists/);
   assert.match(result.output, /Confirmation did not match/);
   assert.match(result.output, /Deployment complete/);
