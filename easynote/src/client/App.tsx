@@ -840,6 +840,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setMobileNoteActions(false);
     setMobileNote(true);
     setLayout('edit');
+    requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.note-title')?.focus());
   });
   const insertFiles = async (files: File[], insertion?: string) => {
     if (!note || uploading) return;
@@ -899,6 +900,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
     setMobileSearch(true);
     requestAnimationFrame(() => searchInput.current?.focus());
+  };
+  const openGlobalSearch = () => {
+    setMobileNote(false);
+    setMobileSearch(true);
+    setSearchFocusRequested(true);
+  };
+  const toggleNavigation = () => {
+    if (window.matchMedia('(max-width: 900px)').matches) setMobileNavigation(true);
+    else setSidebar((value) => !value);
   };
   const setNoteFields = (patch: Partial<NoteInput>) => book.edit(patch);
   const syncNow = async (createVersion = true) => {
@@ -1237,15 +1247,36 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       const modifier = event.metaKey || event.ctrlKey;
       if (!modifier || document.querySelector('dialog[open]')) return;
       const key = event.key.toLocaleLowerCase();
-      if (key === 'k') {
+      if (event.shiftKey) {
+        if (key === 'f') openGlobalSearch();
+        else if (key === 'k' && note && !note.deletedAt && !transfer) {
+          setLayout('edit');
+          requestAnimationFrame(beginLinkInsertion);
+        } else if (key === 'l') setDark((value) => !value);
+        else return;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (key === 'o') {
         event.preventDefault();
         setCommandPalette(true);
         setCommandQuery('');
-      } else if (key === 'f' && event.shiftKey) {
+      } else if (key === 'k') {
         event.preventDefault();
-        setMobileNote(false);
-        setMobileSearch(true);
-        setSearchFocusRequested(true);
+        openGlobalSearch();
+      } else if (key === 'enter' && !transfer && !book.loading) {
+        event.preventDefault();
+        void createNote();
+      } else if (key === ',') {
+        event.preventDefault();
+        setSettings(true);
+      } else if (key === '\\') {
+        event.preventDefault();
+        toggleNavigation();
+      } else if (key === '.' && note) {
+        event.preventDefault();
+        setInspector((value) => !value);
       } else if (key === 's' && (note || book.pending.length)) {
         event.preventDefault();
         void syncNow();
@@ -1255,16 +1286,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       } else if (key === 'e' && note && !note.deletedAt) {
         event.preventDefault();
         toggleLayout();
-      } else if (key === 'enter' && note && !note.deletedAt) {
-        event.preventDefault();
-        toggleLayout();
       } else if (key === '/') {
         event.preventDefault();
         showShortcutHelp();
-      }
+      } else return;
+      event.stopPropagation();
     };
-    window.addEventListener('keydown', keydown);
-    return () => window.removeEventListener('keydown', keydown);
+    // App shortcuts take priority over editor bindings that insert or delete text.
+    window.addEventListener('keydown', keydown, true);
+    return () => window.removeEventListener('keydown', keydown, true);
   });
   const toggleSelected = (id: string) => setSelected((current) => {
     const next = new Set(current);
@@ -1616,7 +1646,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   };
   const commandActions = [
     {
-      id: 'new', label: t('新建笔记'), aliases: ['新建', 'new', 'create'], icon: <Plus size={16} />, shortcut: '',
+      id: 'new', label: t('新建笔记'), aliases: ['新建', 'new', 'create'], icon: <Plus size={16} />, shortcut: 'Cmd/Ctrl+Enter',
       disabled: !!transfer || book.loading,
       action: () => { setCommandPalette(false); void createNote(); },
     },
@@ -1626,18 +1656,18 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       action: () => { setCommandPalette(false); void syncNow(); },
     },
     {
-      id: 'search', label: t('搜索笔记'), aliases: ['搜索', 'search', 'find'], icon: <Search size={16} />, shortcut: 'Cmd/Ctrl+Shift+F',
+      id: 'search', label: t('搜索笔记'), aliases: ['搜索', 'search', 'find'], icon: <Search size={16} />, shortcut: 'Cmd/Ctrl+K',
       disabled: false,
       action: () => {
         book.setQuery(commandQuery);
         setCommandPalette(false);
-        requestAnimationFrame(() => searchInput.current?.focus());
+        openGlobalSearch();
       },
     },
     {
       id: 'layout', label: layout === 'edit' ? t('切换到预览模式') : t('切换到编辑模式'),
       aliases: ['编辑', '预览', '切换', 'edit', 'preview'], icon: layout === 'edit' ? <BookOpen size={16} /> : <PenLine size={16} />,
-      shortcut: 'Ctrl+E / Cmd+Enter', disabled: !note || !!note.deletedAt,
+      shortcut: 'Cmd/Ctrl+E', disabled: !note || !!note.deletedAt,
       action: () => { setCommandPalette(false); toggleLayout(); },
     },
     {
@@ -1658,8 +1688,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     },
     {
       id: 'outline', label: t('打开大纲与反向链接'), aliases: ['大纲', '反向链接', 'outline', 'backlinks'], icon: <ListTree size={16} />,
-      shortcut: '', disabled: !note,
-      action: () => { setCommandPalette(false); setInspector(true); },
+      shortcut: 'Cmd/Ctrl+.', disabled: !note,
+      action: () => { setCommandPalette(false); setInspector((value) => !value); },
     },
     {
       id: 'tasks', label: t('打开任务中心'), aliases: ['任务', '待办', 'TODO', 'tasks', 'todo'], icon: <ClipboardList size={16} />,
@@ -1673,7 +1703,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     },
     {
       id: 'link', label: t('insert_internal_link'), aliases: ['链接', 'link', 'internal link'], icon: <Link2 size={16} />,
-      shortcut: '', disabled: !note || !!note.deletedAt || !!transfer,
+      shortcut: 'Cmd/Ctrl+Shift+K', disabled: !note || !!note.deletedAt || !!transfer,
       action: () => {
         setCommandPalette(false);
         setLayout('edit');
@@ -1692,8 +1722,18 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     },
     {
       id: 'settings', label: t('打开设置'), aliases: ['设置', 'settings', 'config'], icon: <Settings size={16} />,
-      shortcut: '', disabled: false,
+      shortcut: 'Cmd/Ctrl+,', disabled: false,
       action: () => { setCommandPalette(false); setSettings(true); },
+    },
+    {
+      id: 'navigation', label: t('切换导航侧栏'), aliases: ['侧栏', '导航', 'sidebar', 'navigation'], icon: <PanelLeftOpen size={16} />,
+      shortcut: 'Cmd/Ctrl+\\', disabled: false,
+      action: () => { setCommandPalette(false); toggleNavigation(); },
+    },
+    {
+      id: 'theme', label: t('切换深浅外观'), aliases: ['主题', '外观', '深色', 'theme', 'dark', 'light'], icon: <Moon size={16} />,
+      shortcut: 'Cmd/Ctrl+Shift+L', disabled: false,
+      action: () => { setCommandPalette(false); setDark((value) => !value); },
     },
     {
       id: 'shortcuts', label: t('查看快捷键'), aliases: ['快捷键', '帮助', 'shortcuts', 'help'], icon: <Keyboard size={16} />,
@@ -1763,7 +1803,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               <Search size={20} />
             </IconButton>
           )}
-          <IconButton label="快速跳转" className="icon-button list-command-action" onClick={() => { setCommandQuery(''); setCommandPalette(true); }}><Command size={16} /></IconButton>
+          <IconButton label="快速跳转" tooltip={`${t('快速跳转')} (Cmd/Ctrl+O)`} aria-keyshortcuts="Meta+O Control+O" className="icon-button list-command-action" onClick={() => { setCommandQuery(''); setCommandPalette(true); }}><Command size={16} /></IconButton>
           {book.view === 'all' && !book.query && !book.tag && <button type="button" className="sort-toggle" aria-label={t('排序方式')} title={t('排序方式')}
             onClick={() => book.setFolderOrder(book.folderOrder === 'manual' ? 'recent' : 'manual')}>
             {book.folderOrder === 'manual' ? <ArrowUpDown size={14} /> : <Clock size={14} />}
@@ -1836,6 +1876,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           <input
             ref={searchInput}
             aria-label={t('搜索笔记')}
+            aria-keyshortcuts="Meta+K Control+K"
+            title={`${t('全局搜索')} (Cmd/Ctrl+K)`}
             placeholder={t('搜索笔记')}
             value={book.query}
             onChange={(e) => {
@@ -1869,8 +1911,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
           )}
         </div>
       </header>
-      <div className="list-scroll" onKeyDown={(event) => moveButtonFocus(event, '.note-row')} onDragOverCapture={edgeScroll}>
-        {book.loading ? <div className="empty-state">{t('loading')}</div> : !listEntries.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleEntries.map((entry) => {
+      <div className="list-scroll" aria-busy={book.loading || book.listLoading} onKeyDown={(event) => moveButtonFocus(event, '.note-row')} onDragOverCapture={edgeScroll}>
+        {book.loading || book.listLoading ? <div className="list-skeleton" role="status" aria-label={t('loading')}>
+          {[0, 1, 2].map((row) => <div className="list-skeleton-row" key={row} aria-hidden="true"><span /><span /><span /></div>)}
+        </div> : book.listError ? <div className="empty-state"><span>{t('note_list_failed')}</span><button onClick={() => { book.setError(''); void run(book.refresh); }}>{t('retry')}</button></div>
+          : !listEntries.length ? <div className="empty-state"><FileText size={28} /><span>{book.query ? t('no_matching_notes') : t('no_notes')}</span></div> : visibleEntries.map((entry) => {
           if (entry.kind === 'folder') {
             const folder = entry.item;
             return <div key={`folder-${folder.id}`} className={`folder-list-entry ${drop?.key === folder.id ? `drop-${drop.mode}` : ''}`}
@@ -2003,7 +2048,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <div className="note-row-meta"><time>{new Date(item.updatedAt).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' })}</time>{item.tags[0] && <span>#{item.tags[0]}</span>}{book.pending.some((n) => n.id === item.id) && <span className="local-dot" title={t('local_draft')} />}</div>
           </button>);
         })}
-        {(hasHiddenEntries || book.nextOffset !== null) && <button className="load-more" disabled={book.loading} onClick={() => {
+        {!book.loading && !book.listLoading && !book.listError && (hasHiddenEntries || book.nextOffset !== null) && <button className="load-more" onClick={() => {
           setVisibleEntryLimit((value) => value + 50);
           if (!hasHiddenEntries && book.nextOffset !== null) void run(book.loadMore);
         }}>{t('加载更多')}<ChevronDown size={14} /></button>}
@@ -2423,13 +2468,21 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {shortcutHelp && <Modal title="快捷键" close={() => setShortcutHelp(false)}>
       <div className="shortcut-list">
-        <div><span>{t('打开快速跳转')}</span><kbd>Cmd/Ctrl+K</kbd></div>
-        <div><span>{t('全局搜索')}</span><kbd>Cmd/Ctrl+Shift+F</kbd></div>
+        <div><span>{t('全局搜索')}</span><kbd>Cmd/Ctrl+K</kbd></div>
+        <div><span>{t('打开快速跳转')}</span><kbd>Cmd/Ctrl+O</kbd></div>
+        <div><span>{t('新建笔记')}</span><kbd>Cmd/Ctrl+Enter</kbd></div>
         <div><span>{t('sync_and_save_version')}</span><kbd>Cmd/Ctrl+S</kbd></div>
-        <div><span>{t('编辑 / 预览')}</span><kbd>Ctrl+E / Cmd+Enter</kbd></div>
+        <div><span>{t('编辑 / 预览')}</span><kbd>Cmd/Ctrl+E</kbd></div>
+        <div><span>{t('打开设置')}</span><kbd>Cmd/Ctrl+,</kbd></div>
+        <div><span>{t('切换导航侧栏')}</span><kbd>Cmd/Ctrl+\</kbd></div>
+        <div><span>{t('大纲与反向链接')}</span><kbd>Cmd/Ctrl+.</kbd></div>
+        <div><span>{t('insert_internal_link')}</span><kbd>Cmd/Ctrl+Shift+K</kbd></div>
+        <div><span>{t('切换深浅外观')}</span><kbd>Cmd/Ctrl+Shift+L</kbd></div>
         <div><span>{t('导出当前笔记为 PDF')}</span><kbd>Cmd/Ctrl+P</kbd></div>
         <div><span>{t('粗体')}</span><kbd>Cmd/Ctrl+B</kbd></div>
         <div><span>{t('斜体')}</span><kbd>Cmd/Ctrl+I</kbd></div>
+        <div><span>{t('撤销编辑')}</span><kbd>Cmd/Ctrl+Z</kbd></div>
+        <div><span>{t('重做编辑')}</span><kbd>Cmd/Ctrl+Shift+Z / Ctrl+Y</kbd></div>
         <div><span>{t('快捷键帮助')}</span><kbd>Cmd/Ctrl+/</kbd></div>
         <div><span>{t('关闭弹窗')}</span><kbd>Esc</kbd></div>
         <div><span>{t('命令或笔记列表导航')}</span><kbd>↑ / ↓</kbd></div>

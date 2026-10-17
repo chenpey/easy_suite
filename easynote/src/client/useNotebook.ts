@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   filePath,
   noteFingerprint,
@@ -117,6 +117,8 @@ export function useNotebook(session: Session) {
   const pendingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const alive = useRef(true);
   const ready = useRef(false);
+  const localLoaded = useRef(false);
+  const initialization = useRef<Promise<void> | null>(null);
   const pollInFlight = useRef(false);
   const pollQueued = useRef(false);
   const pollAbort = useRef<AbortController | null>(null);
@@ -153,6 +155,7 @@ export function useNotebook(session: Session) {
     fields: NoteConflictField[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [listResult, setListResult] = useState({ scope: '', error: '' });
   const [initialized, setInitialized] = useState(false);
   const [online, setOnline] = useState(!session.offline);
   const [offlineLibrary, setOfflineLibrary] = useState(false);
@@ -183,6 +186,9 @@ export function useNotebook(session: Session) {
   const manualOrder = folderOrder === 'manual' && view === 'all' && !query && !tag;
   // Browsing stays at one level; searches span the library.
   const folderFilter = query ? null : folder ?? (view === 'all' && !tag ? 'root' : null);
+  const navigationScope = JSON.stringify([userId, view, tag, folder, folderOrder]);
+  const listScope = JSON.stringify([navigationScope, query]);
+  const previousScope = useRef({ navigation: navigationScope, query });
 
   const renderMirror = useCallback(() => {
     const scoped = [...mirror.current.values()].filter((item) => {
@@ -205,7 +211,10 @@ export function useNotebook(session: Session) {
     setTags([...new Set([...viewTags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
     setNextOffset(null);
     setOfflineCount(mirror.current.size);
-  }, [folderFilter, manualOrder, query, tag, userId, view]);
+    setListResult({ scope: listScope, error: '' });
+  }, [folderFilter, listScope, manualOrder, query, tag, userId, view]);
+  const renderMirrorRef = useRef(renderMirror);
+  renderMirrorRef.current = renderMirror;
 
   const cacheReferencedFiles = useCallback(() => {
     if (fileCacheAbort.current || !alive.current || !offlineLibraryRef.current) return;
@@ -385,46 +394,55 @@ export function useNotebook(session: Session) {
 
   const refresh = useCallback(async (append = false, signal?: AbortSignal) => {
     const generation = ++listGeneration.current;
-    if (offlineLibraryRef.current) {
-      if (!session.offline) await syncOfflineMirror(signal);
-      if (alive.current && generation === listGeneration.current) renderMirror();
-      return;
-    }
-    // Tags do not depend on the list result, so fetch both in parallel.
-    const listRequest = api.list({
-      q: query, view, tag, folder: folderFilter ?? '', offset: append ? nextOffset ?? 0 : 0,
-      sort: manualOrder ? 'manual' : 'recent',
-    }, signal);
-    // Early returns below never await this, so mark it handled; the awaited copy still throws.
-    const tagsRequest = api.tags(view, signal);
-    tagsRequest.catch(() => undefined);
-    const result = await listRequest;
-    if (!alive.current || generation !== listGeneration.current) return;
-    const existingBlank = result.notes.find(blankSummary);
-    if (existingBlank) {
-      const blankFolder = existingBlank.folderId ?? null;
-      const redundant = [...drafts.current.values()]
-        .map((draft) => draft.note)
-        .filter((item) => item.revision === 0 && item.id !== existingBlank.id && blankNote(item) &&
-          (item.folderId ?? null) === blankFolder);
-      if (redundant.length) {
-        const replacement = redundant.some((item) => item.id === current.current?.id)
-          ? mirror.current.get(existingBlank.id) ?? (await api.note(existingBlank.id, signal)).note
-          : null;
-        await Promise.all(redundant.map((item) => discardDraft(item.id)));
-        if (!alive.current || generation !== listGeneration.current) return;
-        if (replacement) show(replacement);
+    setListResult((value) => value.error ? { ...value, error: '' } : value);
+    try {
+      if (offlineLibraryRef.current) {
+        if (!session.offline) await syncOfflineMirror(signal);
+        if (alive.current && generation === listGeneration.current) renderMirrorRef.current();
+        return;
       }
+      // Tags do not depend on the list result, so fetch both in parallel.
+      const listRequest = api.list({
+        q: query, view, tag, folder: folderFilter ?? '', offset: append ? nextOffset ?? 0 : 0,
+        sort: manualOrder ? 'manual' : 'recent',
+      }, signal);
+      // Early returns below never await this, so mark it handled; the awaited copy still throws.
+      const tagsRequest = api.tags(view, signal);
+      tagsRequest.catch(() => undefined);
+      const result = await listRequest;
+      if (!alive.current || generation !== listGeneration.current) return;
+      const existingBlank = result.notes.find(blankSummary);
+      if (existingBlank) {
+        const blankFolder = existingBlank.folderId ?? null;
+        const redundant = [...drafts.current.values()]
+          .map((draft) => draft.note)
+          .filter((item) => item.revision === 0 && item.id !== existingBlank.id && blankNote(item) &&
+            (item.folderId ?? null) === blankFolder);
+        if (redundant.length) {
+          const replacement = redundant.some((item) => item.id === current.current?.id)
+            ? mirror.current.get(existingBlank.id) ?? (await api.note(existingBlank.id, signal)).note
+            : null;
+          await Promise.all(redundant.map((item) => discardDraft(item.id)));
+          if (!alive.current || generation !== listGeneration.current) return;
+          if (replacement) show(replacement);
+        }
+      }
+      setNotes((prev) => append ? [...prev, ...result.notes.filter((n) => !prev.some((old) => old.id === n.id))] : result.notes);
+      setNextOffset(result.nextOffset);
+      setListResult({ scope: listScope, error: '' });
+      setOnline(true);
+      const data = await tagsRequest;
+      const custom = loadCustomTags(userId);
+      if (alive.current && generation === listGeneration.current) {
+        setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
+      }
+    } catch (error) {
+      if (alive.current && generation === listGeneration.current && !signal?.aborted) {
+        setListResult((value) => ({ ...value, error: String(error) }));
+      }
+      throw error;
     }
-    setNotes((prev) => append ? [...prev, ...result.notes.filter((n) => !prev.some((old) => old.id === n.id))] : result.notes);
-    setNextOffset(result.nextOffset);
-    setOnline(true);
-    const data = await tagsRequest;
-    const custom = loadCustomTags(userId);
-    if (alive.current && generation === listGeneration.current) {
-      setTags([...new Set([...data.tags, ...custom])].sort((left, right) => left.localeCompare(right, 'zh-CN')));
-    }
-  }, [folderFilter, manualOrder, nextOffset, query, renderMirror, session.offline, syncOfflineMirror, tag, userId, view]);
+  }, [folderFilter, listScope, manualOrder, nextOffset, query, session.offline, syncOfflineMirror, tag, userId, view]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -504,7 +522,7 @@ export function useNotebook(session: Session) {
             await persist(id, updated);
           }
           if (offlineLibraryRef.current) {
-            renderMirror();
+            renderMirrorRef.current();
             await cacheMirroredNote(userId, resolved);
           }
           contentSaved = true;
@@ -747,7 +765,7 @@ export function useNotebook(session: Session) {
       savedAll = await saveRef.current(checkpointId, false, true);
     }
     try {
-      await refreshRef.current();
+      await reload();
       return savedAll;
     } catch (e) {
       setError(String(e));
@@ -806,7 +824,7 @@ export function useNotebook(session: Session) {
       if (offlineLibraryRef.current) {
         mirror.current.set(remote.id, remote);
         await cacheMirroredNote(userId, remote);
-        renderMirror();
+        renderMirrorRef.current();
       }
       if (current.current?.id === local.id) show(remote);
     } else if (current.current?.id === local.id) {
@@ -879,7 +897,7 @@ export function useNotebook(session: Session) {
       updated++;
     }
     notify();
-    if (offlineLibraryRef.current) renderMirror();
+    if (offlineLibraryRef.current) renderMirrorRef.current();
     else await refreshRef.current();
     return updated;
   };
@@ -972,7 +990,7 @@ export function useNotebook(session: Session) {
     await persist(copy.id, draft);
     notify();
     if (online && !session.offline) await saveRef.current(copy.id, false);
-    if (offlineLibraryRef.current) renderMirror();
+    if (offlineLibraryRef.current) renderMirrorRef.current();
     await refreshRef.current();
     return copy;
   };
@@ -1049,7 +1067,7 @@ export function useNotebook(session: Session) {
       await cacheSession(session);
       await cacheMirroredFolders(userId, folders);
       if (!session.offline) await syncOfflineMirror();
-      renderMirror();
+      renderMirrorRef.current();
     } else {
       mirror.current.clear();
       setOfflineCount(0);
@@ -1065,50 +1083,72 @@ export function useNotebook(session: Session) {
     return value ? URL.createObjectURL(value.blob) : null;
   }, [userId]);
 
+  const initialize = (): Promise<void> => {
+    if (initialization.current) return initialization.current;
+    const operation = (async () => {
+      setLoading(true);
+      setListResult((value) => ({ ...value, error: '' }));
+      try {
+        // Retry remote setup without replacing drafts the user has edited meanwhile.
+        if (!localLoaded.current) {
+          const [loaded, enabled] = await Promise.all([loadDrafts(userId), offlineEnabled(userId)]);
+          if (!alive.current) return;
+          drafts.current = loaded;
+          offlineLibraryRef.current = enabled;
+          setOfflineLibrary(enabled);
+          if (enabled) {
+            mirror.current = await loadMirroredNotes(userId);
+            if (!alive.current) return;
+            setOfflineCount(mirror.current.size);
+            setFolders(await loadMirroredFolders(userId));
+            if (mirror.current.size) { renderMirrorRef.current(); setLoading(false); }
+            if (!session.offline) await cacheSession(session);
+          }
+          for (const id of loaded.keys()) blocked.current.add(id);
+          if (loaded.size) show(loaded.values().next().value!.note);
+          localLoaded.current = true;
+        }
+        try {
+          if (!session.offline) {
+            if (!offlineLibraryRef.current && onlineCursor.current === null) {
+              onlineCursor.current = (await api.syncHead()).cursor;
+            }
+            await loadFolders();
+          }
+          await refreshRef.current();
+          if (!offlineLibraryRef.current && !session.offline) await syncOnlineRef.current();
+        } catch (error) {
+          if (error instanceof NetworkError) setOnline(false);
+          else if (error instanceof ApiError) setOnline(true);
+          if (!offlineLibraryRef.current || !mirror.current.size) throw error;
+          renderMirrorRef.current();
+        }
+        if (!alive.current) return;
+        ready.current = true;
+        setInitialized(true);
+      } catch (e) {
+        if (alive.current) {
+          if (e instanceof NetworkError) setOnline(false);
+          else if (e instanceof ApiError) setOnline(true);
+          setError(String(e));
+          setListResult((value) => ({ ...value, error: String(e) }));
+        }
+        throw e;
+      } finally {
+        if (alive.current) { setLoading(false); notify(); }
+      }
+    })();
+    initialization.current = operation;
+    void operation.finally(() => {
+      if (initialization.current === operation) initialization.current = null;
+    }).catch(() => undefined);
+    return operation;
+  };
+  const reload = () => ready.current ? refreshRef.current() : initialize();
+
   useEffect(() => {
     alive.current = true;
-    void Promise.all([loadDrafts(userId), offlineEnabled(userId)]).then(async ([loaded, enabled]) => {
-      if (!alive.current) return;
-      drafts.current = loaded;
-      offlineLibraryRef.current = enabled;
-      setOfflineLibrary(enabled);
-      if (enabled) {
-        mirror.current = await loadMirroredNotes(userId);
-        if (!alive.current) return;
-        setOfflineCount(mirror.current.size);
-        setFolders(await loadMirroredFolders(userId));
-        if (mirror.current.size) { renderMirror(); setLoading(false); }
-        if (!session.offline) await cacheSession(session);
-      } else if (!session.offline) {
-        onlineCursor.current = (await api.syncHead()).cursor;
-      }
-      for (const id of loaded.keys()) blocked.current.add(id);
-      if (loaded.size) show(loaded.values().next().value!.note);
-      try {
-        if (!session.offline) {
-          const folderList = await api.folders();
-          if (!alive.current) return;
-          setFolders(folderList.folders);
-          if (enabled) await cacheMirroredFolders(userId, folderList.folders);
-        }
-        await refreshRef.current();
-        if (!enabled && !session.offline) await syncOnlineRef.current();
-      } catch (error) {
-        if (error instanceof NetworkError) setOnline(false);
-        else if (error instanceof ApiError) setOnline(true);
-        if (!enabled || !mirror.current.size) throw error;
-        renderMirror();
-      }
-      ready.current = true;
-      setInitialized(true);
-    }).catch((e: unknown) => {
-      if (!alive.current) return;
-      if (e instanceof NetworkError) setOnline(false);
-      else if (e instanceof ApiError) setOnline(true);
-      setError(String(e));
-    }).finally(() => {
-      if (alive.current) { setLoading(false); notify(); }
-    });
+    void initialize().catch(() => undefined);
     return () => {
       alive.current = false;
       ready.current = false;
@@ -1131,17 +1171,26 @@ export function useNotebook(session: Session) {
     return () => navigator.serviceWorker.removeEventListener('controllerchange', prepare);
   }, [initialized, offlineLibrary, session.offline]);
 
-  useEffect(() => {
+  // Commit cached lists before paint so navigation never flashes an empty state.
+  useLayoutEffect(() => {
+    const debounce = previousScope.current.navigation === navigationScope && previousScope.current.query !== query;
+    previousScope.current = { navigation: navigationScope, query };
     if (!ready.current) return;
-    const timer = setTimeout(() => {
+    listGeneration.current++;
+    setListResult((value) => value.error ? { ...value, error: '' } : value);
+    const controller = new AbortController();
+    const update = () => {
       if (offlineLibraryRef.current) {
-        listGeneration.current++;
         renderMirror();
       }
-      else void refreshRef.current().catch((e: unknown) => setError(String(e)));
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [initialized, view, query, tag, renderMirror]);
+      else void refreshRef.current(false, controller.signal).catch((e: unknown) => {
+        if (alive.current && !controller.signal.aborted) setError(String(e));
+      });
+    };
+    const timer = debounce ? setTimeout(update, 200) : undefined;
+    if (!debounce) update();
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [initialized, navigationScope, query, renderMirror, offlineLibrary]);
 
   useEffect(() => {
     setOnline(!session.offline);
@@ -1286,11 +1335,14 @@ export function useNotebook(session: Session) {
     note, notes: filtered, tags, view, query, tag, setView, setQuery, setTag,
     folders, folder, setFolder, createFolder, renameFolder, moveFolder, deleteFolder, moveNotes, copyNote,
     reorderNotes, folderOrder, setFolderOrder,
-    nextOffset, loading, error, setError, conflict, setConflict, status, pending,
+    nextOffset: listResult.scope === listScope ? nextOffset : null,
+    loading, listLoading: listResult.scope !== listScope && !listResult.error,
+    listError: !initialized || listResult.scope !== listScope ? listResult.error : '',
+    error, setError, conflict, setConflict, status, pending,
     online, offlineLibrary, offlineCount,
     busy: running.current.size > 0, select, clearSelection, create, edit, append, save: () => note ? save(note.id) : Promise.resolve(true),
     retry, conflictCopy, resolveConflict, discardConflict, purge, purgeTrash,
-    refresh: () => refreshRef.current(), loadMore: () => refresh(true),
+    refresh: reload, loadMore: () => refresh(true),
     configureOffline, cachedFile, backlinks, tasks, searchAll, addTag, manageTag, bulkUpdate, findDuplicates,
   };
 }

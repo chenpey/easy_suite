@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { Compartment, EditorState, Facet } from '@codemirror/state';
 import { Decoration, EditorView, keymap, placeholder } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, redo } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
@@ -148,9 +148,9 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
           markdown(), history(), keymap.of([
             { key: 'Mod-b', run: toggleEmphasis('**') },
             { key: 'Mod-i', run: toggleEmphasis('*') },
+            { key: 'Mod-Shift-z', run: redo, preventDefault: true },
             { key: 'Ctrl-e', run: () => { callbacks.current.onTogglePreview(); return true; } },
             { key: 'Meta-e', run: () => { callbacks.current.onTogglePreview(); return true; } },
-            { key: 'Mod-Enter', run: () => { callbacks.current.onTogglePreview(); return true; } },
             { key: 'Mod-/', run: () => { callbacks.current.onShowShortcuts(); return true; } },
             ...defaultKeymap,
             ...historyKeymap,
@@ -160,7 +160,7 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
           searchHighlights,
           EditorView.contentAttributes.of({
             'aria-label': t('note_content'),
-            'aria-keyshortcuts': 'Meta+B Control+B Meta+I Control+I Meta+E Control+E Meta+Enter Control+Enter Meta+/ Control+/',
+            'aria-keyshortcuts': 'Meta+B Control+B Meta+I Control+I Meta+E Control+E Meta+/ Control+/',
             spellcheck: 'false',
           }),
           EditorView.updateListener.of((update) => {

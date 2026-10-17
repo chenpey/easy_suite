@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.3`
+Current Version: `1.3.4`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.4 Release Notes (2026-10-17)
+
+- Make `Cmd/Ctrl+K` the primary global search shortcut, retaining `Cmd/Ctrl+Shift+F` as a compatible alternative. Focus search and select the existing query; from the mobile editor, return to the note list first.
+- Move Quick Open from `Cmd/Ctrl+K` to `Cmd/Ctrl+O` and edit/preview from `Cmd/Ctrl+Enter` to `Cmd/Ctrl+E`. `Cmd/Ctrl+Enter` now creates a note in the current folder. Add shortcuts for settings (`Cmd/Ctrl+,`), navigation (`Cmd/Ctrl+\`, opening the navigation menu at ≤900px), outline (`Cmd/Ctrl+.`), internal links (`Cmd/Ctrl+Shift+K`) and appearance (`Cmd/Ctrl+Shift+L`).
+- Prioritize application shortcuts inside the editor without changing note text while preserving browser find, input composition, key repeat and shortcuts with other modifiers. Keyboard help now documents undo and redo.
+- Switch folders, categories and sort order immediately while keeping the 200ms search debounce. Show a loading skeleton until results arrive, an empty state only after a successful empty response, and ignore stale responses after switching views.
+- Retry the full startup process after folder, sync cursor or note loading fails, restoring folder navigation, categories, sorting and background sync while preserving existing local drafts. No new database migration is required.
 
 ## 1.3.3 Release Notes (2026-10-17)
 
@@ -123,7 +131,7 @@ A self-hosted Markdown note-taking application for individuals or small teams. R
 - Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting. Browser connectivity hints do not block requests; temporary network or server save failures get up to two automatic retries before requiring manual sync.
 - Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
 - Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Notes can open in a regular separate reader window on desktop (omitted on mobile); system-level always-on-top is not supported.
-- Searchable command palette (`Cmd/Ctrl+K`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
+- Global search (`Cmd/Ctrl+K`), searchable command palette (`Cmd/Ctrl+O`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
 - Tag renaming, merging, deletion, plus batch archive and tagging.
 - AI read/write integration: Restricted tokens, exact note statistics, cross-status FTS5 relevance search, match character ranges, batch reading, MCP Resources, and writing tools. AI edits enter version history.
 - Desktop/mobile layouts, light/dark themes, ZIP export/recovery, and import support for Obsidian directories, Markdown/TXT ZIPs, and individual files.
@@ -266,17 +274,28 @@ On mobile, opening a note adds an in-app history entry. System Back returns to t
 
 ### Shortcuts & Navigation
 
-`Cmd/Ctrl+K` opens the quick command palette for navigation, actions, search, and settings.
+`Cmd/Ctrl+K` focuses global search. `Cmd/Ctrl+O` opens the quick command palette for navigation, actions, search, and settings.
 
 | Shortcut | Action |
 | --- | --- |
-| `Cmd/Ctrl+Shift+F` | Focus global search across every folder |
+| `Cmd/Ctrl+K` | Focus global search across every folder and select the existing query |
+| `Cmd/Ctrl+O` | Open Quick Open to find notes or run commands |
+| `Cmd/Ctrl+Enter` | Create a note in the current folder |
 | `Cmd/Ctrl+S` | Save, sync, and record version snapshot |
-| `Ctrl+E` / `Cmd/Ctrl+Enter` | Toggle edit and preview mode (retains cursor position) |
+| `Cmd/Ctrl+E` | Toggle edit and preview mode (retains cursor position) |
+| `Cmd/Ctrl+,` | Open settings |
+| `Cmd/Ctrl+\` | Toggle navigation sidebar; open navigation menu on tablets and phones at viewport widths ≤900px |
+| `Cmd/Ctrl+.` | Toggle outline and backlinks |
+| `Cmd/Ctrl+Shift+K` | Insert an internal note link |
+| `Cmd/Ctrl+Shift+L` | Toggle light / dark appearance |
 | `Cmd/Ctrl+B` / `Cmd/Ctrl+I` | Toggle bold / italic in editor |
+| `Cmd/Ctrl+Z` | Undo edits |
+| `Cmd/Ctrl+Shift+Z` / `Ctrl+Y` | Redo edits |
 | `Cmd/Ctrl+P` | Export current note as PDF |
 | `Cmd/Ctrl+/` | View keyboard shortcuts |
 | `Esc` | Close dialogs |
+
+`Cmd/Ctrl+F` retains the browser's page search. `Cmd/Ctrl+Shift+F` remains a compatible global search shortcut. Global shortcuts are inactive while a dialog is open. Quick Open moves from `Cmd/Ctrl+K` to `Cmd/Ctrl+O`; edit/preview moves from `Cmd/Ctrl+Enter` to `Cmd/Ctrl+E`.
 
 Double-clicking any heading, paragraph, list item, table, or code block in preview mode instantly switches to edit mode and jumps to the exact source line in the editor.
 

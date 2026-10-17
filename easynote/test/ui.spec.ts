@@ -1861,7 +1861,7 @@ test('command palette, cursor-position image insertion and private attachments w
   await page.getByRole('button', { name: '预览模式' }).click();
   await expect(page.getByRole('link', { name: '资料.pdf' })).toHaveAttribute('href', /\/api\/files\/[0-9a-f-]{36}$/);
 
-  await page.keyboard.press('Meta+k');
+  await page.keyboard.press('Meta+o');
   const palette = page.getByRole('dialog');
   await expect(palette.getByRole('heading', { name: '快速跳转' })).toBeVisible();
   await palette.getByLabel('快速跳转搜索').fill(title);
@@ -1887,24 +1887,30 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await editor.press('Meta+a');
   await editor.press('Meta+i');
   await expect(editor).toContainText('*格式文本*');
+  await editor.press('Meta+z');
+  await expect(editor).toHaveText('格式文本');
+  await editor.press('Meta+Shift+z');
+  await expect(editor).toHaveText('*格式文本*');
 
-  await editor.press('Meta+Enter');
+  await editor.press('Meta+e');
   await expect(page.getByRole('button', { name: '预览模式' })).toHaveAttribute('aria-pressed', 'true');
-  await page.keyboard.press('Meta+Enter');
+  await page.keyboard.press('Meta+e');
   await expect(page.getByRole('button', { name: '编辑模式' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('textbox', { name: '笔记正文' }).press('Meta+/');
   const shortcuts = page.getByRole('dialog');
   await expect(shortcuts.getByRole('heading', { name: '快捷键' })).toBeVisible();
   await expect(shortcuts).toContainText('Cmd/Ctrl+P');
-  await expect(shortcuts).toContainText('Cmd/Ctrl+Shift+F');
+  await expect(shortcuts).toContainText('Cmd/Ctrl+K');
+  await expect(shortcuts).toContainText('Cmd/Ctrl+O');
+  await expect(shortcuts).toContainText('Cmd/Ctrl+Enter');
   await shortcuts.getByRole('button', { name: '关闭' }).click();
 
-  await page.keyboard.press('Control+Shift+F');
+  await page.keyboard.press('Control+k');
   const globalSearch = page.getByRole('textbox', { name: '搜索笔记' });
   await expect(globalSearch).toBeFocused();
   await expect(globalSearch).toHaveValue('');
 
-  await page.keyboard.press('Meta+k');
+  await page.keyboard.press('Meta+o');
   const palette = page.getByRole('dialog');
   const commandSearch = palette.getByLabel('快速跳转搜索');
   await commandSearch.fill('设置');
@@ -1926,26 +1932,150 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await expect(rows.first()).toBeFocused();
 });
 
+test('tablet navigation opens with shortcuts and the Quick Open command', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 960 });
+  await page.goto('/');
+  await expect(page.getByRole('textbox', { name: '搜索笔记', exact: true })).toBeVisible();
+  await expect(page.locator('.sidebar')).toBeHidden();
+  const navigation = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'EasyNote', exact: true }) });
+  for (const modifier of ['Control', 'Meta']) {
+    await page.keyboard.press(`${modifier}+\\`);
+    await expect(navigation).toBeVisible();
+    await expect(navigation.getByRole('button', { name: '全部笔记', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(navigation).toBeHidden();
+  }
+  await page.keyboard.press('Control+o');
+  const palette = page.getByRole('dialog');
+  await palette.getByLabel('快速跳转搜索').fill('切换导航侧栏');
+  await palette.getByRole('button', { name: /切换导航侧栏/ }).click();
+  await expect(navigation).toBeVisible();
+  await navigation.getByRole('button', { name: '归档', exact: true }).click();
+  await expect(navigation).toBeHidden();
+  await expect(page.locator('.list-heading h1')).toHaveText('归档笔记');
+});
+
 for (const width of [1440, 390]) {
   test(`global search shortcuts focus and select the query from the editor at width ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 960 });
     await page.goto('/');
     const title = `全局快捷搜索-${randomUUID()}`;
     await newNote(page, title, '搜索正文');
-    await page.getByRole('textbox', { name: '笔记正文' }).press('Control+Shift+F');
+    await page.getByRole('textbox', { name: '笔记正文' }).press('Control+k');
     const search = page.getByRole('textbox', { name: '搜索笔记', exact: true });
     await expect(search).toBeVisible();
     await expect(search).toBeFocused();
     await search.fill(title);
     await expect(page.locator('[data-note-row]').filter({ hasText: title })).toBeVisible();
     await search.press('Tab');
-    await page.keyboard.press('Meta+Shift+F');
+    await page.keyboard.press('Meta+k');
     await expect(search).toBeFocused();
     await expect(search).toHaveValue(title);
     expect(await search.evaluate((input: HTMLInputElement) =>
       [input.selectionStart, input.selectionEnd])).toEqual([0, title.length]);
+    await search.press('Escape');
+    await page.keyboard.press('Control+Shift+F');
+    await expect(search).toBeFocused();
+    await page.keyboard.press('Control+\\');
+    if (width === 390) {
+      await expect(page.getByRole('dialog').getByRole('heading', { name: 'EasyNote', exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+    } else await expect(page.locator('.app-shell')).toHaveClass(/sidebar-hidden/);
+    await page.locator(`[data-note-row]`).filter({ hasText: title }).click();
+    await expect(page.getByRole('textbox', { name: '笔记正文' })).toHaveText('搜索正文');
+    await page.keyboard.press('Meta+o');
+    const palette = page.getByRole('dialog');
+    await palette.getByLabel('快速跳转搜索').fill('搜索');
+    await palette.getByRole('button', { name: /搜索笔记/ }).click();
+    await expect(search).toBeVisible();
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue('搜索');
   });
 }
+
+for (const modifier of ['Control', 'Meta']) {
+  test(`app shortcuts work inside the editor without changing text with ${modifier}`, async ({ page }) => {
+    const folder = await seedOrderFolder(page);
+    await page.goto('/');
+    await openFolder(page, folder.folderId);
+    const title = `快捷键正文保护-${randomUUID()}`;
+    const content = '## 标题\n保留这一行正文';
+    await newNote(page, title, content);
+    const editor = page.getByRole('textbox', { name: '笔记正文' });
+    await editor.press('Home');
+    await editor.press(`${modifier}+o`);
+    const palette = page.getByRole('dialog');
+    await expect(palette.getByRole('heading', { name: '快速跳转' })).toBeVisible();
+    await expect(palette.getByRole('button', { name: /新建笔记/ })).toContainText('Cmd/Ctrl+Enter');
+    await expect(palette.getByRole('button', { name: /搜索笔记/ })).toContainText('Cmd/Ctrl+K');
+    await page.keyboard.press('Escape');
+
+    await editor.press(`${modifier}+.`);
+    await expect(page.getByRole('complementary', { name: '笔记导航' })).toBeVisible();
+    await editor.press(`${modifier}+.`);
+    await expect(page.getByRole('complementary', { name: '笔记导航' })).toBeHidden();
+    await editor.press(`${modifier}+Shift+k`);
+    await expect(page.getByRole('dialog').getByRole('heading', { name: '插入内部链接' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveText(content.replace('\n', ''));
+
+    await editor.press(`${modifier}+Shift+l`);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await editor.press(`${modifier}+Shift+l`);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await editor.press(`${modifier}+,`);
+    const settings = page.getByRole('dialog');
+    await expect(settings.getByRole('heading', { name: '设置', exact: true })).toBeVisible();
+    await page.keyboard.press(`${modifier}+Enter`);
+    await page.keyboard.press(`${modifier}+k`);
+    await expect(settings).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+    await page.keyboard.press('Escape');
+
+    await editor.press(`${modifier}+Enter`);
+    await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: '笔记标题' })).toBeFocused();
+    await expect.poll(async () => (await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json()).notes[0]?.title).toBe(title);
+    const original = (await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json()).notes[0];
+    expect((await (await page.request.get(`/api/notes/${original.id}`)).json()).note.content).toBe(content);
+    await page.getByRole('textbox', { name: '笔记标题' }).fill(`${title}-新建`);
+    await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+    const created = (await (await page.request.get(`/api/notes?q=${encodeURIComponent(`${title}-新建`)}`)).json()).notes[0];
+    expect(created.folderId).toBe(folder.folderId);
+    expect((await (await page.request.get(`/api/notes/${created.id}`)).json()).note.content).toBe('');
+  });
+}
+
+test('global shortcuts leave browser find, shifted shortcuts and input composition alone', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('textbox', { name: '搜索笔记', exact: true })).toBeVisible();
+  const defaultsAllowed = await page.evaluate(() => [
+    { key: 'f', ctrlKey: true },
+    { key: 'f', metaKey: true },
+    { key: 'O', ctrlKey: true, shiftKey: true },
+    { key: 'k', metaKey: true, altKey: true },
+    { key: 'k', ctrlKey: true, repeat: true },
+    { key: 'k', metaKey: true, isComposing: true },
+  ].map((keys) => window.dispatchEvent(new KeyboardEvent('keydown', { ...keys, cancelable: true }))));
+  expect(defaultsAllowed).toEqual([true, true, true, true, true, true]);
+});
+
+test('shortcut help fits narrow screens in both languages', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: '打开导航菜单', exact: true })).toBeVisible();
+  for (const language of ['zh', 'en']) {
+    await page.keyboard.press('Control+,');
+    await page.getByRole('dialog').getByRole('combobox').first().selectOption(language);
+    await expect(page.getByRole('button', { name: language === 'zh' ? '打开导航菜单' : 'Open navigation menu', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+/');
+    const help = page.getByRole('dialog');
+    await expect(help).toContainText('Cmd/Ctrl+K');
+    await expect(help).toContainText('Cmd/Ctrl+O');
+    expect(await help.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
+    await page.keyboard.press('Escape');
+  }
+});
 
 test('Markdown todo items render and persist interactive checkbox changes', async ({ page }) => {
   const title = `待办事项-${randomUUID().slice(0, 6)}`;
@@ -3380,6 +3510,199 @@ async function storedOrderNote(page: Page, id: string, store: 'notes' | 'drafts'
     } finally { db.close(); }
   }, { id, store, userId: testUserId });
 }
+
+for (const width of [1440, 390]) {
+  test(`cached folders switch without timers or a false empty state at width ${width}`, async ({ page, context }) => {
+    const filled = await seedOrderFolder(page, 1);
+    const empty = await seedOrderFolder(page, 0);
+    await page.setViewportSize({ width, height: 960 });
+    await page.clock.install();
+    await page.goto('/');
+    const list = page.locator('.list-scroll');
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await expect(list.locator(`[data-folder-id="${filled.folderId}"]`)).toBeVisible();
+    await context.setOffline(true);
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+
+    await list.locator(`[data-folder-id="${filled.folderId}"] .folder-open`).click();
+    await expect(list.locator(`[data-note-id="${filled.ids[0]}"]`)).toBeVisible();
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await expect(list.getByText('暂无笔记', { exact: true })).toHaveCount(0);
+    await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+    await list.locator(`[data-folder-id="${empty.folderId}"] .folder-open`).click();
+    await expect(list.getByText('暂无笔记', { exact: true })).toBeVisible();
+    await expect(list.locator('[data-note-row]')).toHaveCount(0);
+  });
+}
+
+test('online folder switches start immediately and ignore an abandoned response while search stays debounced', async ({ page }, testInfo) => {
+  const a = await seedOrderFolder(page, 1);
+  const b = await seedOrderFolder(page, 1);
+  await page.clock.install();
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  const list = page.locator('.list-scroll');
+  await expect(list).toHaveAttribute('aria-busy', 'false');
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let finished!: () => void;
+  const handled = new Promise<void>((resolve) => { finished = resolve; });
+  await page.route('**/api/notes?**', async (route) => {
+    if (new URL(route.request().url()).searchParams.get('folder') !== a.folderId) return route.continue();
+    const response = await route.fetch();
+    await held;
+    try { await route.fulfill({ response }); } finally { finished(); }
+  });
+  const requested = page.waitForRequest((request) => new URL(request.url()).searchParams.get('folder') === a.folderId);
+  await list.locator(`[data-folder-id="${a.folderId}"] .folder-open`).click();
+  await requested;
+  await expect(list).toHaveAttribute('aria-busy', 'true');
+  await expect(list.getByRole('status', { name: '正在加载…' })).toBeVisible();
+  await expect(list.getByText('暂无笔记', { exact: true })).toHaveCount(0);
+  await list.screenshot({ path: testInfo.outputPath('folder-loading.png') });
+  await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+  await list.locator(`[data-folder-id="${b.folderId}"] .folder-open`).click();
+  await expect(list.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
+  release();
+  await handled;
+  await expect(list.locator(`[data-note-id="${a.ids[0]}"]`)).toHaveCount(0);
+  await expect(list.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
+
+  const queries: string[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === '/api/notes' && url.searchParams.get('q')) queries.push(url.searchParams.get('q')!);
+  });
+  await page.getByRole('textbox', { name: '搜索笔记', exact: true }).fill(a.folderId);
+  await page.clock.runFor(199);
+  expect(queries).toEqual([]);
+  await page.clock.runFor(1);
+  await expect.poll(() => queries).toEqual([a.folderId]);
+  await expect(list.locator(`[data-note-id="${a.ids[0]}"]`)).toBeVisible();
+  await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+  await expect(list.locator(`[data-folder-id="${b.folderId}"]`)).toBeVisible();
+});
+
+test('a late save keeps the list in the newly selected cached folder', async ({ page }) => {
+  const a = await seedOrderFolder(page, 1);
+  const b = await seedOrderFolder(page, 1);
+  await page.clock.install();
+  await page.goto('/');
+  await openFolder(page, a.folderId);
+  await page.locator(`[data-note-id="${a.ids[0]}"]`).click();
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await expect(editor).toHaveText('原始正文');
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/notes/${a.ids[0]}`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  const saving = page.waitForRequest((request) => request.method() === 'PUT' && request.url().endsWith(`/api/notes/${a.ids[0]}`));
+  await editor.fill('切换时仍保留保存内容');
+  await page.clock.runFor(500);
+  await saving;
+  await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+  await page.locator(`[data-folder-id="${b.folderId}"] .folder-open`).click();
+  const list = page.locator('.list-scroll');
+  await expect(list.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
+  release();
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await expect(list).toHaveAttribute('aria-busy', 'false');
+  await expect(list.locator(`[data-note-id="${b.ids[0]}"]`)).toBeVisible();
+  await expect(list.locator(`[data-note-id="${a.ids[0]}"]`)).toHaveCount(0);
+  expect((await (await page.request.get(`/api/notes/${a.ids[0]}`)).json()).note.content).toBe('切换时仍保留保存内容');
+});
+
+for (const [enabled, endpoint, globalRetry = false] of [
+  [false, '/api/notes'],
+  [false, '/api/notes', true],
+  [false, '/api/folders'],
+  [false, '/api/sync/cursor'],
+  [false, '/api/sync'],
+  [false, '/api/tags'],
+  [true, '/api/folders'],
+  [true, '/api/sync'],
+] as const) {
+  test(`startup retry restores navigation after ${endpoint} fails with offline library ${enabled} via ${globalRetry ? 'global' : 'list'} retry`, async ({ page }) => {
+    const folder = await seedOrderFolder(page, 1);
+    const rootId = randomUUID();
+    expect((await page.request.post(`/api/notes/${rootId}`, { headers, data: {
+      title: `启动恢复-${rootId}`, content: '根层正文', tags: [], pinned: false, archived: false,
+      deletedAt: null, folderId: null, revision: 0, operationId: randomUUID(),
+    } })).status()).toBe(201);
+    if (!enabled) {
+      await page.goto('/');
+      await disableOfflineLibrary(page);
+    }
+    let attempts = 0;
+    const failures = endpoint === '/api/notes' ? 2 : 1;
+    await page.route((url) => url.pathname === endpoint, (route) => {
+      if (route.request().method() === 'GET' && attempts++ < failures) {
+        return route.fulfill({ status: 500, json: { error: { message: 'test startup failure' } } });
+      }
+      return route.continue();
+    });
+    if (enabled) await page.goto('/');
+    else await page.reload();
+    const list = page.locator('.list-scroll');
+    for (let attempt = 0; attempt < failures; attempt++) {
+      await expect(list.getByText('笔记列表加载失败', { exact: true })).toBeVisible();
+      await expect(list).toHaveAttribute('aria-busy', 'false');
+      const feedback = globalRetry ? page.getByRole('alert') : list;
+      await feedback.getByRole('button', { name: '重试', exact: true }).click();
+    }
+    await expect(list.locator(`[data-note-id="${rootId}"]`)).toBeVisible();
+    await list.locator(`[data-folder-id="${folder.folderId}"] .folder-open`).click();
+    await expect(list.locator(`[data-note-id="${folder.ids[0]}"]`)).toBeVisible();
+    await page.getByRole('button', { name: '排序方式', exact: true }).click();
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await expect(list.locator(`[data-note-id="${folder.ids[0]}"]`)).toBeVisible();
+    await page.locator('.sidebar nav.folder-nav').getByRole('button', { name: '归档', exact: true }).click();
+    await expect(page.locator('.list-heading h1')).toHaveText('归档笔记');
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+    await expect(list.locator(`[data-note-id="${folder.ids[0]}"]`)).toHaveCount(0);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(attempts).toBeGreaterThan(failures);
+  });
+}
+
+test('online folder failures offer retry and empty folders appear only after a successful response', async ({ page }) => {
+  const filled = await seedOrderFolder(page, 1);
+  const empty = await seedOrderFolder(page, 0);
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  let fail = true;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/notes?**', async (route) => {
+    const folder = new URL(route.request().url()).searchParams.get('folder');
+    if (folder === filled.folderId && fail) {
+      fail = false;
+      return route.fulfill({ status: 500, json: { error: { message: 'test list failure' } } });
+    }
+    if (folder === empty.folderId) await held;
+    return route.continue();
+  });
+  const list = page.locator('.list-scroll');
+  await list.locator(`[data-folder-id="${filled.folderId}"] .folder-open`).click();
+  await expect(list.getByText('笔记列表加载失败', { exact: true })).toBeVisible();
+  await expect(list.getByText('暂无笔记', { exact: true })).toHaveCount(0);
+  await list.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(list.locator(`[data-note-id="${filled.ids[0]}"]`)).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+  await list.locator(`[data-folder-id="${empty.folderId}"] .folder-open`).click();
+  await expect(list).toHaveAttribute('aria-busy', 'true');
+  await expect(list.getByText('暂无笔记', { exact: true })).toHaveCount(0);
+  release();
+  await expect(list.getByText('暂无笔记', { exact: true })).toBeVisible();
+  await expect(list).toHaveAttribute('aria-busy', 'false');
+});
 
 for (const enabled of [true, false]) {
   test(`mixed folder browsing hides filed notes and searches globally with offline library ${enabled ? 'enabled' : 'disabled'}`, async ({ page, context }) => {

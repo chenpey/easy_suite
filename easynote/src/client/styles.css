@@ -953,6 +953,10 @@ nav button.active svg { color: var(--accent); }
 .mermaid-error { margin: 20px 0; padding: 12px 14px; color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--paper)); border-left: 3px solid var(--danger); white-space: pre-wrap; font-size: 12px; }
 .blocked-image { color: var(--muted); font-size: 12px; }
 .empty-state { padding: 54px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--muted); font-size: 13px; }
+.list-skeleton-row { display: grid; gap: 12px; padding: 20px 18px; }
+.list-skeleton-row span { height: 10px; border-radius: 5px; background: var(--soft); }
+.list-skeleton-row span:first-child { width: 60%; height: 14px; }
+.list-skeleton-row span:last-child { width: 30%; }
 .workspace-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--line-strong); background: var(--paper); }
 .workspace-empty h2 { margin: 0; color: var(--muted); font-size: 18px; font-weight: 400; }
 .error-strip {
