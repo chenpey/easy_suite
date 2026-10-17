@@ -46,7 +46,9 @@ async function openFolder(page: Page, nameOrId: string | null) {
     item = folders.find((folder) => folder.id === item!.parentId);
   }
   expect(item).toBeUndefined();
-  await page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true }).click();
+  // The root crumb is hidden while the list already shows the root level.
+  const rootCrumb = page.getByRole('navigation', { name: '目录路径' }).getByRole('button', { name: '全部笔记', exact: true });
+  if (await rootCrumb.count()) await rootCrumb.click();
   for (const folder of path) {
     const row = page.locator(`[data-folder-id="${folder.id}"]`);
     const more = page.getByRole('button', { name: '加载更多', exact: true });
@@ -3105,6 +3107,7 @@ test('breadcrumbs and back navigation work with the sidebar collapsed and on mob
   await page.screenshot({ path: testInfo.outputPath('desktop-folder-navigation.png') });
   const path = page.getByRole('navigation', { name: '目录路径' });
   await expect(path).toHaveCSS('flex-direction', 'row');
+  expect(await page.locator('.list-heading h1').innerText()).toBe(`${marker}-2`);
   expect(await path.getByRole('button').allTextContents()).toEqual(['全部笔记', ...ids.map((_, index) => `${marker}-${index}`)]);
   await page.getByRole('button', { name: '返回上一级', exact: true }).click();
   await expect(page.getByRole('heading', { name: `${marker}-1`, exact: true })).toBeVisible();
@@ -3113,6 +3116,9 @@ test('breadcrumbs and back navigation work with the sidebar collapsed and on mob
   await path.getByRole('button', { name: '全部笔记', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部笔记', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '返回上一级', exact: true })).toHaveCount(0);
+  // The root level shows no second line repeating the All Notes title.
+  await expect(path).toHaveCount(0);
+  await expect(page.locator('.list-heading h1')).toHaveText('全部笔记');
   await page.setViewportSize({ width: 390, height: 844 });
   await openFolder(page, ids[2]);
   await path.evaluate((element) => { element.scrollLeft = element.scrollWidth; });

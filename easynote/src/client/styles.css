@@ -1747,6 +1747,8 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 }
 .sort-toggle:hover { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, var(--paper)); }
 .sort-toggle svg { color: var(--accent); }
+/* A narrow list pane keeps the title readable by collapsing the label to its icon. */
+.note-list.narrow .sort-toggle span { display: none; }
 @media (max-width: 640px) {
   .sort-toggle span { display: none; }
 }

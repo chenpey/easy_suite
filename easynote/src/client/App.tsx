@@ -1740,7 +1740,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <button className="account" onClick={() => setSettings(true)}><span className="avatar">{session.user!.username[0].toUpperCase()}</span><span>{session.user!.username}</span><Settings size={16} /></button>
       </div>
     </aside>
-    <section className="note-list">
+    <section className={`note-list${noteListWidth < 340 ? ' narrow' : ''}`}>
       <header className="list-header">
         <div className="list-heading">
           <IconButton label="打开导航菜单" className="icon-button mobile-menu-trigger" onClick={() => setMobileNavigation(true)}><Menu size={21} /></IconButton>
@@ -1778,8 +1778,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               openFolderMenu(null, rect.left, rect.bottom, event.currentTarget);
             }}><Plus size={18} /></IconButton>
         </div>
-        {book.view === 'all' && <div className="folder-navigation">
-          {book.folder && <IconButton label="返回上一级" onClick={() => chooseFolder(currentPath.at(-1)?.parentId ?? null)}><ArrowLeft size={16} /></IconButton>}
+        {/* At the plain root the heading already shows All Notes, so the row would only repeat it. */}
+        {book.view === 'all' && (book.folder || book.query || book.tag) && <div className="folder-navigation">
+          <IconButton label="返回上一级" onClick={() => chooseFolder(currentPath.at(-1)?.parentId ?? null)}><ArrowLeft size={16} /></IconButton>
           <nav className="folder-breadcrumbs" aria-label={t('目录路径')}>
           {[null, ...currentPath].map((folder) => <button key={folder?.id ?? 'root'} type="button"
             aria-current={book.folder === (folder?.id ?? null) ? 'page' : undefined}
