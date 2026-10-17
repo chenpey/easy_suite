@@ -898,7 +898,7 @@ export function useNotebook(session: Session) {
     }
     notify();
     if (offlineLibraryRef.current) renderMirrorRef.current();
-    else await refreshRef.current();
+    else await refreshRef.current().catch(() => undefined);
     return updated;
   };
 
@@ -1340,7 +1340,7 @@ export function useNotebook(session: Session) {
     reorderNotes, folderOrder, setFolderOrder,
     nextOffset: listResult.scope === listScope ? nextOffset : null,
     loading, listLoading: listResult.scope !== listScope && !listResult.error,
-    listError: !initialized || listResult.scope !== listScope ? listResult.error : '',
+    listError: listResult.error,
     error, setError, conflict, setConflict, status, pending,
     online, offlineLibrary, offlineCount,
     busy: running.current.size > 0, select, clearSelection, create, edit, append, save: () => note ? save(note.id) : Promise.resolve(true),

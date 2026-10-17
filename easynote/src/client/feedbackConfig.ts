@@ -1,0 +1,1 @@
+export const SUCCESS_FEEDBACK_DURATION_MS = 2_000;

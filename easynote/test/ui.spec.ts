@@ -613,6 +613,90 @@ test('a note share can be created, extended and cancelled from share management'
   expect((await page.request.get(url.replace('/shared/', '/api/public/shares/'))).status()).toBe(404);
 });
 
+test('success feedback expires after two seconds and restarts while failures stay dismissible', async ({ page }) => {
+  await page.addInitScript(() => {
+    let copiedText = '';
+    (window as typeof window & { copyWrites: number }).copyWrites = 0;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          copiedText = value;
+          (window as typeof window & { copyWrites: number }).copyWrites++;
+        },
+        readText: async () => copiedText,
+      },
+    });
+  });
+  await page.goto('/');
+  await newNote(page, `反馈计时-${randomUUID().slice(0, 6)}`, '反馈计时正文');
+  await page.clock.install();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+  await page.getByRole('button', { name: '只读分享', exact: true }).click();
+  const sharingDialog = page.locator('dialog[open]');
+  const notice = sharingDialog.locator('.dialog-feedback-anchor > .toast');
+
+  await page.getByRole('button', { name: '创建链接', exact: true }).click();
+  await expect(notice).toHaveText('只读分享链接已创建');
+  await page.clock.runFor(1_999);
+  await expect(notice).toBeVisible();
+  await page.clock.runFor(1);
+  await expect(notice).toHaveCount(0);
+
+  await sharingDialog.getByRole('button', { name: '替换链接', exact: true }).click();
+  await expect(notice).toHaveText('只读分享链接已创建');
+  await page.clock.runFor(1_000);
+  await sharingDialog.getByRole('button', { name: '撤销', exact: true }).click();
+  await expect(notice).toHaveText('分享链接已撤销');
+  await page.clock.runFor(999);
+  await expect(notice).toBeVisible();
+  await page.clock.runFor(1);
+  await expect(notice).toBeVisible();
+  await page.clock.runFor(999);
+  await expect(notice).toBeVisible();
+  await page.clock.runFor(1);
+  await expect(notice).toHaveCount(0);
+
+  await sharingDialog.getByRole('button', { name: '创建链接', exact: true }).click();
+  await expect(notice).toHaveText('只读分享链接已创建');
+  await page.clock.runFor(2_000);
+  await expect(notice).toHaveCount(0);
+  const copyButton = sharingDialog.locator('.share-url button');
+  await copyButton.click();
+  await expect(copyButton).toHaveText('已复制');
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { copyWrites: number }).copyWrites)).toBe(1);
+  await page.clock.runFor(1_000);
+  await copyButton.click();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { copyWrites: number }).copyWrites)).toBe(2);
+  await page.clock.runFor(999);
+  await expect(copyButton).toHaveText('已复制');
+  await page.clock.runFor(1);
+  await expect(copyButton).toHaveText('已复制');
+  await page.clock.runFor(999);
+  await expect(copyButton).toHaveText('已复制');
+  await page.clock.runFor(1);
+  await expect(copyButton).toHaveText('复制');
+
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.route('**/api/notes/*/share', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'share failed' } }),
+      });
+    } else await route.continue();
+  });
+  await sharingDialog.getByRole('button', { name: '替换链接', exact: true }).click();
+  const failure = sharingDialog.locator('.dialog-feedback-anchor > [role="alert"]');
+  await expect(failure).toContainText('share failed');
+  await page.clock.runFor(10_000);
+  await expect(failure).toBeVisible();
+  expect(await sharingDialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
+  await failure.getByRole('button', { name: '关闭错误', exact: true }).click();
+  await expect(failure).toHaveCount(0);
+});
+
 test('dialog errors remain visible above the backdrop on desktop and mobile', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '管理标签', exact: true }).click();
@@ -4161,6 +4245,66 @@ test('remote order in a failed draft survives an offline cold start', async ({ p
   await expect.poll(() => page.locator('[data-note-row]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-note-id'))))
     .toEqual([ids[1], ids[2], ids[0]]);
   await context.setOffline(false);
+});
+
+test('mobile move stays successful when the following list refresh fails', async ({ page }) => {
+  const source = await seedOrderFolder(page, 1);
+  const target = await seedOrderFolder(page, 0);
+  const id = source.ids[0];
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  await openFolder(page, source.folderId);
+  await page.locator(`[data-note-id="${id}"]`).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const actions = await openMobileNoteActions(page);
+  await actions.getByRole('button', { name: '移动笔记', exact: true }).click();
+  const picker = page.getByRole('dialog');
+  let failRefresh = true;
+  await page.route('**/api/notes?*', async (route) => {
+    if (route.request().method() === 'GET' && failRefresh) {
+      failRefresh = false;
+      await route.abort();
+    } else await route.continue();
+  });
+  const movedResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/notes/${id}` && response.request().method() === 'PUT' && response.ok());
+  await picker.getByRole('button', { name: target.folderId, exact: true }).click();
+  await movedResponse;
+  await expect.poll(async () => (await (await page.request.get(`/api/notes/${id}`)).json()).note.folderId).toBe(target.folderId);
+  await expect.soft(picker).toHaveCount(0);
+  await expect.soft(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: '返回笔记列表' }).click();
+  const list = page.locator('.list-scroll');
+  await expect(list.getByText('笔记列表加载失败', { exact: true })).toBeVisible();
+  await list.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(list.getByText('笔记列表加载失败', { exact: true })).toHaveCount(0);
+  await expect(list).toHaveAttribute('aria-busy', 'false');
+});
+
+test('mobile move keeps the picker open and reports a failed save', async ({ page }) => {
+  const source = await seedOrderFolder(page, 1);
+  const target = await seedOrderFolder(page, 0);
+  const id = source.ids[0];
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  await openFolder(page, source.folderId);
+  await page.locator(`[data-note-id="${id}"]`).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const actions = await openMobileNoteActions(page);
+  await actions.getByRole('button', { name: '移动笔记', exact: true }).click();
+  const picker = page.getByRole('dialog');
+  await page.route(`**/api/notes/${id}`, async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'move failed' } }),
+      });
+    } else await route.continue();
+  });
+  await picker.getByRole('button', { name: target.folderId, exact: true }).click();
+  await expect(picker.getByRole('alert')).toContainText('批量操作已处理 0 篇');
+  await expect.poll(async () => (await (await page.request.get(`/api/notes/${id}`)).json()).note.folderId).toBe(source.folderId);
 });
 
 test('native drag Escape cancels and edge rows keep scrolling without a folder tree', async ({ page }) => {

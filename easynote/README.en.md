@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.7`
+Current Version: `1.3.8`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.8 Release Notes (2026-10-17)
+
+- Fix an "Operation Incomplete" error after a note move has saved successfully but the subsequent list refresh fails. Close the move dialog on success and retain a retry action in the list for refresh failures; actual save failures still report an error.
+- Unify success notices and "Copied" feedback at two seconds, configured through `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts`. Repeated actions restart the timer; failures remain available for manual dismissal or recovery.
+- Add browser regressions for refresh failures after successful moves, actual save failures, feedback expiry, timer resets and manual error dismissal. No new database migration is required.
 
 ## 1.3.7 Release Notes (2026-10-17)
 
@@ -433,6 +439,8 @@ EasyNote supports Model Context Protocol (MCP) natively:
 3. AI agents gain permission-scoped access to search, read, create, or modify notes through standard MCP tools and resources. See [`docs/AI_INTEGRATION.en.md`](docs/AI_INTEGRATION.en.md) for full details.
 
 ## Configuration
+
+Transient success feedback is controlled by `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts`, in milliseconds, with a default of `2000`. Success notices and "Copied" feedback share this value. Failure feedback remains visible for manual dismissal or recovery. Rebuild and publish the application after changing this code configuration.
 
 Configured in `wrangler.json` under `vars`:
 

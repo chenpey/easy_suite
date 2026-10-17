@@ -11,6 +11,7 @@ import { NoteSharing } from './NoteSharing';
 import { ShareManagement } from './ShareManagement';
 import { UserManagement } from './UserManagement';
 import { clearAccountStorage, forgetCachedSession, loadOfflineSession, cacheSession, loadMirroredNote } from './drafts';
+import { SUCCESS_FEEDBACK_DURATION_MS } from './feedbackConfig';
 import { headings, noteLink } from './knowledge';
 import {
   createPdfFile,
@@ -767,7 +768,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   }, [layout, note?.id]);
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), 4500);
+    const timer = setTimeout(() => setNotice(null), SUCCESS_FEEDBACK_DURATION_MS);
     return () => clearTimeout(timer);
   }, [notice]);
   const showNotice = (text: string) => setNotice({ id: Date.now(), text });

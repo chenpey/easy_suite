@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Copy, Link2, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react';
 import type { NoteShare } from '../shared/types';
 import { api } from './api';
+import { SUCCESS_FEEDBACK_DURATION_MS } from './feedbackConfig';
 import { dateLocale, t } from './i18n';
 
 interface Props {
@@ -16,7 +17,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
   const [expiresInHours, setExpiresInHours] = useState('168');
   const [url, setUrl] = useState('');
   const [working, setWorking] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -30,14 +31,14 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
 
   useEffect(() => {
     if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1600);
+    const timer = window.setTimeout(() => setCopied(0), SUCCESS_FEEDBACK_DURATION_MS);
     return () => window.clearTimeout(timer);
   }, [copied]);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      setCopied((value) => value + 1);
     } catch (error) {
       reportError(String(error));
     }
@@ -47,7 +48,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
     setWorking(true);
     try {
       const result = await api.createNoteShare(noteId, expiresInHours === 'permanent' ? null : Number(expiresInHours));
-      setCopied(false);
+      setCopied(0);
       setShare(result.share);
       setUrl(result.url);
       notify(t('share_created'));
@@ -62,7 +63,7 @@ export function NoteSharing({ noteId, disabled, notify, reportError }: Props) {
     setWorking(true);
     try {
       await api.revokeNoteShare(noteId);
-      setCopied(false);
+      setCopied(0);
       setShare(null);
       setUrl('');
       notify(t('share_revoked'));
