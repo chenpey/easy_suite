@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.8`
+Current Version: `1.3.9`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.9 Release Notes (2026-10-17)
+
+- Reduce width and spacing in the Move Note and Move Folder dialogs. Make folder options clickable and highlighted across the full row, align root and nested folder indentation, and provide mobile rows at least 44px high.
+- Center regular success notices near the top of the screen for better visibility. Retain the shared two-second duration configuration, feedback within dialogs, and error dismissal and retry behavior.
+- Add desktop and mobile move regressions covering full-row clicks, touch target height, and success notices remaining within the viewport and unobscured. No new database migration is required.
 
 ## 1.3.8 Release Notes (2026-10-17)
 

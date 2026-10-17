@@ -4247,6 +4247,59 @@ test('remote order in a failed draft survives an offline cold start', async ({ p
   await context.setOffline(false);
 });
 
+for (const mobile of [false, true]) {
+  test(`note move success stays visible after closing the picker on ${mobile ? 'mobile' : 'desktop'}`, async ({ page }, testInfo) => {
+    const source = await seedOrderFolder(page, 1);
+    const target = await seedOrderFolder(page, 0);
+    const id = source.ids[0];
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await openFolder(page, source.folderId);
+    const row = page.locator(`[data-note-id="${id}"]`);
+    await row.click();
+    if (mobile) {
+      const actions = await openMobileNoteActions(page);
+      await actions.getByRole('button', { name: '移动笔记', exact: true }).click();
+    } else {
+      await row.click({ button: 'right' });
+      await page.getByRole('menuitem', { name: '移动笔记', exact: true }).click();
+    }
+    const picker = page.getByRole('dialog');
+    await expect(picker).toHaveClass('move-dialog');
+    const layout = await picker.evaluate((dialog) => {
+      const list = dialog.querySelector('.move-target-list')!;
+      return {
+        width: dialog.getBoundingClientRect().width,
+        fullRows: [...list.querySelectorAll('button')].every((row) =>
+          Math.abs(row.getBoundingClientRect().width - list.clientWidth) < 1),
+        rowHeights: [...list.querySelectorAll('button')].map((row) => row.getBoundingClientRect().height),
+      };
+    });
+    expect(layout.width).toBeLessThanOrEqual(380);
+    expect(layout.fullRows).toBe(true);
+    expect(layout.rowHeights.every((height) => height >= (mobile ? 44 : 40))).toBe(true);
+    const targetRow = picker.getByRole('button', { name: target.folderId, exact: true });
+    await targetRow.hover();
+    await picker.screenshot({ path: testInfo.outputPath('move-picker.png') });
+    const box = (await targetRow.boundingBox())!;
+    await targetRow.click({ position: { x: box.width - 12, y: box.height / 2 } });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    const notice = page.locator('.toast');
+    await expect(notice).toHaveText('已移动 1 篇笔记');
+    await expect(notice).toBeInViewport();
+    const noticeBox = (await notice.boundingBox())!;
+    expect(noticeBox.y).toBeLessThan(100);
+    expect(Math.abs(noticeBox.x + noticeBox.width / 2 - page.viewportSize()!.width / 2)).toBeLessThan(1);
+    expect(await notice.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const topmost = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return topmost === element || element.contains(topmost);
+    })).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('move-success.png') });
+    await expect.poll(async () => (await (await page.request.get(`/api/notes/${id}`)).json()).note.folderId).toBe(target.folderId);
+  });
+}
+
 test('mobile move stays successful when the following list refresh fails', async ({ page }) => {
   const source = await seedOrderFolder(page, 1);
   const target = await seedOrderFolder(page, 0);

@@ -1410,6 +1410,20 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   font-size: 12px;
 }
 .toast svg { color: var(--success); }
+.app-shell > .toast {
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top));
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--line));
+  font-size: 13px;
+}
 .login { min-height: 100dvh; padding: 24px; display: grid; place-items: center; overflow: auto; background: var(--paper); }
 .login-form {
   width: 100%;
@@ -1835,13 +1849,19 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
 .note-context-menu button.danger:hover, .folder-context-menu button.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--paper)); }
 
 /* Move target dialog */
+dialog.move-dialog { width: min(380px, calc(100% - 28px)); padding: 18px; }
+.move-dialog .dialog-header { margin-bottom: 12px; }
 .move-target-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
 .move-target-row {
-  display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 10px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+  width: 100%; min-width: 0; min-height: 40px; padding: 8px 12px;
   border: 0; border-radius: 7px; background: transparent; color: var(--ink);
   text-align: left; font-size: 13px; box-shadow: none;
 }
-.move-target-row:hover { background: var(--hover); }
+.move-target-row:hover, .move-target-row:focus-visible { background: var(--accent-soft); }
 .move-target-row svg { color: var(--accent); flex: 0 0 auto; }
 .move-target-row span { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media(max-width: 640px) {
+  .move-target-row { min-height: 44px; }
+}
 .confirm-hint { margin: 10px 0 0; color: var(--muted); font-size: 13px; }

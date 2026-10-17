@@ -1578,7 +1578,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const renderMoveTargets = (parentId: string | null, depth: number, onPick: (target: string | null) => void, exclude?: Set<string>): ReactNode =>
     folderChildren(parentId).filter((folder) => !exclude?.has(folder.id)).map((folder) => (
       <div key={folder.id}>
-        <button type="button" className="move-target-row" style={{ paddingLeft: depth * 12 }}
+        <button type="button" className="move-target-row" style={{ paddingLeft: 12 + depth * 16 }}
           onClick={() => onPick(folder.id)}><FolderIcon size={14} /><span>{folder.name}</span></button>
         {renderMoveTargets(folder.id, depth + 1, onPick, exclude)}
       </div>
@@ -2677,13 +2677,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </>
       )}
     </Modal>}
-    {folderDialog?.mode === 'move' && folderDialog.folder && <Modal title={t('移动目录')} close={closeFolderDialog}>
+    {folderDialog?.mode === 'move' && folderDialog.folder && <Modal title={t('移动目录')} className="move-dialog" close={closeFolderDialog}>
       <div className="move-target-list">
         <button type="button" className="move-target-row" onClick={() => moveFolderTo(null)}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
         {renderMoveTargets(null, 0, moveFolderTo, folderSubtree(folderDialog.folder.id))}
       </div>
     </Modal>}
-    {moveNoteIds && <Modal title={t('移动笔记')} close={() => setMoveNoteIds(null)}>
+    {moveNoteIds && <Modal title={t('移动笔记')} className="move-dialog" close={() => setMoveNoteIds(null)}>
       <div className="move-target-list">
         <button type="button" className="move-target-row" onClick={() => moveToFolder(null)}><FolderIcon size={14} /><span>{t('根目录')}</span></button>
         {renderMoveTargets(null, 0, moveToFolder)}
