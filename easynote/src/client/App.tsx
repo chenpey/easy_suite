@@ -672,6 +672,13 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const pendingEditorOffset = useRef<{ noteId: string; offset: number } | null>(null);
   const pendingInsertion = useRef<string | null>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const [searchFocusRequested, setSearchFocusRequested] = useState(false);
+  useLayoutEffect(() => {
+    if (!searchFocusRequested || mobileNote) return;
+    searchInput.current?.focus();
+    searchInput.current?.select();
+    setSearchFocusRequested(false);
+  }, [searchFocusRequested, mobileNote]);
   const commandList = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   const attachmentInput = useRef<HTMLInputElement>(null);
@@ -1234,6 +1241,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         event.preventDefault();
         setCommandPalette(true);
         setCommandQuery('');
+      } else if (key === 'f' && event.shiftKey) {
+        event.preventDefault();
+        setMobileNote(false);
+        setMobileSearch(true);
+        setSearchFocusRequested(true);
       } else if (key === 's' && (note || book.pending.length)) {
         event.preventDefault();
         void syncNow();
@@ -1614,7 +1626,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       action: () => { setCommandPalette(false); void syncNow(); },
     },
     {
-      id: 'search', label: t('搜索笔记'), aliases: ['搜索', 'search', 'find'], icon: <Search size={16} />, shortcut: '',
+      id: 'search', label: t('搜索笔记'), aliases: ['搜索', 'search', 'find'], icon: <Search size={16} />, shortcut: 'Cmd/Ctrl+Shift+F',
       disabled: false,
       action: () => {
         book.setQuery(commandQuery);
@@ -1752,15 +1764,15 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             </IconButton>
           )}
           <IconButton label="快速跳转" className="icon-button list-command-action" onClick={() => { setCommandQuery(''); setCommandPalette(true); }}><Command size={16} /></IconButton>
-          {book.view !== 'trash' && <IconButton label={selectionMode ? '退出批量选择' : '批量选择'} className="icon-button list-bulk-action" aria-pressed={selectionMode} onClick={() => {
-            if (selectionMode) exitSelectionMode();
-            else setSelectionMode(true);
-          }}>{selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}</IconButton>}
           {book.view === 'all' && !book.query && !book.tag && <button type="button" className="sort-toggle" aria-label={t('排序方式')} title={t('排序方式')}
             onClick={() => book.setFolderOrder(book.folderOrder === 'manual' ? 'recent' : 'manual')}>
             {book.folderOrder === 'manual' ? <ArrowUpDown size={14} /> : <Clock size={14} />}
             <span>{book.folderOrder === 'manual' ? t('手动排序') : t('最近修改')}</span>
           </button>}
+          {book.view !== 'trash' && <IconButton label={selectionMode ? '退出批量选择' : '批量选择'} className="icon-button list-bulk-action" aria-pressed={selectionMode} onClick={() => {
+            if (selectionMode) exitSelectionMode();
+            else setSelectionMode(true);
+          }}>{selectionMode ? <CheckSquare size={16} /> : <Square size={16} />}</IconButton>}
           <IconButton label={syncing ? '正在同步全部' : '同步全部'} className="icon-button list-sync-action" onClick={() => void syncNow(false)} disabled={book.busy || syncing}>{syncing ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}</IconButton>
           {book.view === 'trash' && (book.notes.length > 0 || !!book.query || !!book.tag) &&
             <IconButton label="全部永久删除" className="icon-button danger-icon list-purge-action" onClick={() => setConfirmAction('purge-all')} disabled={disabled || book.pending.length > 0}><Trash2 size={17} /></IconButton>}
@@ -2412,6 +2424,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {shortcutHelp && <Modal title="快捷键" close={() => setShortcutHelp(false)}>
       <div className="shortcut-list">
         <div><span>{t('打开快速跳转')}</span><kbd>Cmd/Ctrl+K</kbd></div>
+        <div><span>{t('全局搜索')}</span><kbd>Cmd/Ctrl+Shift+F</kbd></div>
         <div><span>{t('sync_and_save_version')}</span><kbd>Cmd/Ctrl+S</kbd></div>
         <div><span>{t('编辑 / 预览')}</span><kbd>Ctrl+E / Cmd+Enter</kbd></div>
         <div><span>{t('导出当前笔记为 PDF')}</span><kbd>Cmd/Ctrl+P</kbd></div>

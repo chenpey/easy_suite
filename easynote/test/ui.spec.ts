@@ -1896,7 +1896,13 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   const shortcuts = page.getByRole('dialog');
   await expect(shortcuts.getByRole('heading', { name: '快捷键' })).toBeVisible();
   await expect(shortcuts).toContainText('Cmd/Ctrl+P');
+  await expect(shortcuts).toContainText('Cmd/Ctrl+Shift+F');
   await shortcuts.getByRole('button', { name: '关闭' }).click();
+
+  await page.keyboard.press('Control+Shift+F');
+  const globalSearch = page.getByRole('textbox', { name: '搜索笔记' });
+  await expect(globalSearch).toBeFocused();
+  await expect(globalSearch).toHaveValue('');
 
   await page.keyboard.press('Meta+k');
   const palette = page.getByRole('dialog');
@@ -1919,6 +1925,27 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await rows.nth(1).press('Home');
   await expect(rows.first()).toBeFocused();
 });
+
+for (const width of [1440, 390]) {
+  test(`global search shortcuts focus and select the query from the editor at width ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 });
+    await page.goto('/');
+    const title = `全局快捷搜索-${randomUUID()}`;
+    await newNote(page, title, '搜索正文');
+    await page.getByRole('textbox', { name: '笔记正文' }).press('Control+Shift+F');
+    const search = page.getByRole('textbox', { name: '搜索笔记', exact: true });
+    await expect(search).toBeVisible();
+    await expect(search).toBeFocused();
+    await search.fill(title);
+    await expect(page.locator('[data-note-row]').filter({ hasText: title })).toBeVisible();
+    await search.press('Tab');
+    await page.keyboard.press('Meta+Shift+F');
+    await expect(search).toBeFocused();
+    await expect(search).toHaveValue(title);
+    expect(await search.evaluate((input: HTMLInputElement) =>
+      [input.selectionStart, input.selectionEnd])).toEqual([0, title.length]);
+  });
+}
 
 test('Markdown todo items render and persist interactive checkbox changes', async ({ page }) => {
   const title = `待办事项-${randomUUID().slice(0, 6)}`;
@@ -3418,6 +3445,17 @@ test('all notes is the only root entry on desktop and mobile and folder sort pre
   await page.goto('/');
   const nav = page.locator('.sidebar nav.folder-nav');
   const sort = page.getByRole('button', { name: '排序方式', exact: true });
+  await expect(sort).toBeVisible();
+  const headerOrder = await page.locator('.list-heading > button').evaluateAll((nodes) => nodes
+    .filter((node) => (node as HTMLElement).offsetParent !== null)
+    .map((node) => node.getAttribute('class')));
+  expect(headerOrder).toEqual([
+    'icon-button list-command-action',
+    'sort-toggle',
+    'icon-button list-bulk-action',
+    'icon-button list-sync-action',
+    'icon-button list-create-action',
+  ]);
   await expect(nav.getByRole('button', { name: '根目录', exact: true })).toHaveCount(0);
   const allNotes = nav.getByRole('button', { name: '全部笔记', exact: true });
   await allNotes.focus();

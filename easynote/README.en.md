@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.2`
+Current Version: `1.3.3`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.3 Release Notes (2026-10-17)
+
+- Reorder the list toolbar to Quick Open, Sort, Bulk Select, Sync and New, keeping browsing controls together.
+- Add `Cmd/Ctrl+Shift+F` to focus global search and select the existing query. From the mobile editor, return to the note list before focusing search.
+- Show the new shortcut in keyboard help, the Quick Open search command and both language guides. Search spans folders while retaining the current category and tag filters. No new database migration is required.
 
 ## 1.3.2 Release Notes (2026-10-17)
 
@@ -264,6 +270,7 @@ On mobile, opening a note adds an in-app history entry. System Back returns to t
 
 | Shortcut | Action |
 | --- | --- |
+| `Cmd/Ctrl+Shift+F` | Focus global search across every folder |
 | `Cmd/Ctrl+S` | Save, sync, and record version snapshot |
 | `Ctrl+E` / `Cmd/Ctrl+Enter` | Toggle edit and preview mode (retains cursor position) |
 | `Cmd/Ctrl+B` / `Cmd/Ctrl+I` | Toggle bold / italic in editor |
