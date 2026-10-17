@@ -1277,9 +1277,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       } else if (key === '.' && note) {
         event.preventDefault();
         setInspector((value) => !value);
-      } else if (key === 's' && (note || book.pending.length)) {
+      } else if (key === 's') {
         event.preventDefault();
-        void syncNow();
+        if (note || book.pending.length) void syncNow();
       } else if (key === 'p' && note) {
         event.preventDefault();
         exportCurrentNote();

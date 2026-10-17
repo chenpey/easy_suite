@@ -1175,7 +1175,7 @@ export function useNotebook(session: Session) {
   useLayoutEffect(() => {
     const debounce = previousScope.current.navigation === navigationScope && previousScope.current.query !== query;
     previousScope.current = { navigation: navigationScope, query };
-    if (!ready.current) return;
+    if (!ready.current || (!offlineLibraryRef.current && listResult.scope === listScope)) return;
     listGeneration.current++;
     setListResult((value) => value.error ? { ...value, error: '' } : value);
     const controller = new AbortController();

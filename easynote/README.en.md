@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.4`
+Current Version: `1.3.5`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.5 Release Notes (2026-10-17)
+
+- Avoid duplicate `/api/notes` and `/api/tags` requests after the initial online library load, reducing Worker/D1 reads and unnecessary list generation updates.
+- Prevent `Cmd/Ctrl+S` from reaching the browser's Save Page dialog when no note is selected and no draft is pending; when content exists, it still saves immediately and records a version snapshot.
+- Add browser regression coverage for online startup request deduplication and the empty-state save shortcut. This is a client-side fix with no new database migration.
 
 ## 1.3.4 Release Notes (2026-10-17)
 

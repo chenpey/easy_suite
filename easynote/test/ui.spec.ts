@@ -129,6 +129,23 @@ test('does not render the login form while the initial session is loading', asyn
   await expect(page.getByRole('main').getByRole('button', { name: '新建笔记', exact: true })).toBeVisible();
 });
 
+test('online startup requests the root note list and tags only once', async ({ page }) => {
+  await page.goto('/');
+  await disableOfflineLibrary(page);
+  let notes = 0;
+  let tags = 0;
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/notes') notes++;
+    else if (path === '/api/tags') tags++;
+  });
+  await page.reload();
+  await expect(page.locator('.list-scroll')).toHaveAttribute('aria-busy', 'false');
+  await page.evaluate(() => new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect({ notes, tags }).toEqual({ notes: 1, tags: 1 });
+});
+
 test('cached startup remains usable while session verification and text sync are delayed', async ({ page }) => {
   await page.goto('/');
   const title = `启动缓存-${randomUUID()}`;
@@ -2058,6 +2075,16 @@ test('global shortcuts leave browser find, shifted shortcuts and input compositi
     { key: 'k', metaKey: true, isComposing: true },
   ].map((keys) => window.dispatchEvent(new KeyboardEvent('keydown', { ...keys, cancelable: true }))));
   expect(defaultsAllowed).toEqual([true, true, true, true, true, true]);
+});
+
+test('save shortcut is blocked when there is no note or pending draft', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.list-scroll')).toHaveAttribute('aria-busy', 'false');
+  const prevented = await page.evaluate(() => [
+    { key: 's', ctrlKey: true },
+    { key: 's', metaKey: true },
+  ].map((keys) => !window.dispatchEvent(new KeyboardEvent('keydown', { ...keys, cancelable: true }))));
+  expect(prevented).toEqual([true, true]);
 });
 
 test('shortcut help fits narrow screens in both languages', async ({ page }) => {
