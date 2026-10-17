@@ -210,8 +210,13 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
 
 const renderer = new MarkdownIt({ html: true, linkify: true, breaks: true }).use(footnote).use(markdownMath);
 renderer.core.ruler.after('block', 'source_lines', (state) => {
-  for (const token of state.tokens) {
+  for (const [index, token] of state.tokens.entries()) {
     if (token.map && token.nesting === 1) token.attrSet('data-source-line', String(token.map[0]));
+    const inline = state.tokens[index + 2];
+    if (token.type === 'list_item_open' && inline?.type === 'inline' && inline.map &&
+        /^\[([ xX]?)\](?=\s|$)/.test(inline.content)) {
+      token.attrSet('data-task-line', String(inline.map[0]));
+    }
   }
 });
 const defaultText = renderer.renderer.rules.text;
@@ -277,12 +282,14 @@ renderer.renderer.rules.footnote_anchor = (tokens, index) => {
   return ` <a href="#footnote-ref-${reference}" data-footnote-backref="${reference}" aria-label="${t('返回脚注引用')}">↩︎</a>`;
 };
 
-export function toggleMarkdownTask(content: string, taskIndex: number, checked: boolean): string {
-  let index = 0;
-  return content.replace(/^(\s*[-+*]\s+)\[([ xX]?)\](?=\s|$)/gm, (source, prefix: string) => {
-    if (index++ !== taskIndex) return source;
-    return `${prefix}[${checked ? 'x' : ' '}]`;
-  });
+export function toggleMarkdownTask(content: string, sourceLine: number, checked: boolean): string {
+  const lines = content.split('\n');
+  if (!Number.isInteger(sourceLine) || sourceLine < 0 || sourceLine >= lines.length) return content;
+  lines[sourceLine] = lines[sourceLine].replace(
+    /^([ \t>]*(?:(?:[-+*]|\d{1,9}[.)])[ \t]+[ \t>]*)*)\[([ xX]?)\](?=\s|$)/,
+    (_source, prefix: string) => `${prefix}[${checked ? 'x' : ' '}]`,
+  );
+  return lines.join('\n');
 }
 
 function highlightRenderedText(root: HTMLElement, query: string) {
@@ -321,7 +328,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
   const clean = DOMPurify.sanitize(renderer.render(content), {
     USE_PROFILES: { html: true },
     ADD_ATTR: [
-      'target', 'download', 'data-source-line', 'data-code-language', 'data-mermaid-source', 'data-math-display',
+      'target', 'download', 'data-source-line', 'data-task-line', 'data-code-language', 'data-mermaid-source', 'data-math-display',
       'data-note-id', 'data-private-image', 'data-private-file', 'data-footnotes',
       'data-footnotes-separator', 'data-footnote-id', 'data-footnote-ref',
       'data-footnote-reference', 'data-footnote-backref',
@@ -372,17 +379,17 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
     link.setAttribute('target', '_blank');
     link.setAttribute('rel', 'noopener noreferrer');
   });
-  let taskIndex = 0;
   parsed.body.querySelectorAll<HTMLLIElement>('li').forEach((item) => {
     const holder = item.firstElementChild?.tagName === 'P' ? item.firstElementChild : item;
-    const text = [...holder.childNodes].find((node) => node.nodeType === Node.TEXT_NODE);
+    const text = holder.firstChild?.nodeType === Node.TEXT_NODE ? holder.firstChild : null;
     const match = /^(\s*)\[([ xX]?)\](?:\s+|$)/.exec(text?.textContent ?? '');
-    if (!text || !match) return;
+    const sourceLine = Number(item.dataset.taskLine);
+    if (!text || !match || !Number.isInteger(sourceLine) || sourceLine < 0) return;
     const checked = match[2].toLocaleLowerCase() === 'x';
     text.textContent = `${match[1]}${text.textContent!.slice(match[0].length)}`;
     const checkbox = parsed.createElement('input');
     checkbox.type = 'checkbox';
-    checkbox.dataset.taskIndex = String(taskIndex++);
+    checkbox.dataset.taskLine = String(sourceLine);
     checkbox.setAttribute('aria-label', t('待办事项：{0}', item.textContent?.trim() || t('未命名')));
     if (checked) {
       checkbox.checked = true;
@@ -429,7 +436,7 @@ export function Preview({
   onImage(src: string): void;
   onNote?(id: string): void;
   onFile?(id: string, href: string): void;
-  onTask?(index: number, checked: boolean): void;
+  onTask?(sourceLine: number, checked: boolean): void;
   resolveFile?(id: string): Promise<string | null>;
   dark?: boolean;
   eagerImages?: boolean;
@@ -589,9 +596,9 @@ export function Preview({
       )?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    const task = target.closest<HTMLInputElement>('input[data-task-index]');
+    const task = target.closest<HTMLInputElement>('input[data-task-line]');
     if (task && onTask) {
-      onTask(Number(task.dataset.taskIndex), task.checked);
+      onTask(Number(task.dataset.taskLine), task.checked);
       return;
     }
     const image = target.closest<HTMLImageElement>('img[data-private-image]');

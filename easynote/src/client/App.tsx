@@ -606,6 +606,19 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     };
   }, []);
   const [settings, setSettings] = useState(false);
+  const [storagePersistent, setStoragePersistent] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      let persistent = false;
+      try {
+        const storage = navigator.storage;
+        persistent = await storage?.persisted?.() || await storage?.persist?.() || false;
+      } catch { /* Storage permission failures must not interrupt editing or saving. */ }
+      if (active) setStoragePersistent(persistent);
+    })();
+    return () => { active = false; };
+  }, []);
   const [accountSecurity, setAccountSecurity] = useState(false);
   const [userManagement, setUserManagement] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(session.registrationEnabled);
@@ -1081,9 +1094,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     }
   };
 
-  const handlePopoutTask = (index: number, checked: boolean) => {
+  const handlePopoutTask = (sourceLine: number, checked: boolean) => {
     if (!activePopoutNote || activePopoutNote.deletedAt || transfer) return;
-    const newContent = toggleMarkdownTask(activePopoutNote.content, index, checked);
+    const newContent = toggleMarkdownTask(activePopoutNote.content, sourceLine, checked);
     if (note?.id === activePopoutNote.id) {
       setNoteFields({ content: newContent });
     } else {
@@ -2126,8 +2139,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               {layout === 'preview' || note.deletedAt || transfer
                 ? <Preview content={note.content} onImage={setLightbox} onNote={(id) => void openNote(id)}
                     onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
-                    onTask={!note.deletedAt && !transfer ? (index, checked) =>
-                      setNoteFields({ content: toggleMarkdownTask(note.content, index, checked) }) : undefined}
+                    onTask={!note.deletedAt && !transfer ? (sourceLine, checked) =>
+                      setNoteFields({ content: toggleMarkdownTask(note.content, sourceLine, checked) }) : undefined}
                     resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={dark}
                     searchQuery={book.query}
                     onEditLine={!note.deletedAt && !transfer ? (line) => editAt(sourceLineOffset(note.content, line)) : undefined} />
@@ -2358,6 +2371,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </select></div>
       <div className="setting-row"><span>{t('深色外观')}</span><button role="switch" aria-checked={dark} aria-label={t('深色外观')} className={`switch ${dark ? 'on' : ''}`} onClick={() => setDark(!dark)}>{dark ? <Moon size={14} /> : <Sun size={14} />}</button></div>
       <div className="setting-row"><span>{t('离线笔记库')}{book.offlineLibrary ? (uiLanguage() === 'en' ? ` · ${book.offlineCount} notes` : ` · ${book.offlineCount} 篇`) : ''}</span><button role="switch" aria-checked={book.offlineLibrary} aria-label={t('离线笔记库')} className={`switch ${book.offlineLibrary ? 'on' : ''}`} disabled={disabled || session.offline} onClick={() => void run(() => book.configureOffline(!book.offlineLibrary))}>{book.offlineLibrary ? <Check size={14} /> : <WifiOff size={14} />}</button></div>
+      <div className="setting-row"><span>{t('本机存储')}</span><span className="setting-value" role="status">{storagePersistent === null ? t('正在检查…') : storagePersistent ? t('持久保存已启用') : t('未启用持久保存')}</span></div>
+      {storagePersistent === false && <p className="setting-value">{t('浏览器可能清理本机数据，未同步草稿请及时导出。')}</p>}
       {installApp && <div className="setting-row"><span>{t('app')}</span><button disabled={disabled} onClick={() => void run(installApp)}><Download size={16} />{t('安装 EasyNote')}</button></div>}
       <div className="setting-row"><span>{t('导出')}</span><div className="button-group">
         <button disabled={!!transfer || !book.online} onClick={() => void transferAction(() => exportArchive(setTransfer), t('备份已下载'))}><Download size={16} />{t('导出 ZIP')}</button>

@@ -2249,6 +2249,85 @@ test('Markdown todo items render and persist interactive checkbox changes', asyn
   await expect(editor).toContainText('- [ ] 标准待办');
 });
 
+test('preview task changes use source lines across code, quotes and ordered or nested lists', async ({ page }) => {
+  const title = `待办定位-${randomUUID().slice(0, 8)}`;
+  let content = [
+    '```md', '- [ ] 围栏示例', '```', '',
+    '    - [ ] 缩进示例', '',
+    '> - [ ] 引用待办', '',
+    '1. [ ] 有序待办', '',
+    '- - [ ] 嵌套待办', '',
+    '-\n  [ ] 续行待办', '',
+    '>- [ ] 紧贴引用', '',
+    '- \\[ ] 转义示例', '',
+    '- [ ] 普通待办',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const { notes } = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await expect(page.locator('.markdown input[type=checkbox]')).toHaveCount(6);
+  for (const task of ['引用待办', '有序待办', '嵌套待办', '续行待办', '紧贴引用', '普通待办']) {
+    await page.getByRole('checkbox', { name: `待办事项：${task}`, exact: true }).check();
+    content = content.replace(`[ ] ${task}`, `[x] ${task}`);
+    await expect.poll(async () => (await (await page.request.get(`/api/notes/${notes[0].id}`)).json()).note.content).toBe(content);
+  }
+  await page.getByRole('checkbox', { name: '待办事项：引用待办', exact: true }).uncheck();
+  content = content.replace('[x] 引用待办', '[ ] 引用待办');
+  await expect.poll(async () => (await (await page.request.get(`/api/notes/${notes[0].id}`)).json()).note.content).toBe(content);
+});
+
+for (const persistence of ['granted', 'denied', 'unsupported', 'failure', 'already-persistent']) {
+  test(`local storage persistence ${persistence} is reported without blocking editing`, async ({ page }) => {
+    await page.addInitScript((mode) => {
+      Object.defineProperty(window, '__persistenceRequests', { value: 0, writable: true });
+      if (mode === 'unsupported') {
+        Object.defineProperty(navigator, 'storage', { value: undefined });
+      } else {
+        Object.defineProperty(navigator.storage, 'persisted', { value: async () => mode === 'already-persistent' });
+        Object.defineProperty(navigator.storage, 'persist', { value: async () => {
+          (window as unknown as { __persistenceRequests: number }).__persistenceRequests++;
+          if (mode === 'failure') throw new Error('storage permission unavailable');
+          return mode === 'granted';
+        } });
+      }
+    }, persistence);
+    await page.goto('/');
+    await page.locator('.account').click();
+    const persistent = persistence === 'granted' || persistence === 'already-persistent';
+    await expect(page.getByText(persistent ? '持久保存已启用' : '未启用持久保存', { exact: true })).toBeVisible();
+    await expect(page.getByText('浏览器可能清理本机数据，未同步草稿请及时导出。', { exact: true })).toHaveCount(persistent ? 0 : 1);
+    expect(await page.evaluate(() => (window as unknown as { __persistenceRequests: number }).__persistenceRequests))
+      .toBe(persistence === 'unsupported' || persistence === 'already-persistent' ? 0 : 1);
+    await page.getByRole('button', { name: '关闭', exact: true }).click();
+    await newNote(page, `存储保护-${randomUUID().slice(0, 8)}`, '持久化申请不影响保存');
+  });
+}
+
+test('offline cold start renders previously unopened Mermaid diagrams and highlighted code', async ({ page, context }) => {
+  const title = `离线渲染-${randomUUID().slice(0, 8)}`;
+  await page.goto('/');
+  await newNote(page, title, [
+    '```mermaid', 'flowchart LR', ' A[Offline] --> B[Ready]', '```', '',
+    '```mermaid', 'sequenceDiagram', ' Alice->>Bob: Offline ready', '```', '',
+    '```javascript', 'const answer = 42;', '```',
+  ].join('\n'));
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  // Keep the Service Worker cache while dropping incidental HTTP-cache coverage.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.clearBrowserCache');
+  await cdp.detach();
+  await context.setOffline(true);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[data-note-row]').filter({ hasText: title }).click();
+    await page.getByRole('button', { name: '预览模式', exact: true }).click();
+    await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(2);
+    await expect(page.locator('.document code.hljs .hljs-keyword')).toHaveText('const');
+    await expect(page.locator('.document .mermaid-error')).toHaveCount(0);
+  } finally { await context.setOffline(false); }
+});
+
 test('desktop export configures and downloads a structured PDF', async ({ page }) => {
   const title = `PDF/导出:${randomUUID().slice(0, 6)}`;
   const content = [

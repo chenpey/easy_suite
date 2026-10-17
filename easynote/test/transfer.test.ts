@@ -33,6 +33,89 @@ test('local draft export identifies every referenced file without a cache entry'
   );
 });
 
+for (const version of [2, 3]) {
+  for (const existingTarget of [false, true]) {
+    test(`archive v${version} remaps links to ${existingTarget ? 'existing' : 'new'} notes and duplicate targets`, async () => {
+      const sourceId = randomUUID(), targetId = randomUUID(), copyId = randomUUID(), outsideId = randomUUID();
+      const existingId = randomUUID();
+      const sourceContent = `[[${targetId.toUpperCase()}|Target]] [[${copyId}|Copy]] [[${sourceId}|Self]] [[${outsideId}|Outside]]`;
+      const targetContent = existingTarget ? 'existing target' : `[[${sourceId}|Back]]`;
+      const notes = [
+        { id: sourceId, title: 'Source', content: sourceContent },
+        { id: targetId, title: 'Target', content: targetContent },
+        { id: copyId, title: 'Copy', content: targetContent },
+      ];
+      const archive = new File([new Uint8Array(zipSync({
+        'manifest.json': strToU8(JSON.stringify({
+          format: 'easynote', version, files: [],
+          notes: notes.map(({ id, title }) => ({
+            id, title, path: `notes/${title}.md`, tags: [], pinned: false, archived: false, deletedAt: null,
+          })),
+        })),
+        ...Object.fromEntries(notes.map((note) => [`notes/${note.title}.md`, strToU8(note.content)])),
+      }))], 'linked.zip');
+      const saved: Array<{ id: string; title: string; content: string }> = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        assert.equal(init?.method, 'POST');
+        assert.match(String(input), /^\/api\/notes\//);
+        const note = { ...JSON.parse(String(init.body)), id: String(input).split('/').at(-1)! };
+        saved.push(note);
+        return Response.json({ note: { ...note, revision: 1 } }, { status: 201 });
+      }) as typeof fetch;
+      try {
+        const targetFingerprint = await noteFingerprint('Target', targetContent);
+        assert.deepEqual(await importArchive(archive, config, () => {}, async () =>
+          existingTarget ? new Map([[targetFingerprint, existingId]]) : new Map()),
+        { imported: existingTarget ? 1 : 2, skipped: existingTarget ? 2 : 1 });
+        const source = saved.find((note) => note.title === 'Source')!;
+        const target = existingTarget ? existingId : saved.find((note) => note.title === 'Target')!.id;
+        assert.notEqual(source.id, sourceId);
+        assert.notEqual(target, targetId);
+        assert.equal(source.content, `[[${target}|Target]] [[${target}|Copy]] [[${source.id}|Self]] [[${outsideId}|Outside]]`);
+        if (!existingTarget) assert.equal(saved.find((note) => note.id === target)!.content, `[[${source.id}|Back]]`);
+      } finally { globalThis.fetch = originalFetch; }
+    });
+  }
+}
+
+test('reimporting an archive resolves duplicate targets before checking linked ancestors', async () => {
+  const leafId = randomUUID(), branchId = randomUUID(), rootId = randomUUID();
+  const notes = [
+    { id: rootId, title: 'Root', content: `[[${branchId}|Branch]]` },
+    { id: branchId, title: 'Branch', content: `[[${leafId}|Leaf]]` },
+    { id: leafId, title: 'Leaf', content: 'leaf body' },
+  ];
+  const archive = new File([new Uint8Array(zipSync({
+    'manifest.json': strToU8(JSON.stringify({
+      format: 'easynote', version: 3, files: [],
+      notes: notes.map(({ id, title }) => ({
+        id, title, path: `notes/${title}.md`, tags: [], pinned: false, archived: false, deletedAt: null,
+      })),
+    })),
+    ...Object.fromEntries(notes.map((note) => [`notes/${note.title}.md`, strToU8(note.content)])),
+  }))], 'chain.zip');
+  const saved: Array<{ id: string; title: string; content: string }> = [];
+  const fingerprints = new Map<string, string>();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(init?.method, 'POST');
+    const note = { ...JSON.parse(String(init.body)), id: String(input).split('/').at(-1)! };
+    saved.push(note);
+    fingerprints.set(await noteFingerprint(note.title, note.content), note.id);
+    return Response.json({ note: { ...note, revision: 1 } }, { status: 201 });
+  }) as typeof fetch;
+  const findDuplicates = async (values: string[]) => new Map(
+    values.filter((value) => fingerprints.has(value)).map((value) => [value, fingerprints.get(value)!]),
+  );
+  try {
+    assert.deepEqual(await importArchive(archive, config, () => {}, findDuplicates), { imported: 3, skipped: 0 });
+    assert.equal(saved.find((note) => note.title === 'Root')!.content, `[[${saved.find((note) => note.title === 'Branch')!.id}|Branch]]`);
+    assert.deepEqual(await importArchive(archive, config, () => {}, findDuplicates), { imported: 0, skipped: 3 });
+    assert.equal(saved.length, 3);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test('reimporting an external note with links and attachments skips before uploading', async () => {
   const notes = new Map<string, { id: string; title: string; content: string; tags: string[] }>();
   let uploads = 0;

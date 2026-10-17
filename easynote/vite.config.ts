@@ -40,11 +40,10 @@ export default defineConfig({
           '**/*.{html,css,svg}',
           'registerSW.js',
           'manifest.webmanifest',
-          'assets/index-*.js',
-          'assets/editor-*.js',
-          'assets/markdown-*.js',
-          'assets/katex-*.js',
+          // Include Mermaid's nested diagram/shared chunks for first-use offline previews.
+          'assets/*.js',
         ],
+        globIgnores: ['assets/pdfmake-*.js', 'assets/pdfjs-*.js'],
         runtimeCaching: [{
           urlPattern: /\/(?:assets\/(?:pdfmake|pdfjs|pdf\.worker)[^/]*\.(?:js|mjs)|fonts\/NotoSansSC-(?:Regular|Bold)\.otf)$/,
           handler: 'CacheFirst',

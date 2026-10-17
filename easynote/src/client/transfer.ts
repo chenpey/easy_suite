@@ -599,7 +599,8 @@ export async function importArchive(
     prepared.push({ entry, content });
   }
   const unique: typeof prepared = [];
-  const fingerprints = new Set<string>();
+  const fingerprints = new Map<string, string>();
+  const noteRemap = new Map<string, string>();
   let skipped = 0;
   const fingerprinted = await Promise.all(prepared.map(async (candidate) => ({
     candidate,
@@ -607,13 +608,45 @@ export async function importArchive(
   })));
   const existing = await findDuplicates([...new Set(fingerprinted.map(({ fingerprint }) => fingerprint))]);
   for (const { candidate, fingerprint } of fingerprinted) {
-    if (fingerprints.has(fingerprint) || existing.has(fingerprint)) {
+    const duplicate = fingerprints.get(fingerprint) ?? existing.get(fingerprint);
+    const targetId = duplicate ?? crypto.randomUUID();
+    noteRemap.set(candidate.entry.id.toLowerCase(), targetId);
+    fingerprints.set(fingerprint, targetId);
+    if (duplicate) {
       skipped++;
       progress(`跳过重复笔记 ${skipped}`);
       continue;
     }
-    fingerprints.add(fingerprint);
     unique.push(candidate);
+  }
+  const rewriteNoteLinks = (content: string) => content.replace(
+    /\[\[([0-9a-f-]{36})(\|[^\]\r\n]{1,256})?\]\]/gi,
+    (source, id: string, label: string = '') => {
+      const targetId = noteRemap.get(id.toLowerCase());
+      return targetId ? `[[${targetId}${label}]]` : source;
+    },
+  );
+  // Recheck after targets are deduplicated, so reimporting a linked chain can reuse its saved IDs.
+  // shortcut: cyclic reimports need durable source identities to deduplicate across remapped UUIDs.
+  while (true) {
+    const linked = await Promise.all(unique.filter(({ content }) => rewriteNoteLinks(content) !== content)
+      .map(async (candidate) => ({ candidate, fingerprint: await noteFingerprint(candidate.entry.title, rewriteNoteLinks(candidate.content)) })));
+    if (!linked.length) break;
+    const matches = await findDuplicates([...new Set(linked.map(({ fingerprint }) => fingerprint))]);
+    let removed = 0;
+    for (const { candidate, fingerprint } of linked) {
+      const duplicate = matches.get(fingerprint);
+      if (!duplicate) continue;
+      const previousId = noteRemap.get(candidate.entry.id.toLowerCase());
+      for (const [sourceId, targetId] of noteRemap) {
+        if (targetId === previousId) noteRemap.set(sourceId, duplicate);
+      }
+      unique.splice(unique.indexOf(candidate), 1);
+      removed++;
+      skipped++;
+      progress(`跳过重复笔记 ${skipped}`);
+    }
+    if (!removed) break;
   }
   const folderRemap = new Map<string, string>();
   if (manifest.folders?.length) {
@@ -670,12 +703,12 @@ export async function importArchive(
       progress(`恢复文件 ${remap.size}/${neededFiles.size}`);
     }
     for (const { entry, content: sourceContent } of unique) {
-      const content = sourceContent
+      const content = rewriteNoteLinks(sourceContent)
         .replace(/\/api\/(images|files)\/([0-9a-f-]{36})/gi, (_all, kind: string, id: string) => {
           const next = remap.get(id) ?? id;
           return kind.toLowerCase() === 'images' ? imagePath(next) : filePath(next);
         });
-      await api.save(crypto.randomUUID(), {
+      await api.save(noteRemap.get(entry.id.toLowerCase())!, {
         title: entry.title, content, tags: entry.tags, pinned: entry.pinned,
         archived: entry.archived, deletedAt: entry.deletedAt,
         folderId: entry.folderId ? folderRemap.get(entry.folderId) ?? null : null,

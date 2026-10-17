@@ -2,9 +2,17 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.9`
+Current Version: `1.3.10`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.10 Release Notes (2026-10-17)
+
+- Fix internal note links after web ZIP restores. Allocate destination UUIDs before saving and remap links to new or deduplicated existing notes, preserving self-links and cycles. Recheck fingerprints when reimporting ordinary linked chains; reimporting an old ZIP containing self-links or cycles may still create additional copies.
+- Toggle preview tasks using source lines from the Markdown parser, covering blockquotes, ordered and nested lists, and tasks starting on continuation lines without modifying examples inside fenced or indented code blocks.
+- Precache Mermaid diagram and shared chunks along with syntax-highlighting scripts, allowing previously unopened diagrams to render on their first offline preview. Initial cache downloads grow accordingly; PDF engines and fonts remain cached on demand.
+- Request persistent storage in the authenticated editor and show the result in Settings. Unsupported APIs, denied requests and permission errors do not block editing or saving; prompt users to export unsynced drafts. Persistent storage does not prevent manual site-data clearing.
+- Add regressions for ZIP links and deduplication, task source positions, offline diagrams and highlighting, and storage permissions. Update both language guides. No new database migration is required.
 
 ## 1.3.9 Release Notes (2026-10-17)
 
@@ -164,7 +172,8 @@ A self-hosted Markdown note-taking application for individuals or small teams. R
 - Revision-based concurrency control, 3-way merge from base revisions, manual conflict resolution with conflict copies, idempotent retries, manual snapshot history, and version restore.
 - Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting. Browser connectivity hints do not block requests; temporary network or server save failures get up to two automatic retries before requiring manual sync.
 - Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
-- Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Notes can open in a regular separate reader window on desktop (omitted on mobile); system-level always-on-top is not supported.
+- Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Preview dependencies, including Mermaid's diagram chunks and syntax highlighting, are precached; PDF engines and fonts remain cached on demand. Notes can open in a regular separate reader window on desktop (omitted on mobile); system-level always-on-top is not supported.
+- The authenticated editor requests persistent browser storage and reports the result in Settings. Editing still works if the browser rejects the request or does not support it, but local data may be evicted. Unsynced drafts exist only on the current device: sync or export them promptly. Persistent storage does not protect against manually clearing site data.
 - Global search (`Cmd/Ctrl+K`), searchable command palette (`Cmd/Ctrl+O`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
 - Tag renaming, merging, deletion, plus batch archive and tagging.
 - AI read/write integration: Restricted tokens, exact note statistics, cross-status FTS5 relevance search, match character ranges, batch reading, MCP Resources, and writing tools. AI edits enter version history.
@@ -304,7 +313,7 @@ Autosave updates note content with `createVersion: false`. Explicit saves (`Cmd/
 
 Simultaneous edits on different devices are resolved using revision numbers. Conflicts return `409 Conflict`, preserving local drafts and allowing users to branch into conflict copies without overwriting remote data.
 
-Updates (PUT) to a purged note return `410`. Deletion tombstones are retained for 30 days and removed by scheduled cleanup; while present, they also block creates with the same ID. After cleanup, an old ZIP import or a revision-zero copy can recreate that ID. Offline mirrors and exported ZIPs can persist beyond this window, so permanent deletion does not erase every historical copy.
+Updates (PUT) to a purged note return `410`. Deletion tombstones are retained for 30 days and removed by scheduled cleanup; while present, they also block creates with the same ID. After cleanup, a revision-zero copy can recreate that ID; web ZIP imports use new UUIDs. Offline mirrors and exported ZIPs can persist beyond this window, so permanent deletion does not erase every historical copy.
 
 Within one browser profile, Web Locks allow only one editor per account to protect local drafts. Waiting pages resume automatically when the editor closes. An installed PWA automatically takes over when it enters the foreground; browser tabs can request takeover with “Reopen”.
 
@@ -501,3 +510,5 @@ All Notes mixes root-level folders with unfiled notes. Opening a folder mixes it
 On desktop, drop notes or folders onto list folders or ancestor breadcrumbs, including All Notes at the root. Use the bulk Move action for selections spanning folders. Manual order supports dragging entries of the same type and Alt+Up / Alt+Down. Sort order switches between Manual order and Last modified, with preferences stored per account in the current browser for the root and each folder. Root defaults to Last modified and folders to Manual order. Search, tags, Archive and Trash retain last-modified ordering. Moving and reordering require a connection, and mobile uses action menus. Reordering notes leaves content, revisions and modification times unchanged.
 
 ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`, manual ordering requires `0004_order.sql`, and the 1.3.6 task-scan index requires `0005_tasks.sql`; the existing deployment script applies migrations automatically. ZIP v3 restores manual order keys for notes and folders. V2 backups lack these keys and use the defaults when imported.
+
+ZIP imports remap internal note links to newly assigned UUIDs or existing deduplicated targets, preserving self-links and cycles. Content fingerprints are checked again after remapping targets so ordinary linked chains can be reimported without duplicates. Deduplication still compares literal content: reimporting an old ZIP containing self-links or cycles may create additional copies.
