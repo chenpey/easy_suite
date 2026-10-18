@@ -38,6 +38,18 @@
   --syntax-meta: #5353a6;
   --footer-height: 32px;
   --toolbar-height: 44px;
+  /* Pele diagrams read these variables from the document root; the dark theme
+     only redefines the source tokens, so both themes stay in sync. */
+  --pele-bg: var(--paper);
+  --pele-fg: var(--ink);
+  --pele-muted: var(--muted);
+  --pele-line: var(--line-strong);
+  --pele-surface: var(--elevated);
+  --pele-surface-alt: var(--hover);
+  --pele-border: var(--line-strong);
+  --pele-accent: var(--accent);
+  --pele-critical: var(--danger);
+  --pele-error: var(--danger);
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -934,7 +946,6 @@ nav button.active svg { color: var(--accent); }
 .markdown .task-list-item > input:disabled,
 .markdown .task-list-item > p > input:disabled { opacity: 1; cursor: default; }
 .markdown .task-list-item.done { color: var(--muted); }
-.markdown .mermaid-diagram p { margin: 0; line-height: normal; }
 .markdown img {
   display: block;
   max-width: 100%;
@@ -993,7 +1004,6 @@ nav button.active svg { color: var(--accent); }
   height: auto;
   margin: 0;
 }
-.mermaid-diagram .mindmap-node > .label-container ~ .label text { text-anchor: middle; }
 .mermaid-error { margin: 20px 0; padding: 12px 14px; color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--paper)); border-left: 3px solid var(--danger); white-space: pre-wrap; font-size: 12px; }
 .blocked-image { color: var(--muted); font-size: 12px; }
 .empty-state { padding: 42px 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }

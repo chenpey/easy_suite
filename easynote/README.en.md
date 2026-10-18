@@ -2,9 +2,19 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.11`
+Current Version: `1.3.12`
 
 A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+
+## 1.3.12 Release Notes (2026-10-18)
+
+- Fix the offline library replacing its list with a load failure once the connection drops. An unreachable background sync now keeps showing the mirrored notes, while the offline badge and the background sync notice remain. Previously browsing offline emptied the mirrored list until a manual retry.
+- Replace Mermaid with Pele as the diagram renderer. Diagram code ships as one ~685 kB chunk (~255 kB gzip) instead of several lazy chunks (its layout engine alone was ~1.5 MB), reducing the offline precache and the first-preview download.
+- Theme diagrams through CSS variables: switching between light and dark takes effect immediately and no longer re-renders up to 20 diagrams.
+- Tighten diagram output sanitizing. The new renderer emits no `<style>` element, so that allowance is removed and only the `role` attribute needed for accessibility is kept. Diagram links and external images stay disabled, and diagram text stays escaped.
+- Keep the existing injection defenses and the limits of 20 diagrams and 50,000 characters per source. Add browser regressions for a broken diagram and for the 21st diagram reporting an inline error.
+- Compatibility: Pele targets Mermaid 12.1 syntax and all 25 example diagram blocks in this repository render. A few older constructs (for example `url(...)` inside `classDef` or `linkStyle`) fail to parse and show an inline error without affecting the rest of the note. Import [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) to check 20 common diagram types.
+- This release only changes frontend rendering and documentation. No database migration is required, and the server API, data format and archive format are unchanged.
 
 ## 1.3.11 Release Notes (2026-10-17)
 
@@ -435,7 +445,7 @@ For mindmaps, set the first line to `mindmap` and indent child nodes. Common dia
 
 Safe HTML blocks can be embedded directly in Markdown, sanitized via DOMPurify. Safe structural tags like `<section>`, `<mark>`, `<kbd>`, `<details>`, `<summary>` are preserved; risky elements such as `<script>`, `<style>`, `<iframe>`, `<form>`, inline event handlers, and external media are stripped.
 
-You can import [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-demo.en.md) to test the complete rendering syntax showcase, or [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) for diagrams and HTML blocks.
+You can import [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-demo.en.md) to test the complete rendering syntax showcase, or [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) for diagrams and HTML blocks. [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) covers 20 common diagram types, exactly the per-note diagram limit.
 
 ### Images & Attachments
 

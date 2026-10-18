@@ -2,9 +2,19 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`1.3.11`
+当前版本：`1.3.12`
 
 一个面向个人或小团队的自托管 Markdown 笔记应用。React + TypeScript 前端，pdfmake 生成 PDF、PDF.js 分页预览，Cloudflare Worker API，D1 保存账号与笔记，私有 R2 保存图片与附件。
+
+## 1.3.12 更新说明（2026-10-18）
+
+- 修复离线笔记库在断网后把列表替换为“笔记列表加载失败”的问题：后台同步不可达时继续显示本机镜像中的笔记，离线标记与后台同步提示仍然保留；此前断网浏览会让镜像列表变空，只能先重试才能恢复。
+- 图表渲染引擎由 Mermaid 更换为 Pele：图表脚本由多个懒加载子分块（其中布局引擎单个约 1.5 MB）变为一个约 685 kB（gzip 约 255 kB）的分块，离线预缓存与首次预览的下载量相应下降。
+- 图表主题改用 CSS 变量，深浅外观切换即时生效，不再重新渲染图表；切换主题时最多 20 个图表不再被同步重绘。
+- 收紧图表输出过滤：新的渲染结果不再包含 `<style>` 元素，因此移除 sanitize 的 `<style>` 放行项，仅保留无障碍语义所需的 `role` 属性；图表中的链接与外部图片仍全部禁用，图表文本仍按转义输出。
+- 图表注入防护、单篇最多 20 个图表、每个源码最多 50,000 字符等限制保持不变；补充“损坏图表显示内联错误”与“超过 20 个图表时其余显示错误”的浏览器回归。
+- 兼容性：Pele 对齐 Mermaid 12.1 语法，仓库内全部 25 个示例图表块渲染通过；个别旧写法（例如在 `classDef` 或 `linkStyle` 中使用 `url(...)`）会解析失败并在原位置显示错误提示，不影响笔记其余内容。可导入 [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) 验收 20 种常见图型。
+- 本次仅涉及前端渲染与文档，无需新增数据库迁移；服务端 API、数据格式与备份格式均不变。
 
 ## 1.3.11 更新说明（2026-10-17）
 
@@ -669,7 +679,7 @@ flowchart LR
 
 HTML block 可直接写入 Markdown，通过 DOMPurify 进行安全过滤。放行 `<section>`、`<mark>`、`<kbd>`、`<details>`、`<summary>` 等安全结构标签；自动剥离 `<script>`、`<style>`、`<iframe>`、`<form>`、事件属性和外部媒体。
 
-可直接在应用中导入 [`examples/markdown-syntax-demo.md`](examples/markdown-syntax-demo.md) 体验全套语法渲染，或导入 [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) 验收图表与 HTML block。
+可直接在应用中导入 [`examples/markdown-syntax-demo.md`](examples/markdown-syntax-demo.md) 体验全套语法渲染，或导入 [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) 验收图表与 HTML block；[`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) 覆盖 20 种常见图型，正好等于单篇 20 个图表的上限。
 
 ### 图片与附件
 

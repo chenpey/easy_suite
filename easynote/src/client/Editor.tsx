@@ -411,15 +411,6 @@ function diagramError(element: HTMLElement, error: unknown) {
   element.textContent = t('图表无法渲染：{0}', String(error).split('\n', 1)[0]);
 }
 
-function fitDiagramToContainer(element: HTMLElement) {
-  const svg = element.querySelector<SVGSVGElement>('svg');
-  const width = svg?.viewBox.baseVal.width ?? 0;
-  if (!svg || width <= 0) return;
-  svg.style.width = `${Math.ceil(width)}px`;
-  svg.style.maxWidth = '100%';
-  svg.style.height = 'auto';
-}
-
 export function Preview({
   content,
   onImage,
@@ -427,7 +418,6 @@ export function Preview({
   onFile,
   onTask,
   resolveFile,
-  dark = false,
   eagerImages = false,
   onEditLine,
   searchQuery = '',
@@ -438,7 +428,6 @@ export function Preview({
   onFile?(id: string, href: string): void;
   onTask?(sourceLine: number, checked: boolean): void;
   resolveFile?(id: string): Promise<string | null>;
-  dark?: boolean;
   eagerImages?: boolean;
   onEditLine?(line: number): void;
   searchQuery?: string;
@@ -513,32 +502,7 @@ export function Preview({
     })();
     if (elements.length) void (async () => {
       try {
-        const { default: mermaid } = await import('mermaid');
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: 'strict',
-          suppressErrorRendering: true,
-          htmlLabels: false,
-          maxTextSize: 50_000,
-          maxEdges: 500,
-          secure: [
-            'secure', 'securityLevel', 'startOnLoad', 'suppressErrorRendering', 'maxTextSize', 'maxEdges',
-            'theme', 'look', 'layout', 'themeVariables', 'themeCSS', 'fontFamily', 'htmlLabels',
-          ],
-          theme: dark ? 'dark' : 'default',
-          look: 'classic',
-          layout: 'dagre',
-          themeVariables: { fontSize: '14px' },
-          flowchart: {
-            curve: 'basis',
-            htmlLabels: false,
-            useMaxWidth: false,
-            diagramPadding: 4,
-            nodeSpacing: 30,
-            rankSpacing: 35,
-          },
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        });
+        const { render } = await import('pele');
         for (const [index, element] of elements.entries()) {
           if (cancelled) return;
           const source = element.textContent?.trim() ?? '';
@@ -547,17 +511,26 @@ export function Preview({
             continue;
           }
           try {
-            const id = `easynote-diagram-${crypto.randomUUID()}`;
-            const { svg, bindFunctions } = await mermaid.render(id, source);
+            const { svg } = render(source, {
+              // Unique per diagram: pele derives the <title>/<desc> ids and their
+              // aria-labelledby/aria-describedby references from this prefix.
+              idPrefix: `easynote-diagram-${crypto.randomUUID()}`,
+              fontSize: 14,
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              links: false,
+              images: false,
+              limit: 50_000,
+              maxEdges: 500,
+            });
             if (cancelled) return;
+            // Pele emits no <style> element: the theme rides on CSS variables in the root
+            // <svg> style attribute, so the sanitizer only needs to keep its role attribute.
             element.innerHTML = DOMPurify.sanitize(svg, {
               USE_PROFILES: { svg: true, svgFilters: true },
-              ADD_TAGS: ['style'],
+              ADD_ATTR: ['role'],
             });
             element.className = 'mermaid-diagram';
             element.removeAttribute('data-mermaid-source');
-            fitDiagramToContainer(element);
-            bindFunctions?.(element);
           } catch (error) {
             diagramError(element, error);
           }
@@ -570,7 +543,8 @@ export function Preview({
       cancelled = true;
       objectUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [html, dark, resolveFile, eagerImages]);
+    // Pele reads the theme from CSS variables, so a theme switch needs no re-render.
+  }, [html, resolveFile, eagerImages]);
 
   return <article ref={host} className="markdown" onDoubleClick={(event) => {
     if (!onEditLine) return;

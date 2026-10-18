@@ -397,8 +397,12 @@ export function useNotebook(session: Session) {
     setListResult((value) => value.error ? { ...value, error: '' } : value);
     try {
       if (offlineLibraryRef.current) {
-        if (!session.offline) await syncOfflineMirror(signal);
-        if (alive.current && generation === listGeneration.current) renderMirrorRef.current();
+        try {
+          if (!session.offline) await syncOfflineMirror(signal);
+        } finally {
+          // The mirror stays the source of truth for this list even when the sync failed.
+          if (alive.current && generation === listGeneration.current) renderMirrorRef.current();
+        }
         return;
       }
       // Tags do not depend on the list result, so fetch both in parallel.
@@ -438,7 +442,11 @@ export function useNotebook(session: Session) {
       }
     } catch (error) {
       if (alive.current && generation === listGeneration.current && !signal?.aborted) {
-        setListResult((value) => ({ ...value, error: String(error) }));
+        // The offline library already renders this list from the local mirror, so a failed background
+        // sync must not replace the notes; the caller still reports the failure as a global error.
+        if (!offlineLibraryRef.current || !mirror.current.size) {
+          setListResult((value) => ({ ...value, error: String(error) }));
+        }
       }
       throw error;
     }

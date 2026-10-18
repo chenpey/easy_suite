@@ -40,7 +40,7 @@ export default defineConfig({
           '**/*.{html,css,svg}',
           'registerSW.js',
           'manifest.webmanifest',
-          // Include Mermaid's nested diagram/shared chunks for first-use offline previews.
+          // Include Pele's lazy diagram chunk for first-use offline previews.
           'assets/*.js',
         ],
         globIgnores: ['assets/pdfmake-*.js', 'assets/pdfjs-*.js'],
@@ -87,10 +87,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist/client',
-    // Mermaid's ELK layout engine is a lazy-loaded optional chunk (~1.5 MB).
-    // Keep Vite's warning useful for application chunks while allowing this
-    // intentional async vendor dependency.
-    chunkSizeWarningLimit: 1600,
+    // Pele is a single lazy-loaded diagram chunk (~685 kB / ~255 kB gzip);
+    // the largest other intentional async vendor chunk is pdfmake (~1.03 MB).
+    // Keep Vite's warning useful for application chunks while allowing these.
+    chunkSizeWarningLimit: 1100,
     rollupOptions: {
       output: {
         manualChunks(id) {

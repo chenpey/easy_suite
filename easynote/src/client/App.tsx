@@ -2143,7 +2143,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
                     onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
                     onTask={!note.deletedAt && !transfer ? (sourceLine, checked) =>
                       setNoteFields({ content: toggleMarkdownTask(note.content, sourceLine, checked) }) : undefined}
-                    resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={dark}
+                    resolveFile={book.offlineLibrary ? book.cachedFile : undefined}
                     searchQuery={book.query}
                     onEditLine={!note.deletedAt && !transfer ? (line) => editAt(sourceLineOffset(note.content, line)) : undefined} />
                 : <Editor ref={editor} key={note.id} value={note.content} onChange={(content) => setNoteFields({ content })}
@@ -2771,7 +2771,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {versionList && versionNoteId === note?.id && <Modal title="历史版本" close={() => { setVersionList(null); setChosenVersion(null); }}>
       <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>{t('修订 {0}', version.revision)} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
-      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={dark} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
+      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
         <RotateCcw size={15} />{t('恢复此版本')}
       </button></div></>}
     </Modal>}
@@ -2836,7 +2836,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     {lightbox && <Modal title="图片" close={() => setLightbox('')}><img className="lightbox-image" src={lightbox} alt={t('笔记图片')} /></Modal>}
     {printNote && <section className={`print-document ${pdfExport ? 'pdf-rendering' : ''}`} data-printing={pdfExport ? 'true' : 'false'} aria-hidden="true">
       <Preview content={printNote.content} onImage={() => undefined}
-        resolveFile={book.offlineLibrary ? book.cachedFile : undefined} dark={false} eagerImages />
+        resolveFile={book.offlineLibrary ? book.cachedFile : undefined} eagerImages />
     </section>}
     {popoutWindow && !popoutWindow.closed && activePopoutNote && createPortal(
       <div className="popout-reader-shell">
@@ -2887,7 +2887,6 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             </div>
             <Preview
               content={activePopoutNote.content}
-              dark={dark}
               onImage={(src) => popoutWindow.open(src, '_blank', 'noopener,noreferrer')}
               onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
               onNote={(id) => void openPopoutReader(id)}

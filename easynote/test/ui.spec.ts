@@ -959,6 +959,13 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
     return { width: box.width, height: box.height, nodes: element.querySelectorAll('path, rect, circle, text').length };
   }));
   expect(sizes.every((size) => size.width > 80 && size.height > 40 && size.nodes > 2)).toBe(true);
+  // Pele renders with links/images disabled, so no diagram may reference an
+  // external resource; and DOMPurify must keep the SVG accessibility role.
+  expect(await diagrams.evaluateAll((elements) =>
+    elements.flatMap((element) => [...element.querySelectorAll('[href], [xlink\\:href], image')])
+      .map((node) => node.getAttribute('href') ?? node.getAttribute('xlink:href') ?? 'image')
+  )).toEqual([]);
+  await expect(diagrams.first()).toHaveAttribute('role', 'graphics-document document');
   const scrollMetrics = await page.locator('.mermaid-diagram').evaluateAll((elements) =>
     elements.map((element) => ({
       clientWidth: element.clientWidth,
@@ -972,9 +979,9 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
     && Math.abs(svgWidth - Math.min(clientWidth, Math.ceil(viewBoxWidth))) <= 1
   )).toBe(true);
   const mindmapRootAlignment = await diagrams.nth(1).evaluate((svg) => {
-    const rootNode = svg.querySelector<SVGGElement>('.mindmap-node.section-root');
+    const rootNode = svg.querySelector<SVGGElement>('.pele-node.pele-root');
     const label = rootNode?.querySelector<SVGGraphicsElement>('text');
-    const root = rootNode?.querySelector<SVGGraphicsElement>('.label-container');
+    const root = rootNode?.querySelector<SVGGraphicsElement>('circle, rect, polygon, ellipse');
     if (!label || !root) return null;
     const labelBox = label.getBoundingClientRect();
     const rootBox = root.getBoundingClientRect();
@@ -986,21 +993,44 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
   expect(mindmapRootAlignment).not.toBeNull();
   expect(mindmapRootAlignment!.x).toBeLessThanOrEqual(2);
   expect(mindmapRootAlignment!.y).toBeLessThanOrEqual(2);
-  const mindmapLeafAlignments = await diagrams.nth(1).evaluate((svg) =>
-    ['Markdown', 'HTML Block'].map((text) => {
-      const label = [...svg.querySelectorAll<SVGGraphicsElement>('.mindmap-node text')]
-        .find((element) => element.textContent?.trim() === text);
-      const node = label?.closest<SVGGElement>('.mindmap-node');
-      const shape = node?.querySelector<SVGGraphicsElement>('.node-bkg, .label-container');
+  const mindmapLabelAlignments = await diagrams.nth(1).evaluate((svg) =>
+    [...svg.querySelectorAll<SVGGElement>('.pele-node')].map((node) => {
+      const label = node.querySelector<SVGGraphicsElement>('text');
+      const shape = node.querySelector<SVGGraphicsElement>('circle, rect, polygon, ellipse');
       if (!label || !shape) return null;
       const labelBox = label.getBoundingClientRect();
       const shapeBox = shape.getBoundingClientRect();
-      return Math.abs(labelBox.x + labelBox.width / 2 - (shapeBox.x + shapeBox.width / 2));
+      return {
+        x: Math.abs(labelBox.x + labelBox.width / 2 - (shapeBox.x + shapeBox.width / 2)),
+        y: Math.abs(labelBox.y + labelBox.height / 2 - (shapeBox.y + shapeBox.height / 2)),
+      };
+    }).filter((entry): entry is { x: number; y: number } => entry !== null)
+  );
+  expect(mindmapLabelAlignments.length).toBeGreaterThan(0);
+  expect(mindmapLabelAlignments.every(({ x, y }) => x <= 2 && y <= 2)).toBe(true);
+  // Pele renders shape-less mindmap leaves ("Markdown", "HTML Block") as
+  // `.pele-shape-text` nodes with no background shape, so the check above skips
+  // them. Their label is drawn at the node frame origin (x=0, text-anchor=middle),
+  // so assert both leaves exist and stay centred on that origin.
+  const mindmapTextLeafAlignments = await diagrams.nth(1).evaluate((svg) =>
+    ['Markdown', 'HTML Block'].map((text) => {
+      const node = [...svg.querySelectorAll<SVGGElement>('.pele-node')]
+        .find((candidate) => candidate.querySelector('text')?.textContent?.trim() === text);
+      const label = node?.querySelector<SVGGraphicsElement>('text');
+      const frame = node?.getScreenCTM();
+      if (!label || !frame) return null;
+      const labelBox = label.getBoundingClientRect();
+      return {
+        text,
+        x: Math.abs(labelBox.x + labelBox.width / 2 - frame.e),
+        y: Math.abs(labelBox.y + labelBox.height / 2 - frame.f),
+      };
     })
   );
-  expect(mindmapLeafAlignments.every((offset) => offset !== null && offset <= 2)).toBe(true);
+  expect(mindmapTextLeafAlignments).not.toContain(null);
+  expect(mindmapTextLeafAlignments.every((entry) => entry !== null && entry.x <= 2 && entry.y <= 2)).toBe(true);
   const shapedMindmapAnchors = await diagrams.nth(3).evaluate((svg) =>
-    [...svg.querySelectorAll<SVGGElement>('.mindmap-node')].map((node) => ({
+    [...svg.querySelectorAll<SVGGElement>('.pele-node')].map((node) => ({
       label: node.querySelector('text')?.textContent?.trim() ?? '',
       anchor: getComputedStyle(node.querySelector('text')!).textAnchor,
     }))
@@ -1008,14 +1038,16 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
   expect(shapedMindmapAnchors).toHaveLength(7);
   expect(shapedMindmapAnchors.every(({ label, anchor }) => label && anchor === 'middle')).toBe(true);
   const styled = diagrams.nth(2);
-  await expect(styled.locator('.node').first()).toHaveAttribute('data-look', 'classic');
-  expect(await styled.locator('.node.company .label-container').evaluate((element) => getComputedStyle(element).fill))
+  await expect(styled).toHaveClass(/pele-flowchart/);
+  expect(await styled.locator('.pele-node.company rect').evaluate((element) => getComputedStyle(element).fill))
     .toBe('rgb(225, 245, 254)');
-  expect(await styled.locator('.node.pool .label-container').evaluate((element) => getComputedStyle(element).fill))
+  expect(await styled.locator('.pele-node.pool polygon').evaluate((element) => getComputedStyle(element).fill))
     .toBe('rgb(255, 236, 179)');
-  expect(await styled.locator('.cluster rect').first().evaluate((element) => getComputedStyle(element).fill))
-    .toBe('rgb(255, 255, 222)');
-  expect(await styled.locator('.node').first().evaluate((element) => getComputedStyle(element).filter))
+  // Light theme maps --pele-surface-alt to --hover (#e8e8ed); the old
+  // expectation pinned Pele's built-in fallback (#e6e6e6).
+  expect(await styled.locator('.pele-cluster rect').first().evaluate((element) => getComputedStyle(element).fill))
+    .toBe('rgb(232, 232, 237)');
+  expect(await styled.locator('.pele-node').first().evaluate((element) => getComputedStyle(element).filter))
     .toBe('none');
   await expect(page.getByRole('heading', { name: 'HTML Block' })).toBeVisible();
   await expect(page.getByText('这是一段由 HTML 渲染的内容', { exact: false })).toBeVisible();
@@ -1034,7 +1066,41 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
   await page.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('.mermaid-diagram svg')).toHaveCount(4, { timeout: 15000 });
+  // Dark theme maps --pele-surface to --elevated (#2c2c2e).
+  expect(await page.locator('.mermaid-diagram svg .pele-node rect').first().evaluate((element) => getComputedStyle(element).fill))
+    .toBe('rgb(44, 44, 46)');
   await page.screenshot({ path: 'test-results/desktop-diagrams-dark.png', fullPage: true });
+});
+
+test('a broken diagram renders an inline error instead of failing the preview', async ({ page }) => {
+  const content = [
+    '```mermaid', 'flowchart LR', ' A --> B', '```', '',
+    '```mermaid', 'not a diagram at all', '```', '',
+    '```mermaid', 'flowchart LR', ' B --> C', '```', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, `图表错误-${randomUUID().slice(0, 6)}`, content);
+  await page.getByRole('button', { name: '预览模式' }).click();
+
+  await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(2, { timeout: 15000 });
+  const errors = page.locator('.document .mermaid-error');
+  await expect(errors).toHaveCount(1);
+  await expect(errors).toHaveText(/图表无法渲染/);
+  await expect(page.locator('.document [data-mermaid-source]')).toHaveCount(0);
+});
+
+test('the preview renders at most 20 diagrams and reports the rest as errors', async ({ page }) => {
+  const content = [...Array(21)].flatMap((_, index) => [
+    '```mermaid', 'flowchart LR', ` N${index}[节点${index}] --> M${index}[节点${index}]`, '```', '',
+  ]).join('\n');
+  await page.goto('/');
+  await newNote(page, `图表上限-${randomUUID().slice(0, 6)}`, content);
+  await page.getByRole('button', { name: '预览模式' }).click();
+
+  await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(20, { timeout: 30000 });
+  const errors = page.locator('.document .mermaid-error');
+  await expect(errors).toHaveCount(1);
+  await expect(errors).toHaveText(/20 个/);
 });
 
 test('new note reopens the existing completely blank note', async ({ page }) => {
