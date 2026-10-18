@@ -1,0 +1,11 @@
+{
+  "developer": {
+    "model": "inherit",
+    "reasoning_effort": "inherit"
+  },
+  "reviewer": {
+    "model": "inherit",
+    "reasoning_effort": "inherit"
+  },
+  "upgrades": []
+}

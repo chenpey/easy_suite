@@ -1,0 +1,32 @@
+{
+  "developer": {
+    "model": "opencode-go/deepseek-v4.1-flash",
+    "reasoning_effort": "high"
+  },
+  "reviewer": {
+    "model": "gpt-6.1-sol",
+    "reasoning_effort": "high"
+  },
+  "upgrades": [
+    {
+      "developer": {
+        "model": "opencode-go/deepseek-v4-pro",
+        "reasoning_effort": "high"
+      },
+      "reviewer": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high"
+      }
+    },
+    {
+      "developer": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high"
+      },
+      "reviewer": {
+        "model": "opencode-go/deepseek-v4-pro",
+        "reasoning_effort": "high"
+      }
+    }
+  ]
+}

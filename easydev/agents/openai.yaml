@@ -1,0 +1,4 @@
+interface:
+  display_name: "easydev · 编码全流程"
+  short_description: "按风险组织设计、实现、排障与验证，内置审查规程和有限独立审查闭环"
+  default_prompt: "使用 $easydev 完成当前编码任务，按复杂度选择必要流程，并交付改动、验证证据和实际审查状态。"
