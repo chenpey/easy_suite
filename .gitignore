@@ -218,3 +218,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# Pi agent local config: sandbox permissions and per-project overrides stay local
+.pi/
+
+# Local sandbox write-probe artifact
+/.probe
