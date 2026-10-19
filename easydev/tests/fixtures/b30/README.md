@@ -26,7 +26,7 @@ bash tests/fixtures/b30/run.sh
 预期输出（顺序）：
 
 1. `probe.py 200`：他人读取返回 200，证明缺少所有权校验；
-2. `check_orders.py` 失败，且失败原因必须恰好是 3 条 `TypeError`（契约未实现），其他原因判为夹具异常；
+2. `check_orders.py` 失败，失败行必须恰好 3 条且全部为 `TypeError`（契约未实现），其他原因或额外失败判为夹具异常；
 3. `git apply solution.patch` 成功；
 4. `probe.py 403`：修复后他人读取返回 403；
 5. `check_orders.py` 输出 `PASS: 7/7`；

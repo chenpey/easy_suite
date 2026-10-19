@@ -16,15 +16,16 @@ git -c user.email=fixture@example.com -c user.name=fixture commit -qm "b30 initi
 echo "== 红：初始代码缺少所有权校验，他人读取返回 200"
 python3 probe.py 200
 
-echo "== 红：初始检查必须因目标契约缺失（TypeError）失败"
+echo "== 红：初始检查必须因目标契约缺失（TypeError）失败，且失败行恰好 3 条"
 if python3 check_orders.py >red.log 2>&1; then
   echo "unexpected: check passed before fix" >&2
   exit 1
 fi
-count="$(grep -c "got 'TypeError'" red.log || true)"
 cat red.log
-if [ "$count" != "3" ]; then
-  echo "unexpected failure reason: expected 3 TypeError failures, got $count" >&2
+failures="$(grep -c '^- ' red.log || true)"
+type_errors="$(grep -c "got 'TypeError'" red.log || true)"
+if [ "$failures" != "3" ] || [ "$type_errors" != "3" ]; then
+  echo "unexpected failure reason: $failures failure lines, $type_errors TypeError lines" >&2
   exit 1
 fi
 

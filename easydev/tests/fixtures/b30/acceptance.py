@@ -19,19 +19,30 @@ def expect(label, fn, expected):
     try:
         actual = fn()
     except Exception as error:  # noqa: BLE001 - 验收脚本
-        actual = type(error).__name__
+        actual = f"{type(error).__name__}: {error}"
     if actual != expected:
         failures.append(f"{label}: expected {expected!r}, got {actual!r}")
 
 
+def expect_raises(label, fn, exc_type):
+    try:
+        actual = fn()
+    except exc_type:
+        return
+    except Exception as error:  # noqa: BLE001 - 验收脚本
+        failures.append(f"{label}: expected {exc_type.__name__}, got {type(error).__name__}: {error}")
+        return
+    failures.append(f"{label}: expected {exc_type.__name__}, got return value {actual!r}")
+
+
 expect("owner reads own order", lambda: get_order("o1", "u1"), order)
-expect("other user denied", lambda: get_order("o1", "u2"), "PermissionError")
+expect_raises("other user denied", lambda: get_order("o1", "u2"), PermissionError)
 expect("missing order returns None", lambda: get_order("nope", "u1"), None)
 expect("owner 200", lambda: handle_show_order({"user_id": "u1"}, "o1"), {"status": 200, "order": order})
 expect("other user 403", lambda: handle_show_order({"user_id": "u2"}, "o1"), {"status": 403})
 expect("missing order 404", lambda: handle_show_order({"user_id": "u1"}, "nope"), {"status": 404})
 expect("admin export works", lambda: export_order("o1", {"role": "admin"}), order)
-expect("non-admin export denied", lambda: export_order("o1", {"role": "viewer"}), "PermissionError")
+expect_raises("non-admin export denied", lambda: export_order("o1", {"role": "viewer"}), PermissionError)
 
 if failures:
     print("FAIL")

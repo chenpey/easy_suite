@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - 'easydev/**'
+  workflow_dispatch:
 
 jobs:
   b30:
