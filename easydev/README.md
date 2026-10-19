@@ -126,9 +126,13 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 
 CLI 目录映射见 [Skills CLI 官方文档](https://github.com/vercel-labs/skills#supported-agents)；[Pi 官方文档](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md)也明确支持 `.agents/skills`。手动复制只需文件系统操作。安装后按宿主方式刷新技能或开启新会话；Pi 可运行 `/reload`。
 
-**DeepSeek Harness：**其 [filesystem skill provider](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/skill-filesystem) 默认还扫描项目 `.agents/skills/` 和用户 `~/.agents/skills/`，所以与 Codex/Pi 共用一份安装即可。自定义 `DSH_HOME` 时，原生用户级位置改为 `$DSH_HOME/skills/easydev/`；自定义 `DSH_AGENTS_HOME` 时，共享用户级位置改为 `$DSH_AGENTS_HOME/skills/easydev/`。项目目录取最近的 `.git` 祖先，缺少该标记时使用当前目录。
+**DeepSeek Harness** 按 [filesystem skill provider](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/skill-filesystem) 的默认设置，除上表两个原生目录外还扫描共享目录，因此与 Codex/Pi 共用同一份安装即可：
 
-DeepSeek Harness 的运行配置需加载 `@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-skill-filesystem` 和用于模型调用的 [`@deepseek-ai/dsh-tool-skill`](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/tool-skill)。自定义部署关闭默认扫描目录时，把技能父目录加入其 `customSkillDirs`。
+- 项目级：最近 `.git` 祖先目录下的 `.agents/skills/`；没有 `.git` 时取当前工作目录。
+- 用户级：`~/.agents/skills/`。
+- 上表里的 `~/.dsh` 与 `~/.agents` 是默认值：设置 `DSH_HOME` 后原生位置变为 `$DSH_HOME/skills/easydev/`，设置 `DSH_AGENTS_HOME` 后共享位置变为 `$DSH_AGENTS_HOME/skills/easydev/`。
+
+自定义部署需在运行配置中加载 `@deepseek-ai/dsh-skill`、`@deepseek-ai/dsh-skill-filesystem`，以及提供模型调用入口的 [`@deepseek-ai/dsh-tool-skill`](https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/skill/tool-skill)。若关闭了默认扫描目录，再把存放技能的父目录加入 `customSkillDirs`。
 
 这些是同一套标准 Skill 文件的安装与加载方式。多代理、模型覆盖及推理深度由各 harness 的实际工具决定，适配与受阻处理见 [环境适配规则](references/setup.md)。
 
