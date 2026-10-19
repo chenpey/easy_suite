@@ -154,6 +154,54 @@ expect_rejected "scalar-leak" "$bypass" \
   "none request identity does not read order" \
   "empty request identity does not read order"
 
+echo "== 负向：缺失身份时返回变形嵌套字段的实现必须被拒绝"
+bypass="$(new_bypass transformed-leak)"
+cat >"$bypass/app/orders.py" <<'PY'
+from app.db import find_order
+
+
+def get_order(order_id, current_user_id=None):
+    order = find_order(order_id)
+    if not current_user_id:
+        return {"total": order["total"] + 1} if order is not None else None
+    if order is None or order["owner_id"] == current_user_id:
+        return order
+    raise PermissionError("order is not owned by the current user")
+
+
+def get_order_for_export(order_id, operator_role):
+    if operator_role != "admin":
+        raise PermissionError("export requires admin role")
+    return find_order(order_id)
+PY
+cat >"$bypass/app/admin.py" <<'PY'
+from app.orders import get_order_for_export
+
+
+def export_order(order_id, operator):
+    return get_order_for_export(order_id, operator.get("role"))
+PY
+cat >"$bypass/app/api.py" <<'PY'
+from app.orders import get_order
+
+
+def handle_show_order(request, order_id):
+    try:
+        order = get_order(order_id, request.get("user_id"))
+    except PermissionError:
+        return {"status": 403}
+    if order is None:
+        return {"status": 404}
+    return {"status": 200, "order": order}
+PY
+expect_rejected "transformed-leak" "$bypass" \
+  "missing identity does not read order" \
+  "none identity does not read order" \
+  "empty identity does not read order" \
+  "missing request identity does not read order" \
+  "none request identity does not read order" \
+  "empty request identity does not read order"
+
 echo "== 负向：把 user_id 当 admin 角色的实现必须被拒绝"
 bypass="$(new_bypass admin-user-id)"
 cat >"$bypass/app/orders.py" <<'PY'

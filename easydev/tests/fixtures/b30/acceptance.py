@@ -38,6 +38,7 @@ known_order_values = {
     order2["total"],
     *dynamic_order.values(),
 }
+allowed_empty_keys = {"status", "error", "message", "detail", "code"}
 checks = 0
 failures = []
 
@@ -91,16 +92,34 @@ def contains_order(value):
     return is_order_value(value)
 
 
+def is_empty_result(value):
+    """只接受报错、None、空容器或仅含 4xx 状态/错误文本的字典。"""
+    if value is None or value == {} or value == [] or value == ():
+        return True
+    if not isinstance(value, dict):
+        return False
+    data = dict(value)
+    if "order" in data and data.pop("order") not in (None, {}, [], ()):
+        return False
+    if not set(data).issubset(allowed_empty_keys):
+        return False
+    for key in ("error", "message", "detail", "code"):
+        if key in data and not isinstance(data[key], str):
+            return False
+    status = data.get("status")
+    return status is None or (isinstance(status, int) and 400 <= status < 500)
+
+
 def expect_no_order(label, fn):
-    """缺少身份时允许报错或返回空结果，但不得返回订单数据。"""
+    """缺少身份时允许报错或空结果，但不得返回订单数据。"""
     count_check()
     try:
         actual = fn()
     except Exception:  # noqa: BLE001 - 验收脚本
         return
-    # 有效结果只有报错、None 或状态容器；裸标量不是订单读取的合法空结果。
-    if type(actual) in (str, int, float):
-        failures.append(f"{label}: returned scalar {actual!r}")
+    # 先限定结果形状，避免变形后的订单字段藏在任意嵌套容器里。
+    if not is_empty_result(actual):
+        failures.append(f"{label}: returned non-empty result {actual!r}")
         return
     if contains_order(actual):
         failures.append(f"{label}: returned order data {actual!r}")
