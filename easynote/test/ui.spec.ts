@@ -551,7 +551,7 @@ test('a note share can be created, extended and cancelled from share management'
   });
   const title = `安全分享-${randomUUID().slice(0, 6)}`;
   const bottomMarker = `分享页尾-${randomUUID().slice(0, 6)}`;
-  const content = ['公开正文', ...Array.from({ length: 40 }, (_, index) => `第 ${index + 1} 段内容`), bottomMarker].join('\n\n');
+  const content = ['[TOC]', '公开导读段落', '## 公开目录标题', '公开正文', ...Array.from({ length: 40 }, (_, index) => `第 ${index + 1} 段内容`), bottomMarker].join('\n\n');
   await page.goto('/');
   await newNote(page, title, content);
   expect(await page.getByRole('navigation', { name: '笔记分类' }).getByRole('button').allTextContents())
@@ -590,9 +590,22 @@ test('a note share can be created, extended and cancelled from share management'
   await expect(shared.getByText('公开正文', { exact: true })).toBeVisible();
   await expect(shared.getByText('只读分享', { exact: true })).toBeVisible();
   const scroll = shared.locator('.shared-page');
+  // The contents directive also renders on read-only share pages.
+  const sharedContents = shared.locator('.shared-document nav.note-toc');
+  await expect(sharedContents.getByRole('link', { name: '公开目录标题' })).toBeVisible();
   expect(await scroll.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   await scroll.evaluate((element) => element.scrollTo(0, element.scrollHeight));
   await expect(shared.getByText(bottomMarker, { exact: true })).toBeVisible();
+  // Dispatch the click so Playwright does not scroll the link into view first. The heading
+  // starts off-screen above and must land near the top; a bare `#` navigation would instead
+  // jump to the page top and leave the heading well below the viewport edge.
+  const sharedHeading = shared.locator('.markdown h2').filter({ hasText: '公开目录标题' });
+  await expect.poll(() => sharedHeading.evaluate((element) => element.getBoundingClientRect().top < 0)).toBe(true);
+  await sharedContents.getByRole('link', { name: '公开目录标题' }).dispatchEvent('click');
+  await expect.poll(() => sharedHeading.evaluate((element) => {
+    const top = element.getBoundingClientRect().top;
+    return top >= 0 && top < 120;
+  })).toBe(true);
   await anonymous.close();
 
   await sharingDialog.getByRole('button', { name: '关闭', exact: true }).click();
@@ -858,6 +871,103 @@ test('footnotes, lazy code highlighting and precise source switching work', asyn
     .toContain('定位：继续精准目标段落[^detail]');
 });
 
+test('a note contents directive builds a clickable table of contents', async ({ page }) => {
+  const filler = Array.from({ length: 30 }, (_, index) =>
+    `补充段落 ${index + 1}：正文需要足够长，才能检验目录跳转是否真的滚动了预览。`).join('\n\n');
+  const content = [
+    '[TOC]',
+    '',
+    '开头说明段落，其中提到了 [TOC] 的写法。',
+    '',
+    '# 第一章',
+    '',
+    filler,
+    '',
+    '### 1.1 小节',
+    '',
+    '小节正文。',
+    '',
+    '## 回到二级',
+    '',
+    '二级正文。',
+    '',
+    '> ## 引用里的标题',
+    '',
+    '```md',
+    '[TOC]',
+    '```',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, `目录-${randomUUID().slice(0, 6)}`, content);
+  await page.getByRole('button', { name: '预览模式' }).click();
+
+  const preview = page.locator('.document .markdown');
+  const contents = preview.locator('nav.note-toc');
+  await expect(contents).toHaveCount(1);
+  await expect(contents).toHaveAttribute('aria-label', '笔记目录');
+  await expect(contents.getByRole('link')).toHaveText(['第一章', '1.1 小节', '回到二级']);
+  // 跳级标题（一级 → 三级 → 二级）合并进同一个子列表，编号连续。
+  await expect(contents.locator('ol > li > ol')).toHaveCount(1);
+  await expect(contents.locator('ol > li > ol > li')).toHaveCount(2);
+  // 引用块里的标题不算正文标题；代码块与行内提到的 [TOC] 保持原样。
+  await expect(preview.locator('blockquote h2')).toHaveText('引用里的标题');
+  await expect(preview.locator('pre code')).toContainText('[TOC]');
+  await expect(preview.locator('p').filter({ hasText: '开头说明段落' })).toContainText('[TOC]');
+  await page.locator('.document-scroll').evaluate((element) => element.scrollTo(0, 0));
+  await expect(contents).toBeInViewport();
+  await page.screenshot({ path: 'test-results/note-toc.png' });
+
+  // 搜索命中 [TOC] 指令文本时目录块仍然生成：目录注入必须先于搜索高亮。
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill('toc');
+  await expect(contents).toHaveCount(1);
+  await expect(contents.getByRole('link')).toHaveText(['第一章', '1.1 小节', '回到二级']);
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill('');
+  await expect(contents).toHaveCount(1);
+
+  await page.locator('.document-scroll').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  const heading = preview.getByRole('heading', { name: '第一章', exact: true });
+  await expect.poll(() => heading.evaluate((element) => element.getBoundingClientRect().top < 0)).toBe(true);
+  await contents.getByRole('link', { name: '第一章' }).click();
+  await expect.poll(() => heading.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return box.top >= 0 && box.top < window.innerHeight;
+  })).toBe(true);
+
+  await page.getByRole('textbox', { name: '笔记标题' }).press('Meta+p');
+  const exportDialog = page.getByRole('dialog');
+  await expect(exportDialog.getByRole('region', { name: 'PDF 分页预览' })
+    .getByRole('img', { name: 'PDF 第 1 页' })).toBeVisible({ timeout: 20_000 });
+  const template = page.locator('.print-document');
+  await expect(template.locator('nav.note-toc')).toHaveCount(1);
+  await expect(template.locator('a[data-toc-target]')).toHaveCount(3);
+  const downloadPromise = page.waitForEvent('download');
+  await exportDialog.getByRole('button', { name: '导出 PDF' }).click();
+  const pdf = await readFile((await (await downloadPromise).path())!);
+  expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  // 目录文字确实写进 PDF：每个标题在导出的文本里出现两次（目录一次、正文一次）。
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const pdfDocument = await getDocument({ data: new Uint8Array(pdf) }).promise;
+  let pdfText = '';
+  for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+    const textContent = await (await pdfDocument.getPage(pageNumber)).getTextContent();
+    pdfText += textContent.items.map((item) => 'str' in item ? item.str : '').join('');
+  }
+  await pdfDocument.destroy();
+  expect(pdfText.split('第一章').length - 1).toBe(2);
+  expect(pdfText.split('回到二级').length - 1).toBe(2);
+});
+
+test('an empty contents directive reports that there are no headings', async ({ page }) => {
+  await page.goto('/');
+  // 空标题（`## ` 渲染为 <h2></h2>）不进入目录，也不能借用笔记级文案。
+  await newNote(page, `空目录-${randomUUID().slice(0, 6)}`, '[TOC]\n\n## \n\n只有正文，没有标题。');
+  await page.getByRole('button', { name: '预览模式' }).click();
+  const contents = page.locator('.document .markdown nav.note-toc');
+  await expect(contents.locator('.note-toc-empty')).toHaveText('没有标题');
+  await expect(contents.getByRole('link')).toHaveCount(0);
+  await expect(contents).not.toContainText('未命名笔记');
+});
+
 test('restoring a content version preserves the current pin state', async ({ page }) => {
   const id = randomUUID();
   const title = `版本置顶-${id.slice(0, 6)}`;
@@ -1087,6 +1197,83 @@ test('a broken diagram renders an inline error instead of failing the preview', 
   await expect(errors).toHaveCount(1);
   await expect(errors).toHaveText(/图表无法渲染/);
   await expect(page.locator('.document [data-mermaid-source]')).toHaveCount(0);
+});
+
+test('Mermaid diagrams can be saved as standalone SVG and PNG images', async ({ page }) => {
+  const title = `图表/导出:${randomUUID().slice(0, 6)}`;
+  await page.goto('/');
+  await newNote(page, title, [
+    '```mermaid',
+    'flowchart LR',
+    '  A[原始图表] --> B[保存图片]',
+    '```',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  Solo',
+    '```',
+  ].join('\n'));
+  await page.getByRole('button', { name: '预览模式' }).click();
+
+  const diagram = page.locator('.document .mermaid-diagram').first();
+  const narrowDiagram = page.locator('.document .mermaid-diagram').nth(1);
+  await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(2, { timeout: 15_000 });
+  const svgButton = diagram.getByRole('button', { name: '将图表另存为 SVG' });
+  const pngButton = diagram.getByRole('button', { name: '将图表另存为 PNG' });
+  await expect(svgButton).toBeVisible();
+  await expect(pngButton).toBeVisible();
+  await diagram.hover();
+  await expect(diagram.locator('.diagram-export-actions')).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: 'test-results/mermaid-save-actions.png' });
+
+  const svgDownloadPromise = page.waitForEvent('download');
+  await svgButton.click();
+  const svgDownload = await svgDownloadPromise;
+  expect(svgDownload.suggestedFilename()).toContain('-diagram-1.svg');
+  expect(svgDownload.suggestedFilename()).not.toMatch(/[\\/:]/);
+  const svg = await readFile((await svgDownload.path())!, 'utf8');
+  expect(svg).toMatch(/^<svg\b/);
+  expect(svg).toContain('http://www.w3.org/2000/svg');
+  expect(svg).toContain('--pele-bg:');
+  const svgStyle = /<svg\b[^>]*\bstyle="([^"]*)"/.exec(svg)?.[1] ?? '';
+  expect(svgStyle).not.toMatch(/--pele-[a-z-]+:\s*var\(/);
+  expect(svg).toContain('原始图表');
+  expect(svg).not.toMatch(/<image\b/);
+
+  const pngDownloadPromise = page.waitForEvent('download');
+  await pngButton.click();
+  const pngDownload = await pngDownloadPromise;
+  expect(pngDownload.suggestedFilename()).toContain('-diagram-1.png');
+  await pngDownload.saveAs('test-results/mermaid-diagram-export.png');
+  const png = await readFile('test-results/mermaid-diagram-export.png');
+  expect([...png.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  expect(png.length).toBeGreaterThan(1_000);
+
+  // A valid single-node diagram is only ~64px wide; its controls must stay inside the page.
+  await narrowDiagram.hover();
+  const narrowBox = (await narrowDiagram.boundingBox())!;
+  const narrowActions = (await narrowDiagram.locator('.diagram-export-actions').boundingBox())!;
+  expect(narrowActions.x).toBeGreaterThanOrEqual(narrowBox.x);
+  expect(narrowActions.x + narrowActions.width).toBeLessThanOrEqual(narrowBox.x + narrowBox.width + 1);
+
+  // Touch layouts place full-size controls below the diagram instead of relying on hover.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const narrowControls = narrowDiagram.locator('.diagram-export-actions');
+  await expect(narrowControls).toHaveCSS('opacity', '1');
+  await expect(narrowControls).toHaveCSS('position', 'static');
+  const narrowButton = narrowDiagram.getByRole('button', { name: '将图表另存为 PNG' });
+  const narrowButtonBox = (await narrowButton.boundingBox())!;
+  expect(narrowButtonBox.width).toBeGreaterThanOrEqual(44);
+  expect(narrowButtonBox.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: 'test-results/mermaid-save-actions-mobile.png' });
+
+  // Encoding errors are visible and do not leave the export button stuck disabled.
+  await page.evaluate(() => {
+    HTMLCanvasElement.prototype.toBlob = function toBlob(callback) { callback(null); };
+  });
+  await narrowButton.click();
+  await expect(narrowDiagram.getByRole('alert')).toContainText('图表图片保存失败');
+  await expect(narrowButton).toBeEnabled();
 });
 
 test('the preview renders at most 20 diagrams and reports the rest as errors', async ({ page }) => {
@@ -2825,7 +3012,19 @@ test('batch note actions and tag management preserve revisions', async ({ page }
 
 test('double-clicking a note opens an independent reader window', async ({ page }) => {
   const title = `双击独立阅读-${randomUUID().slice(0, 8)}`;
-  const content = '# 阅读测试\n\n这是一篇用于独立窗口阅读的笔记内容。\n\n- [ ] 待办任务 1';
+  const content = [
+    '[TOC]',
+    '',
+    '# 阅读测试',
+    '',
+    '这是一篇用于独立窗口阅读的笔记内容。',
+    '',
+    '## 窗口末尾',
+    '',
+    ...Array.from({ length: 40 }, (_, index) => `独立窗口段落 ${index + 1}`),
+    '',
+    '- [ ] 待办任务 1',
+  ].join('\n\n');
   const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
     headers, data: { title, content, tags: [], pinned: false, archived: false,
       deletedAt: null, revision: 0, operationId: randomUUID() },
@@ -2860,6 +3059,18 @@ test('double-clicking a note opens an independent reader window', async ({ page 
   await popup.getByRole('button', { name: '深色外观' }).click();
   await expect(popup.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(popup.locator('.popout-control-close')).toHaveCount(0);
+
+  // The contents directive and its in-window scrolling also work in the reader window.
+  const popoutContents = popup.locator('.popout-reader-document nav.note-toc');
+  await expect(popoutContents.getByRole('link')).toHaveText(['阅读测试', '窗口末尾']);
+  await popup.locator('.popout-reader-content').evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  const popoutHeading = popup.locator('.markdown h2').filter({ hasText: '窗口末尾' });
+  await expect.poll(() => popoutHeading.evaluate((element) => element.getBoundingClientRect().top < 0)).toBe(true);
+  await popoutContents.getByRole('link', { name: '窗口末尾' }).dispatchEvent('click');
+  await expect.poll(() => popoutHeading.evaluate((element) => {
+    const top = element.getBoundingClientRect().top;
+    return top >= 0 && top < 120;
+  })).toBe(true);
   await popup.close();
 });
 

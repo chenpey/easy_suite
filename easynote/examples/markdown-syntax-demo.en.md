@@ -2,6 +2,10 @@
 
 This document demonstrates the complete set of Markdown syntax, formatting elements, diagrams, and security extensions supported by EasyNote.
 
+A lone `[TOC]` line builds a clickable note contents in preview, read-only shares and PDF, indented by heading level:
+
+[TOC]
+
 ## Text Styles & Formatting
 
 Supports standard **Bold**, *Italic*, ~~Strikethrough~~, `Inline Code`, and automatic hyperlinks: https://example.com.

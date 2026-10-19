@@ -9,6 +9,7 @@ import { markdownMath } from './math';
 import DOMPurify from 'dompurify';
 import { idPattern } from '../shared/types';
 import { t } from './i18n';
+import { downloadDiagram, type DiagramImageFormat } from './diagramExport';
 
 interface Props {
   value: string;
@@ -324,6 +325,75 @@ function highlightRenderedText(root: HTMLElement, query: string) {
   }
 }
 
+const tocMarker = /^\[toc\]$/i;
+
+function contentHeadings(parsed: Document): HTMLElement[] {
+  return [...parsed.body.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')]
+    .filter((heading) => !heading.closest('blockquote, [data-footnotes]'))
+    .filter((heading) => (heading.textContent ?? '').trim());
+}
+
+function buildContents(parsed: Document, headings: HTMLElement[]): HTMLElement {
+  const nav = parsed.createElement('nav');
+  nav.className = 'note-toc';
+  nav.setAttribute('aria-label', t('note_contents'));
+  const title = parsed.createElement('p');
+  title.className = 'note-toc-title';
+  title.textContent = t('note_contents');
+  nav.appendChild(title);
+  if (!headings.length) {
+    const empty = parsed.createElement('p');
+    empty.className = 'note-toc-empty';
+    empty.textContent = t('no_headings');
+    nav.appendChild(empty);
+    return nav;
+  }
+  const list = parsed.createElement('ol');
+  list.className = 'note-toc-list';
+  nav.appendChild(list);
+  const levels: { level: number; list: HTMLOListElement; item: HTMLLIElement | null }[] = [];
+  headings.forEach((heading, index) => {
+    const level = Number(heading.tagName.slice(1));
+    while (levels.length && level <= levels[levels.length - 1].level) levels.pop();
+    if (!levels.length) levels.push({ level, list, item: null });
+    else if (level > levels[levels.length - 1].level) {
+      const parent = levels[levels.length - 1].item!;
+      // Reuse the trailing sub-list so a skipped heading level does not restart numbering.
+      const nested = (parent.lastElementChild?.tagName === 'OL'
+        ? parent.lastElementChild
+        : parent.appendChild(parsed.createElement('ol'))) as HTMLOListElement;
+      levels.push({ level, list: nested, item: null });
+    }
+    const item = parsed.createElement('li');
+    const link = parsed.createElement('a');
+    link.setAttribute('href', '#');
+    link.setAttribute('data-toc-target', String(index));
+    link.textContent = heading.textContent!.trim();
+    item.appendChild(link);
+    levels[levels.length - 1].list.appendChild(item);
+    levels[levels.length - 1].item = item;
+  });
+  return nav;
+}
+
+function insertContents(parsed: Document) {
+  const markers = [...parsed.body.querySelectorAll('p')].filter((paragraph) =>
+    paragraph.parentElement === parsed.body &&
+    paragraph.childNodes.length === 1 &&
+    paragraph.firstChild?.nodeType === Node.TEXT_NODE &&
+    tocMarker.test(paragraph.textContent?.trim() ?? ''));
+  if (!markers.length) return;
+  const headings = contentHeadings(parsed);
+  headings.forEach((heading, index) => heading.setAttribute('data-toc-heading', String(index)));
+  const contents = buildContents(parsed, headings);
+  for (const marker of markers) {
+    const nav = contents.cloneNode(true) as HTMLElement;
+    const sourceLine = (marker as HTMLElement).dataset.sourceLine;
+    if (sourceLine) nav.dataset.sourceLine = sourceLine;
+    marker.replaceWith(nav);
+  }
+}
+
 function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery: string): string {
   const clean = DOMPurify.sanitize(renderer.render(content), {
     USE_PROFILES: { html: true },
@@ -401,6 +471,7 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
     item.parentElement?.classList.add('task-list');
     holder.insertBefore(checkbox, holder.firstChild);
   });
+  insertContents(parsed);
   highlightRenderedText(parsed.body, searchQuery);
   return parsed.body.innerHTML;
 }
@@ -411,8 +482,33 @@ function diagramError(element: HTMLElement, error: unknown) {
   element.textContent = t('图表无法渲染：{0}', String(error).split('\n', 1)[0]);
 }
 
+function addDiagramExportActions(element: HTMLElement) {
+  const svg = element.querySelector<SVGSVGElement>('svg');
+  if (!svg) return;
+  const visual = document.createElement('div');
+  visual.className = 'diagram-visual';
+  svg.replaceWith(visual);
+  visual.appendChild(svg);
+  const actions = document.createElement('div');
+  actions.className = 'diagram-export-actions';
+  actions.setAttribute('role', 'group');
+  actions.setAttribute('aria-label', t('图表操作'));
+  for (const format of ['svg', 'png'] as DiagramImageFormat[]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'diagram-export-button';
+    button.dataset.diagramExport = format;
+    button.textContent = format.toLocaleUpperCase();
+    button.title = t('将图表另存为 {0}', format.toLocaleUpperCase());
+    button.setAttribute('aria-label', button.title);
+    actions.appendChild(button);
+  }
+  visual.appendChild(actions);
+}
+
 export function Preview({
   content,
+  name = '',
   onImage,
   onNote,
   onFile,
@@ -423,6 +519,7 @@ export function Preview({
   searchQuery = '',
 }: {
   content: string;
+  name?: string;
   onImage(src: string): void;
   onNote?(id: string): void;
   onFile?(id: string, href: string): void;
@@ -531,6 +628,7 @@ export function Preview({
             });
             element.className = 'mermaid-diagram';
             element.removeAttribute('data-mermaid-source');
+            addDiagramExportActions(element);
           } catch (error) {
             diagramError(element, error);
           }
@@ -555,6 +653,39 @@ export function Preview({
     if (Number.isInteger(line) && line >= 0) onEditLine(line);
   }} onClick={(event) => {
     const target = event.target as HTMLElement;
+    const exportButton = target.closest<HTMLButtonElement>('button[data-diagram-export]');
+    if (exportButton) {
+      const diagram = exportButton.closest<HTMLElement>('.mermaid-diagram');
+      const svg = diagram?.querySelector<SVGSVGElement>('svg');
+      const format = exportButton.dataset.diagramExport as DiagramImageFormat | undefined;
+      if (!diagram || !svg || !format) return;
+      event.preventDefault();
+      const diagrams = [...(host.current?.querySelectorAll('.mermaid-diagram') ?? [])];
+      const index = Math.max(0, diagrams.indexOf(diagram)) + 1;
+      exportButton.disabled = true;
+      exportButton.setAttribute('aria-busy', 'true');
+      void downloadDiagram(svg, name, index, format).catch((error: unknown) => {
+        const message = t('图表图片保存失败：{0}', String(error).replace(/^Error:\s*/, ''));
+        const notice = document.createElement('span');
+        notice.className = 'diagram-export-error';
+        notice.setAttribute('role', 'alert');
+        notice.textContent = message;
+        diagram.querySelector('.diagram-export-error')?.remove();
+        diagram.appendChild(notice);
+        setTimeout(() => notice.remove(), 5_000);
+      }).finally(() => {
+        exportButton.disabled = false;
+        exportButton.removeAttribute('aria-busy');
+      });
+      return;
+    }
+    const contents = target.closest<HTMLAnchorElement>('a[data-toc-target]');
+    if (contents?.dataset.tocTarget) {
+      event.preventDefault();
+      host.current?.querySelector<HTMLElement>(`[data-toc-heading="${contents.dataset.tocTarget}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const footnoteRef = target.closest<HTMLAnchorElement>('a[data-footnote-ref]');
     if (footnoteRef) {
       event.preventDefault();

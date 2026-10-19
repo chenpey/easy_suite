@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.12`
+Current Version: `1.4.0`
 
 A self-hosted Markdown note-taking application for individuals and small teams. The frontend is React 19 + TypeScript + Vite packaged as an installable PWA. The server is a single Cloudflare Worker serving the API, remote MCP, OAuth and static assets; D1 stores accounts and notes, R2 stores private images and attachments, a Durable Object broadcasts changes, and a Cron trigger cleans up expired data every hour. PDFs are generated structurally with pdfmake and previewed page by page with PDF.js.
 
@@ -17,8 +17,8 @@ A self-hosted Markdown note-taking application for individuals and small teams. 
 - Create notes with an independent title, Markdown editing and preview, autosave 500 ms after typing stops, pinning, archiving, tags, trash and restore; permanent deletion asks for confirmation.
 - CodeMirror 6 editor; markdown-it parsing with DOMPurify sanitizing; GFM tables, footnotes, syntax highlighting and safe HTML blocks.
 - Tick to-dos directly in preview; double-click a heading, paragraph, list item, table or code block to jump back to its source line and column.
-- Outline, backlinks and stable internal links `[[note UUID|display title]]` that keep working after the target is renamed.
-- KaTeX inline and block math; Pele renders flowcharts, mind maps, sequence diagrams and more, recolouring instantly with the light/dark theme.
+- Outline, backlinks and stable internal links `[[note UUID|display title]]` that keep working after the target is renamed; a `[TOC]` paragraph of its own (surrounded by blank lines) builds a clickable note contents that matches preview, shares and PDF.
+- KaTeX inline and block math; Pele renders flowcharts, mind maps, sequence diagrams and more, recolouring instantly with the light/dark theme. Save an individual diagram as SVG or PNG from preview or a share page; prefer SVG for vector clarity and smaller files, or PNG for apps that do not support SVG.
 - Version history: manual saves and AI writes create snapshots (20 kept by default) that can be inspected and restored; restoring snapshots the current content first.
 - Multi-device collaboration: a Durable Object WebSocket pushes account-level change signals, the client pulls authoritative data incrementally, and a 30-second foreground poll covers gaps.
 
@@ -214,9 +214,10 @@ Browser write endpoints require a same-origin `Origin` and `X-CSRF-Token`; AI en
 | --- | --- |
 | `- [ ] todo` / `- [x] done` | Tick in preview, written straight back to the source |
 | `[[note UUID\|display title]]` | Internal link that survives a rename |
+| A `[TOC]` paragraph of its own (blank lines around it) | Builds a clickable note contents indented by heading level; quoted headings are left out and PDF keeps the contents as text |
 | `$x^2$` / `$$…$$` | Inline / block math (KaTeX) |
 | `text[^1]` plus `[^1]: note` | Footnote with jump and back-jump |
-| A ` ```mermaid ` block | Diagrams; start with `flowchart LR`, `mindmap`, `sequenceDiagram` and so on |
+| A ` ```mermaid ` block | Diagrams; start with `flowchart LR`, `mindmap`, `sequenceDiagram` and so on. Use the top-right controls to save a diagram as SVG or PNG |
 | A ` ```python ` block | Syntax highlighting, unknown languages fall back to plain text |
 | `\| :--- \| :---: \| ---: \|` | GFM table alignment for left, centre and right |
 | HTML block | Sanitised by DOMPurify, keeping safe structural tags such as `<section>`, `<mark>`, `<kbd>`, `<details>` and `<summary>` |
@@ -301,7 +302,7 @@ Autosave only rewrites the current body, while version slots are consumed by man
 
 ## Release Notes
 
-`1.3.12` (2026-10-18): the offline library keeps showing the local mirror when background sync is unreachable; Pele replaces Mermaid as the diagram renderer, cutting the offline precache and first-preview download; diagram themes moved to CSS variables for instant recolouring; diagram output sanitising tightened.
+`1.4.0` (2026-10-19): note contents arrive — a `[TOC]` paragraph builds a clickable table of contents (quoted headings excluded) across preview, shares, the reader window and PDF; diagrams can be saved as SVG / PNG using the current theme.
 
 Versions live in [`versions.json`](../versions.json) at the repository root; before committing a feature update run:
 

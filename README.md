@@ -10,10 +10,10 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 | 项目 | 当前版本 |
 | --- | --- |
 | [EasyDrop](easydrop/) | `1.3.1` |
-| [EasyNote](easynote/) | `1.3.12` |
+| [EasyNote](easynote/) | `1.4.0` |
 | [EasyMac](easymac/) | `0.4.4` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.1.0` |
+| [EasyDev](easydev/) | `0.2.0` |
 <!-- versions:end -->
 
 ## 项目目录

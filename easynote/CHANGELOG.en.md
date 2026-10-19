@@ -2,6 +2,15 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.4.0 Release Notes (2026-10-19)
+
+- Add note contents: a `[TOC]` paragraph of its own (blank lines around it) builds a clickable table of contents in preview, read-only shares, the independent reader window and PDF export. Entries nest by heading level and scroll to their heading. Headings inside blockquotes are skipped, empty headings are dropped, `[TOC]` inside code blocks or inline text stays literal, and a note without headings shows "No headings".
+- The contents block is built with DOM APIs after DOMPurify sanitising and only writes heading text plus fixed attributes, so the existing XSS defences are unchanged. Search highlighting now runs after the contents are injected, so a search that matches `[TOC]` no longer removes the contents block.
+- Save diagrams as images: every diagram in preview and shared pages can be exported as SVG or PNG. SVG stays vector-based and smaller; PNG pastes easily into software without SVG support. Exports keep the current theme colours and fonts and inline the background, so dark-theme diagrams do not lose their lines on white.
+- Export filenames combine the note title with the diagram index and strip unsafe characters; exports contain no external links or external images.
+- Add browser regressions for the contents structure (including continuous numbering across skipped heading levels), an empty contents block, contents surviving a search, contents scrolling in shares and the reader window, contents entries present in the exported PDF text, and diagram SVG / PNG export.
+- Compatibility: frontend rendering, interaction and documentation only. The server API, data format, archive format and database schema are unchanged, and no migration is required.
+
 ## 1.3.12 Release Notes (2026-10-18)
 
 - Fix the offline library replacing its list with a load failure once the connection drops. An unreachable background sync now keeps showing the mirrored notes, while the offline badge and the background sync notice remain. Previously browsing offline emptied the mirrored list until a manual retry.

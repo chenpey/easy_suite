@@ -2,6 +2,10 @@
 
 本文档演示 EasyNote 完整支持的 Markdown 语法、排版元素、图表与安全扩展。
 
+单独一行写 `[TOC]` 会在预览、只读分享与 PDF 中生成可点击的笔记目录，并按标题层级缩进：
+
+[TOC]
+
 ## 文本样式与排版
 
 支持常规 **粗体 (Bold)**、*斜体 (Italic)*、~~删除线 (Strikethrough)~~、`行内代码 (Inline Code)` 以及自动超链接：https://example.com 。

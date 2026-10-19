@@ -959,6 +959,15 @@ nav button.active svg { color: var(--accent); }
 .markdown a { color: var(--accent); }
 .markdown a[data-note-id] { text-decoration-style: dotted; text-underline-offset: 3px; }
 .markdown a[data-private-file]::before { content: '↓ '; }
+.markdown .note-toc { margin: 0 0 1.6em; padding: 12px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+.markdown .note-toc-title { margin: 0 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.markdown .note-toc-list { margin: 0; padding-left: 22px; }
+.markdown .note-toc-list .note-toc-list { margin: 2px 0; }
+.markdown .note-toc li { margin: 2px 0; }
+.markdown .note-toc a { text-decoration: none; }
+.markdown .note-toc a:hover { text-decoration: underline; }
+.markdown .note-toc-empty { margin: 0; color: var(--subtle); }
+.markdown [data-toc-heading] { scroll-margin-top: 20px; }
 .markdown pre { padding: 16px; overflow-x: auto; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .markdown code { padding: 2px 4px; background: var(--soft); border-radius: 5px; }
 .markdown pre code { padding: 0; }
@@ -991,6 +1000,7 @@ nav button.active svg { color: var(--accent); }
 .markdown td, .markdown th { padding: 7px 12px; border: 1px solid var(--line-strong); }
 .markdown hr { margin: 26px 0; border: 0; border-top: 1px solid var(--line); }
 .mermaid-diagram {
+  position: relative;
   width: 100%;
   max-width: 100%;
   margin: 26px 0;
@@ -1003,6 +1013,61 @@ nav button.active svg { color: var(--accent); }
   max-width: 100%;
   height: auto;
   margin: 0;
+}
+.diagram-visual {
+  position: relative;
+  display: inline-block;
+  min-width: 104px;
+  max-width: 100%;
+  vertical-align: top;
+}
+.diagram-export-actions {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+.mermaid-diagram:hover .diagram-export-actions,
+.mermaid-diagram:focus-within .diagram-export-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.diagram-export-button {
+  min-width: 38px;
+  min-height: 28px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  border-color: var(--line-strong);
+  border-radius: 6px;
+  box-shadow: var(--control-shadow);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+}
+.diagram-export-button:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.diagram-export-error {
+  display: block;
+  max-width: min(360px, 100%);
+  margin-top: 8px;
+  padding: 6px 9px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: 6px;
+  box-shadow: var(--control-shadow);
+  font-size: 11px;
 }
 .mermaid-error { margin: 20px 0; padding: 12px 14px; color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--paper)); border-left: 3px solid var(--danger); white-space: pre-wrap; font-size: 12px; }
 .blocked-image { color: var(--muted); font-size: 12px; }
@@ -1241,6 +1306,7 @@ dialog.pdf-export-dialog[open] { display: flex; flex-direction: column; }
   white-space: pre-wrap;
 }
 .print-document .mermaid-diagram { overflow: visible; }
+.print-document .diagram-export-actions { display: none; }
 .print-document .markdown a { color: #202428; text-decoration: underline; }
 .account-security section { padding: 2px 0 20px; border-bottom: 1px solid var(--line); }
 .account-security section + section { padding-top: 20px; }
@@ -1773,6 +1839,22 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   .document-scroll { padding: 0 15px; }
   .word-count { display: none; }
   .mobile-action-list { grid-template-columns: 1fr; }
+}
+
+@media (hover: none), (max-width: 900px) {
+  .diagram-export-actions {
+    position: static;
+    margin-top: 8px;
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+  .diagram-export-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 
 .math-display { display: block; max-width: 100%; overflow-x: auto; padding: .35em 0; }

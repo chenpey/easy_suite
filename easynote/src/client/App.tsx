@@ -255,7 +255,7 @@ function SharedPage({ token }: { token: string }) {
             <time>{t('更新于 {0}', new Date(note.updatedAt).toLocaleString(dateLocale()))}</time>
             <span>{note.expiresAt === null ? t('永久有效') : t('有效至 {0}', new Date(note.expiresAt).toLocaleString(dateLocale()))}</span>
           </div>
-          <Preview content={note.content} onImage={(src) => window.open(src, '_blank', 'noopener,noreferrer')} />
+          <Preview content={note.content} name={note.title} onImage={(src) => window.open(src, '_blank', 'noopener,noreferrer')} />
         </article>}
   </main>;
 }
@@ -2139,7 +2139,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
               <input className="note-title" aria-label={t('note_title')} placeholder={t('untitled_note')} maxLength={256} value={note.title} readOnly={!!note.deletedAt || !!transfer} onChange={(e) => setNoteFields({ title: e.target.value })} />
               <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>{uiLanguage() === 'en' ? `Rev ${note.revision}` : `修订 ${note.revision}`}</span></div>
               {layout === 'preview' || note.deletedAt || transfer
-                ? <Preview content={note.content} onImage={setLightbox} onNote={(id) => void openNote(id)}
+                ? <Preview content={note.content} name={note.title} onImage={setLightbox} onNote={(id) => void openNote(id)}
                     onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
                     onTask={!note.deletedAt && !transfer ? (sourceLine, checked) =>
                       setNoteFields({ content: toggleMarkdownTask(note.content, sourceLine, checked) }) : undefined}
@@ -2771,7 +2771,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {versionList && versionNoteId === note?.id && <Modal title="历史版本" close={() => { setVersionList(null); setChosenVersion(null); }}>
       <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>{t('修订 {0}', version.revision)} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
-      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
+      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} name={chosenVersion.title} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
         <RotateCcw size={15} />{t('恢复此版本')}
       </button></div></>}
     </Modal>}
@@ -2835,7 +2835,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {lightbox && <Modal title="图片" close={() => setLightbox('')}><img className="lightbox-image" src={lightbox} alt={t('笔记图片')} /></Modal>}
     {printNote && <section className={`print-document ${pdfExport ? 'pdf-rendering' : ''}`} data-printing={pdfExport ? 'true' : 'false'} aria-hidden="true">
-      <Preview content={printNote.content} onImage={() => undefined}
+      <Preview content={printNote.content} name={printNote.title} onImage={() => undefined}
         resolveFile={book.offlineLibrary ? book.cachedFile : undefined} eagerImages />
     </section>}
     {popoutWindow && !popoutWindow.closed && activePopoutNote && createPortal(
@@ -2887,6 +2887,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             </div>
             <Preview
               content={activePopoutNote.content}
+              name={activePopoutNote.title}
               onImage={(src) => popoutWindow.open(src, '_blank', 'noopener,noreferrer')}
               onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
               onNote={(id) => void openPopoutReader(id)}

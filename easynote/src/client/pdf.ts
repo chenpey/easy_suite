@@ -215,8 +215,9 @@ async function exportHtml(source: HTMLElement, options: PdfExportOptions): Promi
     checkbox.replaceWith(document.createTextNode(checkbox.checked ? '☒ ' : '☐ '));
   });
   clone.querySelectorAll('button').forEach((button) => button.remove());
+  // ponytail: 目录在 PDF 中只保留文字；pdfmake 需要为每个标题建立 dest 才能页内跳转，需要时再补。
   clone.querySelectorAll<HTMLAnchorElement>('a').forEach((link) => {
-    if (link.dataset.noteId || link.dataset.privateFile || link.dataset.footnoteBackref) {
+    if (link.dataset.noteId || link.dataset.privateFile || link.dataset.footnoteBackref || link.dataset.tocTarget) {
       link.removeAttribute('href');
     }
   });
