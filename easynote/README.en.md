@@ -4,527 +4,315 @@
 
 Current Version: `1.3.12`
 
-A self-hosted Markdown note-taking application for individuals or small teams. React + TypeScript frontend, pdfmake PDF generation with PDF.js paginated preview, Cloudflare Worker API, D1 database for accounts and notes, and private R2 object storage for images and attachments.
+A self-hosted Markdown note-taking application for individuals and small teams. The frontend is React 19 + TypeScript + Vite packaged as an installable PWA. The server is a single Cloudflare Worker serving the API, remote MCP, OAuth and static assets; D1 stores accounts and notes, R2 stores private images and attachments, a Durable Object broadcasts changes, and a Cron trigger cleans up expired data every hour. PDFs are generated structurally with pdfmake and previewed page by page with PDF.js.
 
-## 1.3.12 Release Notes (2026-10-18)
+## Contents
 
-- Fix the offline library replacing its list with a load failure once the connection drops. An unreachable background sync now keeps showing the mirrored notes, while the offline badge and the background sync notice remain. Previously browsing offline emptied the mirrored list until a manual retry.
-- Replace Mermaid with Pele as the diagram renderer. Diagram code ships as one ~685 kB chunk (~255 kB gzip) instead of several lazy chunks (its layout engine alone was ~1.5 MB), reducing the offline precache and the first-preview download.
-- Theme diagrams through CSS variables: switching between light and dark takes effect immediately and no longer re-renders up to 20 diagrams.
-- Tighten diagram output sanitizing. The new renderer emits no `<style>` element, so that allowance is removed and only the `role` attribute needed for accessibility is kept. Diagram links and external images stay disabled, and diagram text stays escaped.
-- Keep the existing injection defenses and the limits of 20 diagrams and 50,000 characters per source. Add browser regressions for a broken diagram and for the 21st diagram reporting an inline error.
-- Compatibility: Pele targets Mermaid 12.1 syntax and all 25 example diagram blocks in this repository render. A few older constructs (for example `url(...)` inside `classDef` or `linkStyle`) fail to parse and show an inline error without affecting the rest of the note. Import [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) to check 20 common diagram types.
-- This release only changes frontend rendering and documentation. No database migration is required, and the server API, data format and archive format are unchanged.
-
-## 1.3.11 Release Notes (2026-10-17)
-
-- Arrange bulk actions in two equal-width columns, giving Archive, Add Tag, Move Notes and Delete one cell each without leaving Delete alone on a row or wrapping button labels.
-- Highlight the selected count with a subtle badge and use borderless Select All and Cancel controls. Keep disabled actions neutral, showing the danger color only when Delete is enabled. Wrap selection controls together in narrow lists and retain touch targets at least 44px high on mobile.
-- Add layout regressions in both languages and themes, covering 220/300px desktop lists and 320/390px mobile viewports. Verify button alignment, single-line labels, disabled states and containment. This UI update requires no database migration.
-
-## 1.3.10 Release Notes (2026-10-17)
-
-- Fix internal note links after web ZIP restores. Allocate destination UUIDs before saving and remap links to new or deduplicated existing notes, preserving self-links and cycles. Recheck fingerprints when reimporting ordinary linked chains; reimporting an old ZIP containing self-links or cycles may still create additional copies.
-- Toggle preview tasks using source lines from the Markdown parser, covering blockquotes, ordered and nested lists, and tasks starting on continuation lines without modifying examples inside fenced or indented code blocks.
-- Precache Mermaid diagram and shared chunks along with syntax-highlighting scripts, allowing previously unopened diagrams to render on their first offline preview. Initial cache downloads grow accordingly; PDF engines and fonts remain cached on demand.
-- Request persistent storage in the authenticated editor and show the result in Settings. Unsupported APIs, denied requests and permission errors do not block editing or saving; prompt users to export unsynced drafts. Persistent storage does not prevent manual site-data clearing.
-- Add regressions for ZIP links and deduplication, task source positions, offline diagrams and highlighting, and storage permissions. Update both language guides. No new database migration is required.
-
-## 1.3.9 Release Notes (2026-10-17)
-
-- Reduce width and spacing in the Move Note and Move Folder dialogs. Make folder options clickable and highlighted across the full row, align root and nested folder indentation, and provide mobile rows at least 44px high.
-- Center regular success notices near the top of the screen for better visibility. Retain the shared two-second duration configuration, feedback within dialogs, and error dismissal and retry behavior.
-- Add desktop and mobile move regressions covering full-row clicks, touch target height, and success notices remaining within the viewport and unobscured. No new database migration is required.
-
-## 1.3.8 Release Notes (2026-10-17)
-
-- Fix an "Operation Incomplete" error after a note move has saved successfully but the subsequent list refresh fails. Close the move dialog on success and retain a retry action in the list for refresh failures; actual save failures still report an error.
-- Unify success notices and "Copied" feedback at two seconds, configured through `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts`. Repeated actions restart the timer; failures remain available for manual dismissal or recovery.
-- Add browser regressions for refresh failures after successful moves, actual save failures, feedback expiry, timer resets and manual error dismissal. No new database migration is required.
-
-## 1.3.7 Release Notes (2026-10-17)
-
-- Fix a race in folder depth validation. Creation and moves recheck destination ancestors, source subtree height and cycles within the write itself, preventing concurrent changes after preflight from exceeding five levels. Add deterministic regressions for parent moves and subtree growth.
-- Simplify folder rows and breadcrumb navigation. Desktop folder actions use right-click or `Shift+F10`, while mobile retains the action button. Remove the redundant back button, use breadcrumbs to return to ancestors or the root, and enlarge mobile toolbar and folder-action touch targets.
-- Include pending database migrations in deployment confirmation, preventing Wrangler's second prompt from being obscured by progress heartbeats. Add interactive deployment regression coverage and usage notes.
-- No new database migration is required. Upgrades from older versions still apply all pending migrations before deployment.
-
-## 1.3.6 Release Notes (2026-10-17)
-
-- Tighten sidebar, note-list and editor-toolbar spacing on desktop and mobile. Place note excerpts beside timestamps and keep folder rows aligned with their action buttons.
-- Upgrade ZIP manifests to v3 to preserve note and folder manual order while retaining v2 import compatibility. Accept valid negative keys and renumber siblings when a drop would exceed the supported range, keeping exported backups restorable.
-- Use modification-time and ID cursors with on-demand "Load More" in the online task center. Process at most 50 candidate notes plus one lookahead note per page and suppress duplicate entries. Pages are live rather than a fixed snapshot; reopen the task center to see notes edited ahead of the cursor. Offline mode still collects mirrored notes and drafts locally.
-- Count only rejected passwords against the global login budget for both login and OAuth consent, so other users cannot exhaust it to block correct passwords. Per-IP throttling still runs before verification; the global failure budget does not cap password derivation CPU from distributed requests.
-- Retain deletion tombstones for 30 days before scheduled cleanup. Old-revision updates still return `410`, but an old ZIP or revision-zero copy can recreate the original ID after cleanup. Document this limitation in both disaster recovery guides.
-- Apply the new `0005_tasks.sql` task-scan index when upgrading; the existing deployment script runs it before publishing. Disaster recovery verification still accepts compatible backups from before the index. Add regressions for order bounds, archive round trips, task pagination and login budgets.
-
-## 1.3.5 Release Notes (2026-10-17)
-
-- Avoid duplicate `/api/notes` and `/api/tags` requests after the initial online library load, reducing Worker/D1 reads and unnecessary list generation updates.
-- Prevent `Cmd/Ctrl+S` from reaching the browser's Save Page dialog when no note is selected and no draft is pending; when content exists, it still saves immediately and records a version snapshot.
-- Add browser regression coverage for online startup request deduplication and the empty-state save shortcut. This is a client-side fix with no new database migration.
-
-## 1.3.4 Release Notes (2026-10-17)
-
-- Make `Cmd/Ctrl+K` the primary global search shortcut, retaining `Cmd/Ctrl+Shift+F` as a compatible alternative. Focus search and select the existing query; from the mobile editor, return to the note list first.
-- Move Quick Open from `Cmd/Ctrl+K` to `Cmd/Ctrl+O` and edit/preview from `Cmd/Ctrl+Enter` to `Cmd/Ctrl+E`. `Cmd/Ctrl+Enter` now creates a note in the current folder. Add shortcuts for settings (`Cmd/Ctrl+,`), navigation (`Cmd/Ctrl+\`, opening the navigation menu at ≤900px), outline (`Cmd/Ctrl+.`), internal links (`Cmd/Ctrl+Shift+K`) and appearance (`Cmd/Ctrl+Shift+L`).
-- Prioritize application shortcuts inside the editor without changing note text while preserving browser find, input composition, key repeat and shortcuts with other modifiers. Keyboard help now documents undo and redo.
-- Switch folders, categories and sort order immediately while keeping the 200ms search debounce. Show a loading skeleton until results arrive, an empty state only after a successful empty response, and ignore stale responses after switching views.
-- Retry the full startup process after folder, sync cursor or note loading fails, restoring folder navigation, categories, sorting and background sync while preserving existing local drafts. No new database migration is required.
-
-## 1.3.3 Release Notes (2026-10-17)
-
-- Reorder the list toolbar to Quick Open, Sort, Bulk Select, Sync and New, keeping browsing controls together.
-- Add `Cmd/Ctrl+Shift+F` to focus global search and select the existing query. From the mobile editor, return to the note list before focusing search.
-- Show the new shortcut in keyboard help, the Quick Open search command and both language guides. Search spans folders while retaining the current category and tag filters. No new database migration is required.
-
-## 1.3.2 Release Notes (2026-10-17)
-
-- The root level no longer repeats All Notes on a second line. The back button and folder path appear only inside a folder or while a search or tag filter is active.
-- Below 340px of list width the sorting control collapses to its icon so the heading is not cut off; widen the list to see the Last modified or Manual order label again.
-- Mobile keeps the icon-only control. This release only touches the list header and needs no new database migration.
-
-## 1.3.1 Release Notes (2026-10-16)
-
-- The plus button in the list toolbar no longer shows a "New" hover tooltip, which duplicated the creation menu underneath it.
-- Tighten the list creation menu and the note and folder context menus with smaller padding, row height and corner radius; mobile keeps 36px touch rows.
-- Restyle the sorting control from an outlined box into the borderless pill already used for sidebar active states, aligned with the toolbar icon height; narrow screens show the icon only.
-- A visual-detail release. No new database migration is required.
-
-## 1.3.0 Release Notes (2026-10-16)
-
-- Remove the duplicate folder tree from desktop and mobile navigation. Browse folders in the mixed list; each folder's action menu supports creating subfolders, renaming, moving and deleting. Desktop also supports right-click and Shift+F10.
-- The list's plus button offers New Note and New Folder at the current level. All Notes no longer has a folder-creation context menu. Mobile uses the same visible creation menu; subfolder creation is disabled offline and at the fifth level.
-- Add a separate Back to parent folder button and clickable folder breadcrumbs. Navigation works with the sidebar collapsed; on mobile the path scrolls horizontally while the back button remains visible.
-- Preserve folder dragging and manual ordering, with breadcrumbs accepting drops into ancestor folders. Add a bulk Move action that appends cross-folder selections in display order; partial save failures prevent group reordering.
-- Remember sorting preferences independently for the root and each folder. Root defaults to Last modified and folders to Manual order. Equal manual positions retain folder name order and note modification order. No new database migration is required.
-
-## 1.2.0 Release Notes (2026-10-16)
-
-- All Notes now browses the root level, mixing top-level folders with unfiled notes in one list. Filed notes no longer appear there again. Opening a folder lists its direct subfolders and notes, without flattening descendant notes.
-- Search spans folders even when started inside a folder. Tags, Archive and Trash retain their respective filters. Online pagination, the offline library and local drafts follow the same browsing scope.
-- Open folders directly from the list, or drop notes and folders onto them. All Notes remains a drop target for moving items back to the root level. Folders and notes share list ordering and Load more; folders after an unloaded note page are deferred to preserve ordering.
-- Preserve pinned notes and existing manual ordering within folders. No new database migration is required; upgrades from 1.1.x can use the existing deployment script directly.
-
-## 1.1.1 Release Notes (2026-10-16)
-
-- Remove the duplicate Root entry from desktop and mobile navigation, using All Notes as the single entry. All Notes continues to list notes across folders.
-- On desktop, drop notes or subfolders onto All Notes to move them back to the root level. Drop highlighting, folder creation and keyboard menus remain available. This update requires no new database migration.
-
-## 1.1.0 Release Notes (2026-10-16)
-
-- On desktop, drag folders to reorder siblings or move them into another folder, and drag a selection of notes into a folder or Root. Folder depth, sibling-name uniqueness and cycle checks remain enforced.
-- Root stays visible. Each folder can independently use Manual order or Last modified, with preferences stored per account in the current browser. Manual order supports dragging and Alt+Up / Alt+Down; search, tag and All Notes lists retain last-modified ordering.
-- Reordering notes changes only their positions, preserving content, revisions and modification times. Cross-device position updates retain unsaved drafts and rebuild pagination in manually ordered lists.
-- Upgrading to 1.1.0 requires `0004_order.sql`, which adds note and folder positions and a sorting index. The existing deployment script applies migrations before publishing code. ZIP restores preserve folders but not manual order. Mobile continues to use action menus; moving and reordering require a connection.
-- Fix web ChatGPT MCP authorization: PWA navigation no longer intercepts OAuth, discovery metadata, MCP or share paths. Consent submissions strictly validate a same-origin Origin, falling back to a same-origin Referer only when Origin is absent, allowing popup cross-site markers and Referer-only submissions.
-- Fix MCP search results being rejected when internal sorting fields are present. Upgrades from older versions must also have `0002_oauth.sql` applied; the deployment script checks and applies all pending migrations.
-
-## 1.0.0 Release Notes (2026-10-16)
-
-- Show the folder tree directly below All Notes instead of in a separate Folders section, with the same hierarchy order on desktop and mobile.
-- Right-click All Notes on desktop to create a root folder, or open the menu with Shift+F10 or the menu key. Escape closes it and returns focus to All Notes; clicking outside or pressing Tab also closes it.
-- Keep the New Folder touch entry in mobile navigation. Folder creation is disabled offline; existing folders and cached notes remain available.
-- Upgrading from 0.11.0 requires no new database migration. Existing folders, notes and folder actions remain compatible.
-
-## 0.11.0 Release Notes (2026-10-16)
-
-- Add a folder tree in the sidebar, five levels deep, with create, rename, move and delete. Moving a folder carries its whole subtree and the notes inside it, and a folder can never be moved into itself or its own subtree.
-- The note list gains a right-click menu for copy, edit, move and delete. The offline library mirrors the folder list, and AI/MCP note metadata now reports `folderId`.
-- Sibling folder names stay unique: create, rename, move, ZIP import and disaster-recovery restore all validate the same rule and return 409 on a clash. Migration `0003_folders.sql` adds a unique sibling index as a backstop, using `COALESCE` so root folders with a `NULL` parent are compared too.
-- One account may hold at most 1200 folders, matching the ZIP import and export budget. Importing merges same-name siblings and always generates new UUIDs for created folders, so a folder ID owned by another account no longer aborts the import.
-- Folder restore creates each level with up to six concurrent requests, cutting the wait for large archives on slow networks.
-- Disaster-recovery backups include folders, and the restore precheck now rejects old backups that contain duplicate sibling names. Deployments apply database migrations before the new code.
-
-## 0.10.2 Release Notes (2026-10-15)
-
-- Reduce the default autosave delay from 1000 ms to 500 ms. Edits made during a save keep their existing debounce deadline and save immediately once it has elapsed, without waiting another full interval. The saved status still requires server confirmation.
-- Deliver cross-device change notifications in the background so they no longer delay completed save responses; retain failure logging and polling recovery.
-- Register the offline worker before the full page finishes loading, using a deferred registration script while preserving immediate activation and control of the page.
-- Treat PDF resources as an optional background cache: preparation failures no longer interrupt editing, saving, or enabling offline notes. Export failures appear in the PDF dialog. Offline PDF export may remain unavailable if the resources were not cached successfully.
-- Add regression coverage for slow page resources, PDF cache failures, edits during saves, and background notifications. The database schema and migrations are unchanged.
-
-## 0.10.1 Release Notes (2026-10-15)
-
-- Fewer database round trips when saving a note: the current revision and the purge tombstone are read in one batch, and the save response comes from the write itself via `RETURNING` instead of a follow-up read, so the response always matches the revision that was written.
-- Load the note list and the tag list in parallel, removing one serial round trip. A failed list refresh after a successful save is no longer treated as a save failure and no longer blocks further autosaves of that note (the content is already on the server); the list catches up on the next poll.
-- The database schema and migrations are unchanged: upgrading from 0.10.0 needs no extra migration or backup step.
-
-## 0.10.0 Release Notes (2026-10-15)
-
-- Add OAuth authorization for remote MCP: clients that only support OAuth, such as ChatGPT on the web, can connect to `/mcp` directly, with automatic client registration and PKCE (S256). The consent page asks for the account password and a read-only or read-write access level.
-- Each authorization creates one integration token named after the client, listed under "Settings → AI Integration", revocable at any time, and sharing the limit of 10 active tokens per account with manually created tokens.
-- Access tokens last 1 hour. Refresh tokens last 30 days and rotate on every refresh; reusing a rotated-out refresh token revokes that authorization immediately. Changing a password, disabling an account, an administrator password reset, or account deletion also revokes OAuth grants.
-- OAuth endpoints accept HTTPS only: client registration uses the `ACCOUNT_WINDOW_SECONDS` window, consent submissions reuse the login rate limit, and unknown `/.well-known/*` paths return a JSON 404 instead of the app shell.
-- Deployments apply database migrations before the new code. Disaster-recovery backups include the new OAuth client table; after the migration version changes, restore older backups with matching code.
-
-## 0.9.0 Release Notes (2026-10-15)
-
-- Add KaTeX inline and display math, including offline cold starts, shared and separate readers, PDF exports, and an importable example. PDF export rasterizes formulas and their containing paragraphs, headings, list items, or table cells; text inside those images cannot be selected or searched.
-- Browser connectivity hints no longer block sync or image requests. Network failures and HTTP errors update connectivity separately, including when the offline library is disabled. The task center uses mirrored notes and unsynced drafts when the offline library is enabled.
-- Retry temporary save failures up to twice with the same operation ID; prevent delayed reads from overwriting newer synchronized content or purge tombstones.
-- Fix PDF exports containing math and Mermaid in the same list item, preserve image dimensions, reuse decoded images when their sources become unreachable if the canvas can read them, and report other images as unwritable, and cover large images mixed with inline math.
-- Build current source before UI tests, update stale selectors, include client API and math parser tests in the regular test command, and remove unused translation keys.
-
-## 0.8.7 Release Notes (2026-10-09)
-
-- Fix the editor-lock screen when switching from a browser tab to the installed PWA. A foreground PWA automatically takes over; waiting pages resume when the previous editor closes, while preserving one editor per account and browser profile.
-- Add an in-app history entry when opening a note on mobile. System Back returns to the note list, and Forward restores the note view. The Back button waits for history traversal before displaying the list to avoid races when reopening quickly.
-- Disable horizontal overscroll navigation while retaining horizontal scrolling in code blocks and tables.
-- Add regression coverage for PWA takeover, editor-lock recovery, and mobile Back/Forward; update existing mobile navigation tests to use the current button labels.
+[Implemented Features](#implemented-features) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Deploying to Cloudflare](#deploying-to-cloudflare) · [Configuration](#configuration) · [API](#api) · [Syntax Cheatsheet](#syntax-cheatsheet) · [Shortcuts](#shortcuts) · [Verification](#verification) · [Cost](#cost) · [Notes](#notes) · [Release Notes](#release-notes)
 
 ## Implemented Features
 
-- Multi-tenant model: Initial admin provisioning, user management, approval-based registration (disabled by default), recovery codes, account deletion, HttpOnly session cookies, CSRF, origin checks, and login rate limiting. Notes, versions, attachments, offline caches, and AI tokens are strictly tenant-isolated.
-- Note creation, standalone title, Markdown editing/preview, checkable tasks, autosave, pinning in the note list, archive, tags, and full-text keyword search.
-- Task Center: Aggregates incomplete Markdown TODOs with source note and line number references, with direct jump-to-source support.
-- Single blank note rule: Keeps at most one completely blank note per account; creating a new note reuses an existing blank note if present.
-- CodeMirror 6 editor, markdown-it parsing with DOMPurify sanitization, supporting footnotes, code highlighting, and safe HTML blocks.
-- Mermaid diagrams: Flowcharts, mindmaps, and other Mermaid charts rendered on-demand in preview mode.
-- KaTeX math: `$x^2$` inline and `$$…$$` display formulas, including offline previews, separate readers, shares, and PDF exports. Code and ordinary currency remain literal.
-- Image pasting, drag-and-drop, and file selection (JPEG, PNG, WebP); private attachments (PDF, Markdown, TXT, CSV, JSON); inserted at cursor position.
-- PDF export with authentic paginated preview, A4/Letter formats, portrait/landscape orientation, and scaling; direct download on desktop, system share sheet on iOS/Android.
-- Trash bin, restore, permanent deletion, and tombstone records retained for 30 days to prevent stale devices from resurrecting purged notes.
-- Revision-based concurrency control, 3-way merge from base revisions, manual conflict resolution with conflict copies, idempotent retries, manual snapshot history, and version restore.
-- Full offline note library (enabled by default): IndexedDB mirrors note content, private files, full-text search, and pending drafts, automatically submitting changes upon reconnecting. Browser connectivity hints do not block requests; temporary network or server save failures get up to two automatic retries before requiring manual sync.
-- Durable Object WebSockets broadcast mutation signals (create, update, delete) per account; clients fetch authoritative data upon notification. Foreground polling and focus restoration act as fallbacks.
-- Installable PWA with a standalone app window, home screen icon, app shell caching, and offline cold start. Preview dependencies, including Mermaid's diagram chunks and syntax highlighting, are precached; PDF engines and fonts remain cached on demand. Notes can open in a regular separate reader window on desktop (omitted on mobile); system-level always-on-top is not supported.
-- The authenticated editor requests persistent browser storage and reports the result in Settings. Editing still works if the browser rejects the request or does not support it, but local data may be evicted. Unsynced drafts exist only on the current device: sync or export them promptly. Persistent storage does not protect against manually clearing site data.
-- Global search (`Cmd/Ctrl+K`), searchable command palette (`Cmd/Ctrl+O`), document outline, stable internal links (`[[UUID|Title]]`), and backlinks.
-- Tag renaming, merging, deletion, plus batch archive and tagging.
-- AI read/write integration: Restricted tokens, exact note statistics, cross-status FTS5 relevance search, match character ranges, batch reading, MCP Resources, and writing tools. AI edits enter version history.
-- Desktop/mobile layouts, light/dark themes, ZIP export/recovery, and import support for Obsidian directories, Markdown/TXT ZIPs, and individual files.
-- Revocable time-limited or permanent read-only share links with centralized management.
-- Scheduled cleanup of expired sessions, share links, login counters, unreferenced files, failed uploads, and deleted tenant data.
+**Notes and editing**
 
-## Project Structure
+- Create notes with an independent title, Markdown editing and preview, autosave 500 ms after typing stops, pinning, archiving, tags, trash and restore; permanent deletion asks for confirmation.
+- CodeMirror 6 editor; markdown-it parsing with DOMPurify sanitizing; GFM tables, footnotes, syntax highlighting and safe HTML blocks.
+- Tick to-dos directly in preview; double-click a heading, paragraph, list item, table or code block to jump back to its source line and column.
+- Outline, backlinks and stable internal links `[[note UUID|display title]]` that keep working after the target is renamed.
+- KaTeX inline and block math; Pele renders flowcharts, mind maps, sequence diagrams and more, recolouring instantly with the light/dark theme.
+- Version history: manual saves and AI writes create snapshots (20 kept by default) that can be inspected and restored; restoring snapshots the current content first.
+- Multi-device collaboration: a Durable Object WebSocket pushes account-level change signals, the client pulls authoritative data incrementally, and a 30-second foreground poll covers gaps.
+
+**Organisation and search**
+
+- Folders up to 5 levels deep with create, rename, move and delete; sibling names stay unique.
+- Drag notes or folders across levels and reorder siblings, or nudge with Alt+↑ / Alt+↓; lists sort by recent change or manual order, with the preference stored per account in the browser.
+- Global search with `Cmd/Ctrl+K`, tag filters and a quick-jump command palette.
+- Task centre aggregating every unfinished TODO with its source note and line number, one click away from the source.
+
+**Sharing and AI access**
+
+- Read-only share links valid for 1 hour / 1 day / 7 days / 30 days / forever, extendable or revocable; only the token hash is stored and attachments are authorised against the current revision.
+- Remote MCP: any MCP client can connect to `https://your-domain/mcp` for search, batch reading and write tools.
+- OAuth support (dynamic client registration + PKCE S256) with read-only or read-write authorisation; each grant creates an integration token named after the client, revocable from settings.
+- AI writes land in the regular version history, and search uses FTS5 trigram with BM25 relevance ranking.
+
+**Offline and PWA**
+
+- Installable PWA: the app shell and preview scripts are precached for offline cold start and a standalone app window.
+- A per-account IndexedDB library is enabled by default and mirrors note bodies, private files, full-text search and pending drafts; drafts are submitted automatically with the original revision and operationId once the session is valid, and conflicts go through explicit merging.
+- An editor lock keeps one editing window per account; an installed PWA reclaims the lock when it returns to the foreground.
+
+**Accounts and security**
+
+- Multi-user tenancy: initial admin, approval-based self-registration, recovery codes, account deletion, HttpOnly session cookies, CSRF, origin checks and login rate limits; notes, versions, attachments, shares and AI tokens are all scoped by `user_id`, and R2 keys are shaped `<user_id>/<file_id>`.
+- Changing a password or signing out everywhere revokes other browser sessions and all AI tokens; administrators always keep their own account usable.
+- Private uploads use quota reservation and a state machine (pending → ready → deleting), with unreferenced objects cleaned up after a grace period.
+
+**Import, export and operations**
+
+- ZIP v3 export and import preserve folder structure and manual ordering keys (v2 archives stay importable); Obsidian folders, generic Markdown/TXT ZIPs and single or multiple `.md` / `.markdown` / `.txt` files import as well, rewriting external links into stable internal ones.
+- PDF export offers a page-by-page preview, A4/Letter, portrait or landscape and zoom; the desktop downloads directly while iOS and Android open the system share sheet.
+- `backup.sh` exports the full D1 snapshot and verifies every R2 object by size and SHA-256; `restore.sh --check` runs a read-only preflight, and a real restore only writes to empty resources.
+- Cron cleans up expired sessions, shares, login counters, unreferenced files and the tenant data of accounts pending deletion every hour.
+
+## Architecture
 
 ```text
-easynote/
-├── src/
-│   ├── client/
-│   │   ├── App.tsx            # Login, workspace, settings, and dialogs
-│   │   ├── Editor.tsx         # CodeMirror and sanitized Markdown preview
-│   │   ├── useNotebook.ts     # Autosave, revision conflicts, list, polling
-│   │   ├── merge.ts           # 3-way merge and conflict detection
-│   │   ├── drafts.ts          # IndexedDB drafts, offline mirror, private files
-│   │   ├── api.ts             # API client, error handling, private file uploads
-│   │   ├── pdf.ts             # Structured PDF generation and paginated preview
-│   │   ├── transfer.ts        # ZIP export, validation, remapping, import
-│   │   ├── UserManagement.tsx  # Admin user and registration management
-│   │   ├── NoteSharing.tsx     # Single-note read-only sharing
-│   │   ├── ShareManagement.tsx # Share list, renewal, and revocation
-│   │   ├── styles.css
-│   │   └── main.tsx
-│   ├── worker/
-│   │   ├── index.ts           # Request routing and Cron triggers
-│   │   ├── auth.ts            # Multi-user, sessions, recovery, admin, rate limits
-│   │   ├── events.ts          # Durable Object WebSocket mutation notifications
-│   │   ├── features.ts        # Task center and read-only sharing
-│   │   ├── integrations.ts    # AI tokens, snapshots, delta sync, controlled writes
-│   │   ├── notes.ts           # Notes, tags, versions, soft delete, purging
-│   │   ├── images.ts          # Private files, quota reservation, cleanup
-│   │   └── core.ts            # Config validation, limits, errors, shared types
-│   ├── ai/
-│   │   ├── index.ts           # Remote MCP tools and Resources
-│   │   └── client.ts          # MCP internal API client
-│   └── shared/types.ts
-├── docs/AI_INTEGRATION.md     # User and AI integration guide
-├── docs/DISASTER_RECOVERY.md  # Backup and disaster recovery procedures
-├── migrations/                # Initial D1 schema and incremental upgrades
-├── scripts/                   # Setup, maintenance, Cloudflare API, deployment
-├── test/                      # Integration and UI tests
-├── setup.sh                  # Prepare local dependencies and admin
-├── dev.sh                    # One-command local development server
-├── deploy.sh                 # Interactive production deployment
-├── backup.sh                 # Interactive D1/R2 disaster recovery backup
-├── restore.sh                # Backup verification and restore
-├── reset-password.sh         # Interactive password recovery
-├── wrangler.json             # Worker config, bindings, and environment variables
-├── vite.config.ts
-└── playwright.config.ts
+Browser / PWA (React 19 + TypeScript + Vite)
+   │  HTTPS: /api/*  /mcp  /oauth/*  / static assets
+   ▼
+Cloudflare Worker (src/worker, src/ai)
+   ├── D1              accounts, sessions, notes, versions, folders, sync sequence, FTS5, shares, tokens
+   ├── R2              private images and attachments (<user_id>/<file_id>)
+   ├── Durable Object  NoteEvents: account-level change broadcast with WebSocket Hibernation
+   └── Cron (hourly)   cleanup and tenant deletion
 ```
 
-## Local Development
+### Key mechanisms
 
-Requires Node.js 22.12 or later and Bash (macOS / Linux).
+- **Concurrency**: every write submits a `revision` and a random `operationId`; a revision mismatch returns `409` with the server version, and the client resolves it with a three-way merge (`node-diff3`) from the edit base or by creating a conflict copy.
+- **Incremental sync**: `note_changes` keeps a monotonic sequence, `/api/sync` pulls full notes and deletions by cursor, and the WebSocket carries only invalidation signals.
+- **Offline submission**: drafts and mirrors live in IndexedDB and retry idempotently with the original `operationId` once the session is valid.
+- **Deletion**: deletes write a 30-day tombstone that stops old devices recreating a note from a stale revision; the scheduled cleanup removes the tombstone and frees the ID.
+- **Migrations**: `0001_initial` is the schema baseline and `0002`–`0005` add OAuth, folders, manual ordering and the task scan index; the deploy script applies them before releasing code.
+
+### Project structure
+
+```text
+src/
+├── client/                 # frontend
+│   ├── App.tsx             # login, workspace, settings and dialogs
+│   ├── Editor.tsx          # CodeMirror and safe Markdown preview
+│   ├── useNotebook.ts      # autosave, revision conflicts, lists and polling
+│   ├── merge.ts            # three-way note merge
+│   ├── drafts.ts           # IndexedDB drafts, offline mirror and private files
+│   ├── api.ts              # API calls and uploads
+│   ├── pdf.ts              # structured PDF generation, pagination preview and export
+│   ├── transfer.ts         # ZIP export, validation, file remapping and import
+│   ├── math.ts / knowledge.ts / i18n.ts / feedbackConfig.ts
+│   ├── UserManagement.tsx / NoteSharing.tsx / ShareManagement.tsx / AccountSecurity.tsx / AiAccess.tsx
+│   └── styles.css / main.tsx
+├── worker/                 # server
+│   ├── index.ts            # request entry and cron
+│   ├── auth.ts             # users, sessions, recovery, admin and rate limits
+│   ├── notes.ts            # notes, tags, versions, soft delete and purge
+│   ├── events.ts           # Durable Object change notifications
+│   ├── images.ts           # private files, quota reservation, status and cleanup
+│   ├── oauth.ts            # OAuth authorisation server
+│   ├── features.ts         # task centre and read-only sharing
+│   ├── integrations.ts     # AI tokens, snapshots, incremental sync and controlled writes
+│   └── core.ts             # config validation, size limits and shared types
+├── ai/
+│   ├── index.ts            # remote MCP tools and Resources
+│   └── client.ts           # MCP internal API client
+└── shared/types.ts         # shared types and limits
+migrations/                 # D1 schema and incremental migrations
+scripts/                    # setup / maintenance / cloudflare / deploy orchestration
+test/                       # Miniflare API tests, Playwright browser tests and script tests
+```
+
+## Quick Start
+
+Node.js 22.12 or later (npm included) and Bash on macOS / Linux are required; dependencies install from `package-lock.json`.
 
 ```bash
 cd easynote
 bash dev.sh
 ```
 
-First launch automatically installs dependencies and interactively prompts for initial admin credentials, builds the frontend, applies D1 migrations, and starts the service. Access at `http://127.0.0.1:8791`.
+The first run prepares dependencies and creates a local administrator interactively, then builds, initialises local D1/R2 and starts the server at `http://127.0.0.1:8791`; stop it with `Ctrl+C`. For frontend hot reload, start the server and run `npm run dev:client` in another terminal (`http://127.0.0.1:5174`).
 
-| Command | Description |
+| Command | Purpose |
 | --- | --- |
-| `bash setup.sh` | Install dependencies and initialize admin without starting the server |
-| `bash dev.sh` | Start local development server (auto-initializes if unconfigured) |
-| `bash dev.sh --port 8793` | Start on custom port |
-| `bash deploy.sh` | Interactive production deployment |
-| `bash deploy.sh --check` | Local build and Wrangler preflight checks |
-| `bash reset-password.sh --local` | Reset local account password |
-| `bash reset-password.sh --remote` | Reset remote account password |
-| `bash ../reset.sh easynote --local` | Clear local D1/R2 state while preserving admin config |
-| `bash ../reset.sh easynote --remote` | Reset remote Cloudflare D1/R2 and Worker |
-| `bash backup.sh --remote` | Create and verify full D1/R2 disaster recovery backup |
-| `bash restore.sh <dir> --remote --check` | Preflight check for backup restoration |
-| `bash restore.sh <dir> --remote` | Restore backup to empty D1/R2 resources |
-| `npm run test:ai` | Test remote Streamable HTTP MCP integration |
+| `bash setup.sh` | Prepare dependencies and the local account without starting the server |
+| `bash dev.sh [--port 8793]` | Start locally, initialising the account when missing |
+| `bash deploy.sh` / `bash deploy.sh --check` | Interactive production deploy / local build and deploy preflight |
+| `bash reset-password.sh --local` / `--remote` | Reset a local / production account and revoke its sessions and AI tokens |
+| `bash backup.sh --remote` | Create and verify a full D1/R2 disaster-recovery set |
+| `bash restore.sh <dir> --remote [--check]` | Preflight or restore into empty D1/R2 |
+| `bash ../reset.sh easynote --local` / `--remote` | Wipe local / cloud D1, R2 and the Worker after confirmation |
+| `npm run test:ai` | Test the remote Streamable HTTP MCP |
 
-### Version Management
+Every script supports `--help`. Production requires HTTPS; only local commands allow loopback HTTP.
 
-Versions are maintained in [`versions.json`](../versions.json) at the repository root:
+## Deploying to Cloudflare
 
-```bash
-node scripts/version.mjs bump easynote patch
-node scripts/version.mjs check
-git add .
-git commit -m "发布：EasyNote v0.4.4"
-```
+1. **Enable R2**: complete the one-time account-level checkout in the Cloudflare Dashboard under **Storage & databases → R2 → Overview**; once **Create bucket** appears you can return to the terminal. The deploy script creates or reuses a dedicated D1 database and private R2 bucket from your token.
+2. **Choose a public entry point**: leave it empty for `workers.dev` (the script can initialise the account subdomain), or enter a full hostname such as `notes.example.com` to use a Worker Custom Domain.
+3. **Create a custom API token** ([My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/)) with Account Resources limited to the target account:
 
-## Production Deployment
+| Scope | Permission | Level | Purpose |
+| --- | --- | --- | --- |
+| Account | Account Settings | Read | Discover the accounts the token can reach |
+| Account | Workers Scripts | Edit | Create or update the Worker, static assets, cron and secrets |
+| Account | D1 | Edit | Inspect or create the database and run migrations |
+| Account | Workers R2 Storage | Edit | Inspect or create the private bucket |
+| Zone | Zone | Read | Find the Active zone of a Custom Domain |
+| Zone | Workers Routes | Read | Check route conflicts for the hostname |
 
-### 1. Enable R2
+The last two are only needed with a Custom Domain, together with Zone Resources limited to the root domain. The token is typed into a hidden prompt and lives for that run only; `wrangler.deploy.json` stores resource identifiers with `0600` permissions.
 
-When using R2 for the first time, log into [Cloudflare Dashboard](https://dash.cloudflare.com/), go to **Storage & databases → R2 → Overview**, and complete the R2 subscription checkout. Once the **Create bucket** button appears, return to your terminal; manual bucket creation is not required.
+4. **Deploy**: `bash deploy.sh`. The script prepares dependencies, checks and builds, creates any missing D1 database, private bucket and account subdomain, applies migrations, deploys the Worker and verifies public DNS and HTTPS. Typing `deploy <Worker name>` confirms both the change set and the pending migrations.
 
-![EasyNote Cloudflare D1, R2, and workers.dev Resource Preparation](docs/img/cloudflare/cloudflare-resources.svg)
+To update an existing deployment, run `git pull --ff-only` in the repository root and then `bash deploy.sh` again; the script reuses the saved account and resources, applies the migrations in `migrations/` that have not run yet, and updates the Worker.
 
-The deployment script automatically discovers accounts based on your Token, creates or reuses dedicated `easynote-db` and private `easynote-images`, and retrieves the D1 UUID.
+Official references: [Wrangler API token](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/), [Workers permissions](https://developers.cloudflare.com/workers/authorization/), [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 
-### 2. Choose Public Access
+## Configuration
 
-- Leave blank for `workers.dev` (creates an account-level subdomain if absent).
-- Enter a custom domain (e.g. `notes.example.com`), which must belong to an Active Zone in the same account.
+Server parameters are declared in `wrangler.json` under `vars` and validated for type and range at use time.
 
-### 3. Create Custom API Token
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MAX_NOTE_BYTES` | 262144 | 256 KiB per note body |
+| `MAX_IMAGE_BYTES` | 8388608 | 8 MiB per image |
+| `MAX_IMAGE_PIXELS` | 40000000 | 40 million pixels per image |
+| `MAX_ATTACHMENT_BYTES` | 20971520 | 20 MiB per attachment |
+| `IMAGE_QUOTA_BYTES` | 1073741824 | 1 GiB of R2 files per account |
+| `MAX_NOTES` | 5000 | Notes per account, trash included |
+| `VERSIONS_KEPT` | 20 | History snapshots per note; the current body lives in `notes` |
+| `IMAGE_GRACE_HOURS` | 168 | Grace period before unreferenced files are cleaned |
+| `SESSION_DAYS` | 30 | Fixed session lifetime |
+| `AUTOSAVE_MS` | 500 | Save delay after typing stops (milliseconds) |
+| `POLL_SECONDS` | 30 | Foreground sync interval |
+| `LOGIN_WINDOW_SECONDS` / `LOGIN_IP_LIMIT` / `LOGIN_GLOBAL_LIMIT` | 900 / 20 / 200 | Login rate limit window, per-IP budget and instance-wide failed-attempt budget |
+| `ACCOUNT_WINDOW_SECONDS` | 900 | Window for registration, recovery and OAuth client counters |
+| `REGISTRATION_IP_LIMIT` / `REGISTRATION_GLOBAL_LIMIT` | 5 / 50 | Registration rate limits |
+| `PASSWORD_RESET_IP_LIMIT` / `PASSWORD_RESET_GLOBAL_LIMIT` | 5 / 50 | Recovery-code rate limits |
+| `OAUTH_CLIENT_IP_LIMIT` / `OAUTH_CLIENT_GLOBAL_LIMIT` | 20 / 200 | OAuth client registration rate limits |
+| `ALLOW_LOCAL_HTTP` | false | Loopback HTTP switch for local commands |
 
-Create a Custom API Token under [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens/):
+Titles are limited to 256 characters, tags to 20 per note and 40 characters each, and a note may reference up to 80 private files; those rules live in `src/worker/notes.ts`. The client success-toast duration is `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts` (2000 milliseconds by default).
 
-- Account Settings: Read (to discover accounts)
-- Workers Scripts: Edit (to create/update Worker, assets, and secrets)
-- D1: Edit (to manage database and migrations)
-- Workers R2 Storage: Edit (to manage private R2 bucket)
-- (Custom Domain only) Zone: Read
-- (Custom Domain only) Workers Routes: Read
+## API
 
-![EasyNote Cloudflare API Token Scopes and Permissions](docs/img/cloudflare/cloudflare-api-token.svg)
-
-### 4. Deploy
-
-```bash
-bash deploy.sh
-```
-
-Follow the prompts to enter your API Token, select or confirm resources, and finalize deployment.
-
-Typing `deploy <Worker name>` also authorizes database migrations, so that step does not ask for a second confirmation that could be obscured by heartbeat output. `still running` only means the local subprocess has not exited; it does not report remote migration progress.
-
-## Key Behaviors
-
-### Autosave & Conflicts
-
-Autosave updates note content with `createVersion: false`. Explicit saves (`Cmd/Ctrl+S` or "Sync and Update Version") set `createVersion: true` to snapshot history. AI writes enforce version creation. Duplicate content does not create redundant history snapshots.
-
-Simultaneous edits on different devices are resolved using revision numbers. Conflicts return `409 Conflict`, preserving local drafts and allowing users to branch into conflict copies without overwriting remote data.
-
-Updates (PUT) to a purged note return `410`. Deletion tombstones are retained for 30 days and removed by scheduled cleanup; while present, they also block creates with the same ID. After cleanup, a revision-zero copy can recreate that ID; web ZIP imports use new UUIDs. Offline mirrors and exported ZIPs can persist beyond this window, so permanent deletion does not erase every historical copy.
-
-Within one browser profile, Web Locks allow only one editor per account to protect local drafts. Waiting pages resume automatically when the editor closes. An installed PWA automatically takes over when it enters the foreground; browser tabs can request takeover with “Reopen”.
-
-On mobile, opening a note adds an in-app history entry. System Back returns to the note list before leaving the app, and Forward restores the note view.
-
-### Shortcuts & Navigation
-
-`Cmd/Ctrl+K` focuses global search. `Cmd/Ctrl+O` opens the quick command palette for navigation, actions, search, and settings.
-
-| Shortcut | Action |
+| Method / path | Purpose |
 | --- | --- |
-| `Cmd/Ctrl+K` | Focus global search across every folder and select the existing query |
-| `Cmd/Ctrl+O` | Open Quick Open to find notes or run commands |
-| `Cmd/Ctrl+Enter` | Create a note in the current folder |
-| `Cmd/Ctrl+S` | Save, sync, and record version snapshot |
-| `Cmd/Ctrl+E` | Toggle edit and preview mode (retains cursor position) |
-| `Cmd/Ctrl+,` | Open settings |
-| `Cmd/Ctrl+\` | Toggle navigation sidebar; open navigation menu on tablets and phones at viewport widths ≤900px |
-| `Cmd/Ctrl+.` | Toggle outline and backlinks |
-| `Cmd/Ctrl+Shift+K` | Insert an internal note link |
-| `Cmd/Ctrl+Shift+L` | Toggle light / dark appearance |
-| `Cmd/Ctrl+B` / `Cmd/Ctrl+I` | Toggle bold / italic in editor |
-| `Cmd/Ctrl+Z` | Undo edits |
-| `Cmd/Ctrl+Shift+Z` / `Ctrl+Y` | Redo edits |
-| `Cmd/Ctrl+P` | Export current note as PDF |
-| `Cmd/Ctrl+/` | View keyboard shortcuts |
-| `Esc` | Close dialogs |
+| `GET /api/session` | Account state, CSRF and client parameters |
+| `POST /api/login` / `POST /api/logout` / `POST /api/register` | Sign in, sign out, request registration |
+| `POST /api/account/password` / `logout-all` / `recovery-code` / `reset-password` | Change password, sign out everywhere, issue a recovery code, reset with one |
+| `DELETE /api/account` | Request deletion of the current tenant |
+| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `PATCH /api/admin/settings/registration` | Admin user management and the registration switch |
+| `GET /api/events` | Same-origin WebSocket for account change signals |
+| `GET /api/sync`, `GET /api/sync/cursor` | Incremental sync of full notes and deletions by monotonic sequence |
+| `GET /api/tasks` | Unfinished TODOs with source locations, paginated by `cursor` (`updated_at:id`) and `limit` (50) |
+| `GET /api/notes` | List, search, views and tag filters, 50 per page |
+| `POST /api/notes/duplicates` | Batch lookup of existing note content fingerprints |
+| `POST /api/notes/:id`, `GET /api/notes/:id`, `PUT /api/notes/:id`, `DELETE /api/notes/:id` | Create (revision 0), read, update by revision, permanently delete |
+| `GET /api/notes/:id/versions`, `GET /api/notes/:id/backlinks`, `GET /api/tags` | Version history, backlinks, tags |
+| `GET /api/shares`, `GET/POST/PATCH/DELETE /api/notes/:id/share` | Share list, creation, extension and revocation |
+| `GET /api/public/shares/:token`, `/public/shares/:token/(images\|files)/:id` | Anonymous read of a valid share and its referenced files |
+| `PUT/GET /api/images/:id`, `PUT/GET /api/files/:id` | Upload or authorised read of images and attachments |
+| `GET/POST /api/integrations/tokens`, `DELETE /api/integrations/tokens/:id` | Create, list and revoke AI integration tokens |
+| `GET /api/integrations/notes`, `/notes/batch`, `/notes/:id`, `POST/PUT /api/integrations/notes/:id` | Bearer-token search (batches of up to 20), read and controlled write |
 
-`Cmd/Ctrl+F` retains the browser's page search. `Cmd/Ctrl+Shift+F` remains a compatible global search shortcut. Global shortcuts are inactive while a dialog is open. Quick Open moves from `Cmd/Ctrl+K` to `Cmd/Ctrl+O`; edit/preview moves from `Cmd/Ctrl+Enter` to `Cmd/Ctrl+E`.
+Browser write endpoints require a same-origin `Origin` and `X-CSRF-Token`; AI endpoints use a dedicated Bearer token. Every data endpoint is scoped per account.
 
-Double-clicking any heading, paragraph, list item, table, or code block in preview mode instantly switches to edit mode and jumps to the exact source line in the editor.
+## Syntax Cheatsheet
 
-### Heading Hierarchy & Outline
-
-EasyNote provides a dedicated note title input; titles do not require Markdown `#` prefixes. The note body starts major sections with `##`, subsections with `###`, and so forth. The sidebar outline panel automatically generates a hierarchical table of contents from body headings for quick jumping.
-
-### Interactive Task Lists
-
-Use `- [ ] task` for incomplete items and `- [x] task` for completed items (`- [] task` shorthand is also supported). In preview mode, checkboxes can be directly clicked to toggle status, which automatically writes back to the Markdown source and saves.
-
-```markdown
-- [ ] Incomplete task
-- [x] Completed task
-```
-
-The sidebar "Task Center" aggregates all uncompleted tasks across all non-deleted notes (including archived notes), while ignoring task syntax inside code blocks. Each entry displays its source note and line number, and clicking it jumps directly to that line in edit mode.
-
-With the offline library disabled, the task center uses modification-time and note-ID cursors, processing up to 50 candidate notes per page plus one lookahead note; select "Load More" to continue. `GET /api/tasks` accepts `limit` (default and maximum 50) and `cursor` (`updated_at:id`); omit the cursor initially, then pass the returned `nextCursor` until it is `null`. Apply `0005_tasks.sql` for the scan index when upgrading; the deployment script runs migrations automatically. Pages do not share a fixed snapshot: reopen the task center to see notes edited past the cursor while loading. With the offline library enabled, mirrored notes and unsynced drafts are still collected locally in one pass.
-
-### GFM Tables
-
-Supports standard GitHub Flavored Markdown tables with column alignment via colons:
-
-```markdown
-| Header 1 | Header 2 | Header 3 |
-| :--- | :---: | ---: |
-| Left-aligned | Center-aligned | Right-aligned |
-```
-
-Double-clicking a table in preview mode jumps to its Markdown source line. Tables automatically adapt to desktop and mobile viewport widths.
-
-### Code Blocks & Syntax Highlighting
-
-Code blocks use fenced syntax with language tags (powered by `highlight.js/lib/common`), supporting major languages such as `typescript`, `javascript`, `python`, `bash`, `json`, `html`, `css`, `yaml`, `sql`, `go`, etc. Unrecognized languages gracefully fall back to safe plain text. Double-clicking any code block navigates to its editor source line.
-
-````markdown
-```python
-def hello_world():
-    print("Hello from EasyNote")
-```
-````
-
-### Footnotes
-
-Supports standard Markdown footnote syntax:
-
-```markdown
-Body reference[^1] and additional note[^details].
-
-[^1]: Detailed definition for the first footnote.
-[^details]: Footnote content supports multi-line text and links.
-```
-
-In preview mode, clicking a superscript (e.g. `[1]`) smoothly scrolls down to the footnote definition at the bottom; clicking the backreference link (`↩︎`) smoothly returns to the citation in the body text.
-
-### Knowledge Links (WikiLinks) & Backlinks
-
-Use `[[Note UUID|Display Title]]` or `[[Note UUID]]` to build bidirectional links between notes. Links are permanently bound to the note's UUID, so renaming a target note's title will not break existing links. Clicking a link in preview mode directly navigates to the target note in-app.
-
-```markdown
-See reference document: [[00000000-0000-0000-0000-000000000001|Project Specification]]
-```
-
-The sidebar outline panel scans active notes in real time to display "Backlinks" (all notes referencing the current note), establishing a two-way knowledge graph.
-
-### Diagrams, Math & HTML
-
-Math supports `$x^2$` inline and `$$…$$` display formulas. `\(` and `\[` are Markdown escapes and stay literal so existing notes do not change. Code and ordinary currency remain literal. Each formula is limited to 10,000 source characters; `trust: false` prevents untrusted links and external images, `maxExpand: 1000` bounds macro expansion, and `maxSize: 20` bounds user-specified sizes. Invalid formulas retain their source; oversized or unclosed formulas remain plain text.
-
-Import [`examples/math-demo.md`](examples/math-demo.md) to check formulas in lists and tables, including math mixed with Mermaid.
-
-Flowcharts and mindmaps use Mermaid fenced code blocks and render automatically in preview mode, with full light/dark mode auto-theming:
+| Syntax | Usage |
+| --- | --- |
+| `- [ ] todo` / `- [x] done` | Tick in preview, written straight back to the source |
+| `[[note UUID\|display title]]` | Internal link that survives a rename |
+| `$x^2$` / `$$…$$` | Inline / block math (KaTeX) |
+| `text[^1]` plus `[^1]: note` | Footnote with jump and back-jump |
+| A ` ```mermaid ` block | Diagrams; start with `flowchart LR`, `mindmap`, `sequenceDiagram` and so on |
+| A ` ```python ` block | Syntax highlighting, unknown languages fall back to plain text |
+| `\| :--- \| :---: \| ---: \|` | GFM table alignment for left, centre and right |
+| HTML block | Sanitised by DOMPurify, keeping safe structural tags such as `<section>`, `<mark>`, `<kbd>`, `<details>` and `<summary>` |
 
 ````markdown
 ```mermaid
 flowchart LR
-  A[Start] --> B{Approved?}
-  B -->|Yes| C[Deploy]
+  A[Start] --> B{Check}
+  B -->|Yes| C[Done]
 ```
 ````
 
-For mindmaps, set the first line to `mindmap` and indent child nodes. Common diagram types such as `sequenceDiagram`, `classDiagram`, and `stateDiagram` are also supported. Notes support up to 20 Mermaid diagrams, each up to 50,000 characters.
+Import the demos to see the rendering: [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-demo.en.md) (all syntax), [`examples/math-demo.md`](examples/math-demo.md) (math mixed with diagrams), [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) (20 diagram types), [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) (diagrams with HTML blocks).
 
-Safe HTML blocks can be embedded directly in Markdown, sanitized via DOMPurify. Safe structural tags like `<section>`, `<mark>`, `<kbd>`, `<details>`, `<summary>` are preserved; risky elements such as `<script>`, `<style>`, `<iframe>`, `<form>`, inline event handlers, and external media are stripped.
+## Shortcuts
 
-You can import [`examples/markdown-syntax-demo.en.md`](examples/markdown-syntax-demo.en.md) to test the complete rendering syntax showcase, or [`examples/mermaid-html-demo.md`](examples/mermaid-html-demo.md) for diagrams and HTML blocks. [`examples/mermaid-all-types-demo.md`](examples/mermaid-all-types-demo.md) covers 20 common diagram types, exactly the per-note diagram limit.
+| Shortcut | Action |
+| --- | --- |
+| `Cmd/Ctrl+K` | Focus global search with the current keywords selected, across all folders |
+| `Cmd/Ctrl+O` | Open quick jump to search notes or run commands |
+| `Cmd/Ctrl+Enter` | Create a note in the current folder |
+| `Cmd/Ctrl+S` | Save, sync and record a version immediately |
+| `Cmd/Ctrl+E` | Toggle editing and preview, keeping the source caret |
+| `Cmd/Ctrl+,` | Open settings |
+| `Cmd/Ctrl+\` | Show or hide the navigation sidebar; open the nav menu on narrow screens |
+| `Cmd/Ctrl+.` | Show or hide the outline and backlinks |
+| `Cmd/Ctrl+Shift+K` | Insert an internal note link |
+| `Cmd/Ctrl+Shift+L` | Toggle the dark or light theme |
+| `Cmd/Ctrl+B` / `Cmd/Ctrl+I` | Toggle bold / italic |
+| `Cmd/Ctrl+Shift+Z` / `Ctrl+Y` | Redo |
+| `Cmd/Ctrl+P` | Export the current note as PDF |
+| `Cmd/Ctrl+/` | Show the shortcut list |
 
-### Images & Attachments
-
-- **Private Image Syntax**: `![Image description](/api/images/<uuid>)`. Supports original image uploads (no lossy compression or EXIF stripping), lazy loading, offline IndexedDB cache fallback, and full-screen lightbox zoom upon clicking in preview mode.
-- **Private Attachment Syntax**: `[Document.pdf](/api/files/<uuid>)`. For PDF, TXT, CSV, JSON, ZIP, etc., clicking the link in preview mode triggers a secure browser download with the `download` attribute and `nosniff` security header.
-- **External Image Tracking Shield**: To prevent access tracking and privacy leaks, external HTTP(S) images are blocked by default and rendered with a placeholder (`[外部图片未加载]`).
-- **Security & Storage**:
-  - Image/attachment URLs use stable internal routes (`/api/images/<id>`), with no public buckets or temporary signed URLs.
-  - Every file request verifies login and tenant ownership with `private, no-store` headers.
-  - Files referenced by active notes, trash, or retained version snapshots are protected from deletion; unreferenced files are safely cleaned up after a grace period.
-
-### PDF Export
-
-PDF export provides a paginated preview with A4/Letter paper, portrait/landscape orientation, and scaling. Ordinary text remains selectable and searchable. Formulas and Mermaid diagrams are embedded as images; an entire paragraph, heading, list item, or table cell containing inline math becomes an image, so its text cannot be selected or searched. Raster images are limited to 2400 pixels on their longest side, which can reduce clarity for large blocks. Keep the Markdown source when searchable or copyable formula content is required.
-
-### AI Integration (MCP)
-
-EasyNote supports Model Context Protocol (MCP) natively:
-
-1. Generate a token under "Settings → AI Integration" in the web app.
-2. Connect your AI client (e.g. Codex) to `https://your-domain/mcp` using Bearer authentication.
-3. AI agents gain permission-scoped access to search, read, create, or modify notes through standard MCP tools and resources. See [`docs/AI_INTEGRATION.en.md`](docs/AI_INTEGRATION.en.md) for full details.
-
-## Configuration
-
-Transient success feedback is controlled by `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts`, in milliseconds, with a default of `2000`. Success notices and "Copied" feedback share this value. Failure feedback remains visible for manual dismissal or recovery. Rebuild and publish the application after changing this code configuration.
-
-Configured in `wrangler.json` under `vars`:
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `MAX_NOTE_BYTES` | 262144 | Maximum note body size (256 KiB) |
-| `MAX_IMAGE_BYTES` | 8388608 | Maximum image size (8 MiB) |
-| `MAX_IMAGE_PIXELS` | 40000000 | Maximum image pixels (40 MP) |
-| `MAX_ATTACHMENT_BYTES` | 20971520 | Maximum attachment size (20 MiB) |
-| `IMAGE_QUOTA_BYTES` | 1073741824 | Per-user R2 file quota (1 GiB) |
-| `MAX_NOTES` | 5000 | Maximum notes per user (including trash) |
-| `VERSIONS_KEPT` | 20 | Maximum historical snapshots per note |
-| `IMAGE_GRACE_HOURS` | 168 | Retention grace period for unreferenced files |
-| `SESSION_DAYS` | 30 | Session expiration duration in days |
-| `AUTOSAVE_MS` | 500 | Autosave delay after typing stops, in milliseconds |
-| `POLL_SECONDS` | 30 | Foreground sync polling fallback interval |
-| `LOGIN_WINDOW_SECONDS` | 900 | Login attempt rate limit window |
-| `LOGIN_IP_LIMIT` | 20 | Login attempts per IP within window |
-| `LOGIN_GLOBAL_LIMIT` | 200 | Instance-wide budget for rejected passwords only (a correct password is never blocked); counted after verification, so it does not cap password derivation CPU. Only the per-IP limit runs before derivation. |
-| `ACCOUNT_WINDOW_SECONDS` | 900 | Counting window for registration, recovery and OAuth client registration |
-| `REGISTRATION_IP_LIMIT` | 5 | Registration requests per IP within window |
-| `REGISTRATION_GLOBAL_LIMIT` | 50 | Instance-wide registration budget within window |
-| `PASSWORD_RESET_IP_LIMIT` | 5 | Password recovery requests per IP within window |
-| `PASSWORD_RESET_GLOBAL_LIMIT` | 50 | Instance-wide password recovery budget within window |
-| `OAUTH_CLIENT_IP_LIMIT` | 20 | OAuth client registrations per IP within window (`/oauth/register`) |
-| `OAUTH_CLIENT_GLOBAL_LIMIT` | 200 | Instance-wide OAuth client registration budget within window |
+`Cmd/Ctrl+Shift+F` remains a compatible global-search shortcut, and global shortcuts yield to input while a dialog is open.
 
 ## Verification
 
 ```bash
 bash deploy.sh --check
-npm run build
-npm test
-npm run test:ai
-npm run test:scripts
-npx playwright install chromium
-npm run test:ui
+npm run build          # type checks + i18n check + build
+npm test               # API and AI tests
+npm run test:scripts   # script flow tests (temp dirs, mock Wrangler)
+npx playwright install chromium && npm run test:ui
 ```
 
-### Folders and note actions
+API tests run against in-memory D1 / R2, and browser tests start an isolated instance on `127.0.0.1:8792`; test accounts and data exist only in the test environment. Script tests use mock npm / Wrangler, and interactive flows drive a pseudo-terminal through the system `expect`.
 
-Browse folders and notes in the mixed center list; desktop and mobile navigation retain categories and tags. The list's plus button creates a note or folder at the current level. Folder actions support creating subfolders, renaming, moving and deleting. On desktop, open them with right-click or Shift+F10; on mobile and touch devices, use the folder's action button. Nesting is limited to five levels, and folder changes require a connection. Moving a folder carries its subfolders and notes along, and cannot move it into its own subtree or past five levels. Folders containing subfolders or notes, including trashed notes, cannot be deleted. New notes belong to the selected folder.
+Coverage spans multi-tenant isolation, approval-based registration, recovery and account deletion, save conflicts and idempotency, task locations, timed and permanent shares, ZIP and Obsidian imports, offline cold start and submission, AI tokens and real MCP, deletion tombstones, private files, disaster-recovery validation, mobile layouts and the editor lock.
 
-Clickable breadcrumbs remain available with the sidebar collapsed. Click an ancestor to return there, or All Notes to return to the root. On mobile the path scrolls horizontally. Escape closes creation and folder action menus and restores focus; arrow keys select menu items.
+## Cost
 
-Folder names must be unique within the same level; creating, renaming, moving and importing all enforce this, and same-level folders with the same name are merged into one during import. Accounts are limited to 1200 folders, matching the ZIP import/export budget.
+Billing covers Workers, D1 and R2 Standard; prices were checked on 2026-09-17. Individuals and small teams usually stay inside the free tier.
 
-Right-click a note to duplicate, edit, move to trash, or move to a folder/root. Shift+F10 opens the menu, arrow keys navigate, and Escape closes it. Mobile users can duplicate and move from the note actions menu. Cached folders and notes work offline; folder structure changes require a connection.
+| Item | Free tier | Overage |
+| --- | --- | --- |
+| Worker dynamic requests | 100,000/day | 10 million/month included, then `$0.30` per million |
+| Worker CPU | 10 ms per request | 30 million CPU-ms/month included, then `$0.02` per million |
+| D1 row reads / writes | 5 million / 100,000 per day | 25 billion / 50 million per month included, then `$0.001` / `$1.00` per million |
+| D1 storage | 5 GB (500 MB per database) | `$0.75` per GB-month |
+| R2 Standard storage | 10 GB-month/month | `$0.015` per GB-month |
+| R2 Class A / Class B | 1 million / 10 million per month | `$4.50` / `$0.36` per million |
+| D1 / R2 egress | Free | — |
 
-All Notes mixes root-level folders with unfiled notes. Opening a folder mixes its direct subfolders and notes, so filed notes no longer appear again at the root level. Click a folder in the list to open it; search spans all folders. Tags, Archive and Trash retain their respective filters.
+Typical usage:
 
-On desktop, drop notes or folders onto list folders or ancestor breadcrumbs, including All Notes at the root. Use the bulk Move action for selections spanning folders. Manual order supports dragging entries of the same type and Alt+Up / Alt+Down. Sort order switches between Manual order and Last modified, with preferences stored per account in the current browser for the root and each folder. Root defaults to Last modified and folders to Manual order. Search, tags, Archive and Trash retain last-modified ordering. Moving and reordering require a connection, and mobile uses action menus. Reordering notes leaves content, revisions and modification times unchanged.
+| Scenario | Estimated monthly cost |
+| --- | ---: |
+| 1,000 notes, 20 KiB average, 5 versions, ≤ 1 GiB attachments, one device | **$0** |
+| 1,000 notes, 20 KiB average, close to 20 versions (~410 MiB of raw bodies; indexes can push past 500 MB) | **$0, or from $5** |
+| 1,000 notes, 50 KiB average, 10 versions (raw bodies already exceed the free single-database limit) | **from $5** |
+| D1 within limits, R2 totalling 20 GB / 50 GB | about `$0.15` / `$0.60` |
 
-ZIP exports and disaster recovery backups preserve folders. Older ZIP archives and backups created before folders are supported. Upgrading from versions before 0.11.0 requires `0003_folders.sql`, manual ordering requires `0004_order.sql`, and the 1.3.6 task-scan index requires `0005_tasks.sql`; the existing deployment script applies migrations automatically. ZIP v3 restores manual order keys for notes and folders. V2 backups lack these keys and use the defaults when imported.
+Autosave only rewrites the current body, while version slots are consumed by manual saves and AI writes, so setting `VERSIONS_KEPT` to 5–10 leaves plenty of D1 headroom. After going live, watch Workers Requests, CPU Time and Error 1027, D1 `rows_read`, `rows_written` and database size, plus R2 storage and operations — adjust `POLL_SECONDS`, `VERSIONS_KEPT` or the plan once any of them reaches 70% of the free tier. These figures exclude domains, taxes and external backup storage; your invoice is authoritative: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
 
-ZIP imports remap internal note links to newly assigned UUIDs or existing deduplicated targets, preserving self-links and cycles. Content fingerprints are checked again after remapping targets so ordinary linked chains can be reimported without duplicates. Deduplication still compares literal content: reimporting an old ZIP containing self-links or cycles may create additional copies.
+## Notes
+
+- The product focuses on Markdown notes, per-note read-only sharing and remote MCP; AI reaches a tenant through a restricted token the user creates.
+- The offline mirror inherits the security boundary of the browser profile and device account, so disk encryption is recommended on sensitive devices.
+- Data is protected by access control inside your Cloudflare account, where the account administrator has infrastructure-level access.
+- Lists use offset pagination, so page boundaries can be refreshed manually after content arrives from another device; AI search runs on FTS5, with semantic vector search as a possible extension.
+- Before going to production, verify account configuration, backup and restore, and Cloudflare usage on a separate temporary instance.
+
+## Release Notes
+
+`1.3.12` (2026-10-18): the offline library keeps showing the local mirror when background sync is unreachable; Pele replaces Mermaid as the diagram renderer, cutting the offline precache and first-preview download; diagram themes moved to CSS variables for instant recolouring; diagram output sanitising tightened.
+
+Versions live in [`versions.json`](../versions.json) at the repository root; before committing a feature update run:
+
+```bash
+node scripts/version.mjs bump easynote patch   # minor for features, major for breaking changes
+node scripts/version.mjs check
+```
+
+The script syncs this README, the root README, `package.json`, the lockfile and the version shown in the app.
+
+- Full release history: [`CHANGELOG.en.md`](CHANGELOG.en.md)
+- AI / MCP setup: [`docs/AI_INTEGRATION.en.md`](docs/AI_INTEGRATION.en.md)
+- Backup and restore: [`docs/DISASTER_RECOVERY.en.md`](docs/DISASTER_RECOVERY.en.md)
+- Importable syntax and diagram samples: [`examples/`](examples/)
