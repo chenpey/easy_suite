@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.3`
+当前版本：`0.3.4`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -100,7 +100,7 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 
 ### 六个 harness 的安装位置
 
-将整个 `easydev` 文件夹复制到目标 harness 的技能目录，保持 `SKILL.md`、`references/`、`models.json` 等文件的相对位置。
+将运行所需的 `SKILL.md`、`references/`、`models.json`（可选 `agents/`、`examples/`）复制到目标 harness 的技能目录，保持相对位置；不要复制本地 `.pi/` 与 `tests/`：前者是宿主本地配置，后者是维护与评测材料。使用 CLI 从本地工作区安装后，请检查安装目录；若包含 `.pi/` 或 `tests/`，删除后再使用。
 
 下表给出可用于手动复制的默认位置；项目级路径相对于目标项目，`~` 表示用户主目录。Skills CLI 会将支持共享目录的客户端安装到 `.agents/skills`（用户级为 `~/.agents/skills`）；实际位置以安装输出为准。
 
@@ -165,7 +165,7 @@ CLI 目录映射见 [Skills CLI 官方文档](https://github.com/vercel-labs/ski
 npx skills update easydev
 ```
 
-更新会替换安装目录内容；个人模型配置放在上述外部路径即可保留。曾直接修改安装目录内 `models.json` 的用户，应先将其迁移到外部位置。手动复制安装时，备份后替换整个文件夹。
+更新会替换安装目录内容；个人模型配置放在上述外部路径即可保留。曾直接修改安装目录内 `models.json` 的用户，应先将其迁移到外部位置。手动复制安装时，备份后按安装说明替换运行时文件（仍排除 `.pi/` 与 `tests/`）。
 
 版本变化与具体改动见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -181,7 +181,7 @@ npx skills update easydev
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md) 与 [第五轮](tests/results/chatgpt-review-0.3.3.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
+0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md)、[第五轮](tests/results/chatgpt-review-0.3.3.md) 与 [Gemini review](tests/results/gemini-review-0.3.4.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
 
 ## 适用范围
 
@@ -192,6 +192,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.3.4`（2026-10-19）：B30 独立验收补充缺失/空身份断言与伪修复回归；B30 任务提示声明 `request["user_id"]`、`PermissionError` 与 403/404 契约；安装说明排除本地 `.pi/` 与 `tests/`。
 
 `0.3.3`（2026-10-19）：B30 红阶段校验失败原因并增加接口探针；新增独立验收脚本与夹具用途说明；新增 EasyDev 夹具 CI；补跑 B33（真实零发现收敛与 P3 决策回放）。
 
@@ -232,6 +234,7 @@ easydev/
 ├── tests/results/chatgpt-review-0.3.1.md
 ├── tests/results/chatgpt-review-0.3.2.md
 ├── tests/results/chatgpt-review-0.3.3.md
+├── tests/results/gemini-review-0.3.4.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh

@@ -14,7 +14,7 @@ b30/
 ├── solution.patch         初始状态 → 修复后实现的完整 diff
 ├── acceptance.py          独立验收脚本（不依赖被测仓库的 check_orders.py）
 ├── reviewer-report.md     独立 Reviewer 原始报告（未改写）
-└── run.sh                 红 → 应用补丁 → 绿 → 独立验收 的一键复验
+└── run.sh                 红 → 应用补丁 → 绿 → 独立验收 → 负向拒绝伪修复 的一键复验
 ```
 
 ## 运行
@@ -30,7 +30,8 @@ bash tests/fixtures/b30/run.sh
 3. `git apply solution.patch` 成功；
 4. `probe.py 403`：修复后他人读取返回 403；
 5. `check_orders.py` 输出 `PASS: 7/7`；
-6. `acceptance.py` 输出 `PASS: 8/8 independent acceptance checks`。
+6. `acceptance.py` 输出 `PASS: 12/12 independent acceptance checks`；
+7. 负向变体：省略身份的伪修复被独立验收拒绝（非零退出，恰好 3 条失败，覆盖缺失身份、空身份与缺失 `request` 身份）。
 
 只需要 `bash`、`git` 与 Python 3，不安装依赖。脚本在 `mktemp` 临时目录内执行，不改动工作区。
 
@@ -44,8 +45,8 @@ bash tests/fixtures/b30/run.sh
 
 ## 覆盖与限制
 
-- 检查覆盖：本人可读、他人被拒、缺失订单返回 `None`、接口 200/403/404、admin 导出、非 admin 拒绝。
-- 未覆盖：`request["user_id"]` 的上游可信性（夹具没有 HTTP/鉴权层，该项在记录中保持为待验证风险）；缺失 `user_id` 字段的分支。
+- 检查覆盖：本人可读、他人被拒、缺失订单返回 `None`、缺失/空身份不返回订单（含部分字段与嵌套容器）、接口 200/403/404、admin 导出（含非本人订单）、非 admin 拒绝。
+- 未覆盖：`request["user_id"]` 的上游可信性（夹具没有 HTTP/鉴权层，该项在记录中保持为待验证风险）；真实鉴权中间件与并发请求。
 - 修复前基线 `check_orders.py` 已按目标两参契约编写，初始失败原因是契约尚未实现（`TypeError`），不是越权读取的运行证据；越权由 `probe.py 200` 与静态实现共同证明。
-- `run.sh` 只证明固定补丁能通过断言；独立 Reviewer 是否实际运行、Agent 是否遵守流程，需要另看执行记录，不能由本脚本推导。
+- `run.sh` 只证明固定补丁能通过断言、省略身份的伪修复会被拒绝；独立 Reviewer 是否实际运行、Agent 是否遵守流程，需要另看执行记录，不能由本脚本推导。
 - 本夹具仅覆盖单次 `full` 工作流与公共契约调用方适配，不代表其他语言或真实鉴权环境。

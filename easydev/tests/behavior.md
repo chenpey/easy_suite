@@ -56,7 +56,7 @@
 
 ### B30：订单读取夹具
 
-初始提交后再执行用例；`docs/orders.md` 只描述 `get_order(order_id)` 契约与两个调用方，不写校验要求。
+初始提交后再执行用例；完整夹具（含 `check_orders.py`、`probe.py` 与 `docs/orders.md`）见 [tests/fixtures/b30/initial](fixtures/b30/initial/)，执行时以该目录为准。下面只摘录 `app/` 的四个文件；`docs/orders.md` 只描述 `get_order(order_id)` 契约与两个调用方，不写校验要求。
 
 ```python
 # app/db.py
@@ -102,7 +102,7 @@ def export_order(order_id, operator):
     return get_order(order_id)
 ```
 
-用户请求只给：“订单详情接口没有所有权校验，任何已认证用户都能按订单 ID 读到别人的订单。给订单读取加上所有权校验：只有下单本人可以读取自己的订单；运营导出订单是内部用途，不受此限制，但必须仍然校验 admin 角色。完成后确保现有调用方适配，并给出验证证据。”
+用户请求只给：“订单详情接口没有所有权校验，任何已认证用户都能按订单 ID 读到别人的订单。给订单读取加上所有权校验：只有下单本人可以读取自己的订单，越权时 `get_order` 抛出 `PermissionError`；`handle_show_order` 从 `request["user_id"]` 取当前用户，越权返回 `{"status": 403}`（只含 status，不带订单内容），订单不存在仍返回 `{"status": 404}`。运营导出订单是内部用途，不受此限制，但必须仍然校验 admin 角色。完成后确保现有调用方适配，并给出验证证据。”
 
 ### B05：订单方案
 

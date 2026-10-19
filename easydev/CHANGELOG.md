@@ -2,6 +2,21 @@
 
 完整历史记录。最近一次更新见 [README](README.md)。
 
+## 0.3.4 更新说明（2026-10-19）
+
+### 评测加固
+
+- B30 独立验收补充缺失/空身份断言与伪修复回归检查：覆盖 `get_order("o1")`、`get_order("o1", None)`、`handle_show_order({}, "o1")`，并检测完整/部分/嵌套订单数据泄露；`run.sh` 负向回归要求恰好 3 条失败并匹配三个 label。
+- B30 用户请求显式声明 `request["user_id"]`、`PermissionError`、`{"status": 403}`（仅 status）与 404；`behavior.md` 内联摘录注明完整夹具以 `tests/fixtures/b30/initial/` 为准。
+
+### 安装说明
+
+- 手动安装只复制运行时文件，排除本地 `.pi/` 与 `tests/`；更新说明同步；CLI 安装后要求检查目录、包含则删除。
+
+### 发布
+
+- 版本 0.3.4；Gemini review 的逐条处理与独立审查见 [处理记录](tests/results/gemini-review-0.3.4.md)。
+
 ## 0.3.3 更新说明（2026-10-19）
 
 ### 评测加固
