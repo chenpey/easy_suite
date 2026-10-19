@@ -18,7 +18,8 @@
 
 ## Google Antigravity（AGY）
 
-- 安装位置按 [官方 Skills 文档](https://antigravity.google/docs/skills)：项目级为 `.agents/skills/easydev/`；App/IDE 用户级为 `~/.gemini/config/skills/easydev/`，CLI 用户级为 `~/.gemini/antigravity-cli/skills/easydev/`。保持 `SKILL.md` 与 `references/` 等运行时文件的相对位置；安装步骤及 Skills CLI 旧目录映射见 [README](../README.md#各-harness-的安装位置)。
+- 安装位置按 [官方 Skills 文档](https://antigravity.google/docs/skills)：项目级为 `.agents/skills/easydev/`；App/IDE 用户级为 `~/.gemini/config/skills/easydev/`，CLI 用户级为 `~/.gemini/antigravity-cli/skills/easydev/`。保持 `SKILL.md` 与 `references/` 等运行时文件的相对位置；安装步骤及 Skills CLI 旧目录映射见 [README](https://github.com/chenpey/easy_suite/blob/main/easydev/README.md#各-harness-的安装位置)。
 - 先确认宿主已发现技能，App/CLI 可通过 `/easydev` 显式调用。目录存在或文档兼容不代表当前宿主已加载、激活或通过行为回归。
 - 原生委派按 [官方 Subagents 文档](https://antigravity.google/docs/subagents)：使用当前工具实际暴露的 `invoke_subagent`；自定义代理的 `subagent` 必须允许调用。将开发/审查角色映射为独立实例，审查仅给必要材料与只读权限，不因工具同名假定各版本参数相同。
 - `models.json` 的模型 ID、推理深度及工作区隔离选项须逐项核对宿主工具能力；不能把模型层级当成任意供应商 ID，或静默忽略不支持的设置。无法满足时沿用本文件的受阻规则，不虚称独立审查通过。
+- 以降低 `full` 成本为目标（效果待 [成本基线](https://github.com/chenpey/easy_suite/blob/main/easydev/tests/behavior.md#最小成本回归集合与记录) 验证），可复制 [examples/models.antigravity.json](../examples/models.antigravity.json) 到用户配置：开发用 `flash`，审查用 `pro`，升级阶段换 `pro` 开发。该示例使用 `invoke_subagent` 当前暴露的层级（`inherit/flash_lite/flash/pro`），工具接口若变化需重新核对。当前接口没有推理深度参数，`reasoning_effort` 保持 `inherit`，不得声称已按深度生效；以工具返回的实际模型为准，未返回则标未知。

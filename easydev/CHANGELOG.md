@@ -2,6 +2,21 @@
 
 完整历史记录。最近一次更新见 [README](README.md)。
 
+## 0.3.6 更新说明（2026-10-19）
+
+### 安装与模型示例
+
+- 新增 Antigravity 模型配置示例 `examples/models.antigravity.json`：`flash` 开发、`pro` 审查，升级阶段换 `pro` 开发；README 与 `references/setup.md` 说明其以降低成本为目标，效果待成本基线验证。
+- README 安装章节新增只复制运行时文件的 rsync 命令：`DEST` 明确为技能父目录，排除 `README.md`、`CHANGELOG.md` 与 `tests/`，并说明无 `--delete` 时的更新步骤，避免嵌套目录和旧文件残留。
+- `references/setup.md` 的安装与成本基线链接改为仓库绝对 URL，避免安装副本中指向未复制文件。
+
+### 回归与文档
+
+- `tests/behavior.md` 新增“最小成本回归集合与记录”：定义每次升级的最低复跑集合 B01/B02/B09/B13/B16/B25q、与大版本升级集合的并集关系及去重项，并要求在 `tests/results/` 记录成本基线。
+- 发布前检查改为解析 `examples/` 下全部 `models*.json`；目录树补充新示例与本轮审计记录。
+- 清理 `references/orchestration.md` 中与“默认至多 4 轮正式审核”重复的旧句，预算规则不变。
+- 审计与修复记录见 [audit-fixes-0.3.6.md](tests/results/audit-fixes-0.3.6.md)。
+
 ## 0.3.5 更新说明（2026-10-19）
 
 ### 安装与发现元数据

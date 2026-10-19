@@ -1,0 +1,22 @@
+{
+  "developer": {
+    "model": "flash",
+    "reasoning_effort": "inherit"
+  },
+  "reviewer": {
+    "model": "pro",
+    "reasoning_effort": "inherit"
+  },
+  "upgrades": [
+    {
+      "developer": {
+        "model": "pro",
+        "reasoning_effort": "inherit"
+      },
+      "reviewer": {
+        "model": "inherit",
+        "reasoning_effort": "inherit"
+      }
+    }
+  ]
+}

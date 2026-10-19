@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.5`
+当前版本：`0.3.6`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -102,6 +102,14 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 
 将运行所需的 `SKILL.md`、`references/`、`models.json`（可选 `agents/`、`examples/`）复制到目标 harness 的技能目录，保持相对位置；不要复制本地 `.pi/` 与 `tests/`：前者是宿主本地配置，后者是维护与评测材料。使用 CLI 从本地工作区安装后，请检查安装目录；若包含 `.pi/` 或 `tests/`，删除后再使用。
 
+只复制运行时文件的一行命令（在 EasyDev 目录执行，`DEST` 为技能父目录，如 `.agents/skills`，命令会创建 `$DEST/easydev/`）：
+
+```bash
+rsync -a --exclude .git --exclude .pi --exclude tests --exclude README.md --exclude CHANGELOG.md ./ "$DEST/easydev/"
+```
+
+命令不带 `--delete`：更新版本时，先确认 `$DEST/easydev/` 内没有自建文件，再删除该目录后重新复制，避免残留已移除的旧文件。
+
 下表给出可用于手动复制的默认位置；项目级路径相对于目标项目，`~` 表示用户主目录。Skills CLI 会将支持共享目录的客户端安装到 `.agents/skills`（用户级为 `~/.agents/skills`）；实际位置以安装输出为准。
 
 | Harness | Skills CLI ID | 项目级目录 | 用户级目录 |
@@ -147,7 +155,7 @@ CLI 目录映射见 [Skills CLI 官方文档](https://github.com/vercel-labs/ski
 
 ## 模型配置
 
-默认开发和审核都继承宿主模型，可换成任意供应商。复制 [默认配置](models.json) 或 [跨模型示例](examples/models.cross-provider.json) 到用户配置位置，再修改模型 ID：
+默认开发和审核都继承宿主模型，可换成任意供应商。复制 [默认配置](models.json)、[跨模型示例](examples/models.cross-provider.json) 或 [Antigravity 示例（flash 开发、pro 审查，以降低 full 成本为目标，效果待成本基线验证）](examples/models.antigravity.json) 到用户配置位置，再修改模型 ID：
 
 - macOS/Linux：`~/.config/easydev/models.json`；设置了 `XDG_CONFIG_HOME` 时使用 `$XDG_CONFIG_HOME/easydev/models.json`。
 - Windows：`%APPDATA%/easydev/models.json`；APPDATA 未设置时使用用户主目录下的 `.config/easydev/models.json`。
@@ -181,11 +189,11 @@ npx skills update easydev
 
 - `git diff --check`，确认没有空白错误。
 - 在仓库根目录运行 `node scripts/version.mjs check`，确认版本文件与各项目发布说明一致（CI 已接入）。
-- 解析 `models.json` 与 `examples/models.cross-provider.json`。
+- 解析 `models.json` 与 `examples/` 下全部 `models*.json`。
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-持续回归当前只接入 B30 固定补丁复验，不会调用真实 Agent，也未覆盖 B01–B28 的持续行为评测。模型或宿主升级后的回归选择与记录要求见 [持续回归覆盖与缺口](tests/behavior.md#持续回归覆盖与缺口)。本轮审计意见的核实、修复及验证见 [审计问题处理记录](tests/results/audit-fixes-0.3.4.md)。
+持续回归当前只接入 B30 固定补丁复验，不会调用真实 Agent，也未覆盖 B01–B28 的持续行为评测。模型或宿主升级后的回归选择与记录要求见 [持续回归覆盖与缺口](tests/behavior.md#持续回归覆盖与缺口)。本轮审计意见的核实、修复及验证见 [审计问题处理记录](tests/results/audit-fixes-0.3.6.md)。
 
 0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md)、[第五轮](tests/results/chatgpt-review-0.3.3.md) 与 [Gemini review](tests/results/gemini-review-0.3.4.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
 
@@ -198,6 +206,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.3.6`（2026-10-19）：新增 Antigravity 模型配置示例与只复制运行时文件的安装命令；补充最小成本回归集合与成本基线记录要求；修复安装副本中的文档链接，发布前检查覆盖全部示例配置。审计记录见 [audit-fixes-0.3.6.md](tests/results/audit-fixes-0.3.6.md)。
 
 `0.3.5`（2026-10-19）：补充 Antigravity App/IDE 与 CLI 安装和适配说明；description 增加英文能力与排除边界；整理历史证据引用；明确持续 Agent 行为回归缺口及升级后的优先回归集合。流程正文不变，宿主行为与英文激活效果仍待实测。
 
@@ -229,6 +239,7 @@ easydev/
 ├── SKILL.md
 ├── models.json
 ├── examples/models.cross-provider.json
+├── examples/models.antigravity.json
 ├── agents/openai.yaml
 ├── tests/behavior.md
 ├── tests/results/opus-review.md
@@ -244,6 +255,7 @@ easydev/
 ├── tests/results/chatgpt-review-0.3.3.md
 ├── tests/results/gemini-review-0.3.4.md
 ├── tests/results/audit-fixes-0.3.4.md
+├── tests/results/audit-fixes-0.3.6.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh
