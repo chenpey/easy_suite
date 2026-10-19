@@ -16,6 +16,27 @@
   const APP_STORE_ID_PATTERN = /^[0-9]+$/;
   const NODE_FORMULA_PATTERN = /^node(?:@([0-9]+))?$/;
   const WEB_APP_URL_PATTERN = /^https?:\/\/[^\s"'`]+$/i;
+  const MIGRATION_COMMAND_FILENAME = "EasyMac-Migration.command";
+  const MIGRATION_GUIDE_FILENAME = "EasyMac-First-Run.txt";
+  const MIGRATION_FIRST_RUN_GUIDE = `EasyMac 迁移安装 / Migration
+================================
+
+1. 解压 ZIP 后，先尝试双击 EasyMac-Migration.command。
+2. 如果 macOS 提示“无法打开”“无法验证开发者”或“Apple 无法验证”：
+   - 在文件上右键，选择“打开”，再确认“打开”。
+   - 或打开“终端”，输入 /bin/zsh 和一个空格，把 EasyMac-Migration.command 拖进终端窗口，按回车。
+3. 脚本首次运行后会移除自身的下载隔离标记，以后可以直接双击。
+
+EasyMac 没有 Apple Developer ID 公证。以上操作只处理当前迁移脚本，不会关闭 Gatekeeper，也不会修改系统安全设置。
+
+English
+-------
+1. Unzip the download, then try opening EasyMac-Migration.command.
+2. If macOS blocks the unsigned script, right-click it and choose Open, or run it from Terminal with /bin/zsh.
+3. The script removes quarantine only from itself after the first run.
+
+These steps do not disable Gatekeeper or change macOS security settings.
+`;
 
   function decodeBase64(value) {
     if (!value) return "";
@@ -170,6 +191,13 @@
       "#!/bin/zsh",
       "",
       "set -u",
+      "",
+      'if [[ "${0:A}" == *.command && -f "${0:A}" ]]; then',
+      '  /usr/bin/xattr -d com.apple.quarantine "${0:A}" 2>/dev/null || true',
+      '  if /usr/bin/xattr -p com.apple.quarantine "${0:A}" >/dev/null 2>&1; then',
+      '    print -u2 -- "提示：无法移除当前迁移脚本的下载隔离标记；本次可继续运行，但以后仍需右键打开或从终端运行。"',
+      "  fi",
+      "fi",
       "",
       "set -o pipefail",
       "typeset -a failed_items failed_reasons skipped_items skipped_reasons",
@@ -566,70 +594,106 @@ fi`),
     return output;
   }
 
-  function createExecutableZip(filename, content, modifiedAt = new Date()) {
+  function createZip(entries, modifiedAt = new Date()) {
     const encoder = new TextEncoder();
-    const filenameBytes = encoder.encode(filename);
-    const contentBytes = encoder.encode(content);
-    const checksum = crc32(contentBytes);
     const stamp = dosDateTime(modifiedAt);
     const utf8Flag = 0x0800;
+    const localRecords = [];
+    const centralRecords = [];
+    let localOffset = 0;
 
-    const localHeader = new Uint8Array(30);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, utf8Flag, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, stamp.time, true);
-    localView.setUint16(12, stamp.date, true);
-    localView.setUint32(14, checksum, true);
-    localView.setUint32(18, contentBytes.length, true);
-    localView.setUint32(22, contentBytes.length, true);
-    localView.setUint16(26, filenameBytes.length, true);
-    localView.setUint16(28, 0, true);
+    entries.forEach((entry) => {
+      const filenameBytes = encoder.encode(entry.filename);
+      const contentBytes = encoder.encode(entry.content);
+      const checksum = crc32(contentBytes);
 
-    const localRecord = concatBytes(localHeader, filenameBytes, contentBytes);
+      const localHeader = new Uint8Array(30);
+      const localView = new DataView(localHeader.buffer);
+      localView.setUint32(0, 0x04034b50, true);
+      localView.setUint16(4, 20, true);
+      localView.setUint16(6, utf8Flag, true);
+      localView.setUint16(8, 0, true);
+      localView.setUint16(10, stamp.time, true);
+      localView.setUint16(12, stamp.date, true);
+      localView.setUint32(14, checksum, true);
+      localView.setUint32(18, contentBytes.length, true);
+      localView.setUint32(22, contentBytes.length, true);
+      localView.setUint16(26, filenameBytes.length, true);
+      localView.setUint16(28, 0, true);
 
-    const centralHeader = new Uint8Array(46);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, (3 << 8) | 30, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, utf8Flag, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, stamp.time, true);
-    centralView.setUint16(14, stamp.date, true);
-    centralView.setUint32(16, checksum, true);
-    centralView.setUint32(20, contentBytes.length, true);
-    centralView.setUint32(24, contentBytes.length, true);
-    centralView.setUint16(28, filenameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0o100755 * 65536, true);
-    centralView.setUint32(42, 0, true);
+      const localRecord = concatBytes(localHeader, filenameBytes, contentBytes);
+      localRecords.push(localRecord);
 
-    const centralRecord = concatBytes(centralHeader, filenameBytes);
+      const centralHeader = new Uint8Array(46);
+      const centralView = new DataView(centralHeader.buffer);
+      centralView.setUint32(0, 0x02014b50, true);
+      centralView.setUint16(4, (3 << 8) | 30, true);
+      centralView.setUint16(6, 20, true);
+      centralView.setUint16(8, utf8Flag, true);
+      centralView.setUint16(10, 0, true);
+      centralView.setUint16(12, stamp.time, true);
+      centralView.setUint16(14, stamp.date, true);
+      centralView.setUint32(16, checksum, true);
+      centralView.setUint32(20, contentBytes.length, true);
+      centralView.setUint32(24, contentBytes.length, true);
+      centralView.setUint16(28, filenameBytes.length, true);
+      centralView.setUint16(30, 0, true);
+      centralView.setUint16(32, 0, true);
+      centralView.setUint16(34, 0, true);
+      centralView.setUint16(36, 0, true);
+      centralView.setUint32(38, (entry.mode << 16) >>> 0, true);
+      centralView.setUint32(42, localOffset, true);
+
+      centralRecords.push(concatBytes(centralHeader, filenameBytes));
+      localOffset += localRecord.length;
+    });
+
+    const centralRecord = concatBytes(...centralRecords);
 
     const endRecord = new Uint8Array(22);
     const endView = new DataView(endRecord.buffer);
     endView.setUint32(0, 0x06054b50, true);
     endView.setUint16(4, 0, true);
     endView.setUint16(6, 0, true);
-    endView.setUint16(8, 1, true);
-    endView.setUint16(10, 1, true);
+    endView.setUint16(8, entries.length, true);
+    endView.setUint16(10, entries.length, true);
     endView.setUint32(12, centralRecord.length, true);
-    endView.setUint32(16, localRecord.length, true);
+    endView.setUint32(16, localOffset, true);
     endView.setUint16(20, 0, true);
 
-    return concatBytes(localRecord, centralRecord, endRecord);
+    return concatBytes(...localRecords, centralRecord, endRecord);
+  }
+
+  function createExecutableZip(filename, content, modifiedAt = new Date()) {
+    return createZip(
+      [{ filename, content, mode: 0o100755 }],
+      modifiedAt,
+    );
+  }
+
+  function createMigrationZip(content, modifiedAt = new Date()) {
+    return createZip(
+      [
+        {
+          filename: MIGRATION_COMMAND_FILENAME,
+          content,
+          mode: 0o100755,
+        },
+        {
+          filename: MIGRATION_GUIDE_FILENAME,
+          content: MIGRATION_FIRST_RUN_GUIDE,
+          mode: 0o100644,
+        },
+      ],
+      modifiedAt,
+    );
   }
 
   const api = Object.freeze({
     decodeScanPayload,
     generateInstallScript,
     createExecutableZip,
+    createMigrationZip,
     isAutomatic,
     needsHomebrew,
     summarize,

@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-当前版本：`0.4.4`
+当前版本：`0.4.5`
 
 [EasyMac Latest 下载](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
 
@@ -18,9 +18,9 @@ EasyMac 在旧 Mac 上扫描已安装应用，让用户搜索、筛选和选择�
 4. 命令会自动在下载目录定位 App；校验和授权完成后会关闭当前终端标签页并打开 EasyMac。
 5. 以后可直接双击 `EasyMac.app`。
 6. 在自动打开的本地页面中选择项目并预览脚本，然后下载迁移脚本。
-7. 将 ZIP 带到新 Mac，解压后双击 `EasyMac-Migration.command`。
+7. 将 ZIP 带到新 Mac，解压后先阅读 `EasyMac-First-Run.txt`，再双击 `EasyMac-Migration.command`。
 
-EasyMac 没有使用 Apple Developer ID 公证，因为项目没有付费开发者账号。授权脚本会先使用 `codesign` 验证应用包内容和固定 Bundle ID，再只移除 `EasyMac.app` 自身的下载隔离标记；它不会关闭 Gatekeeper、修改系统安全设置或请求管理员权限，因此不需要也不应要求管理员密码。
+EasyMac 没有使用 Apple Developer ID 公证，因为项目没有付费开发者账号。若新 Mac 拦截下载的迁移脚本，可右键选择“打开”，或按 `EasyMac-First-Run.txt` 的说明从终端运行。迁移脚本首次启动后只会移除自身的下载隔离标记。上述流程不会关闭 Gatekeeper、修改系统安全设置或请求管理员权限。
 
 ## 识别范围
 
@@ -61,7 +61,8 @@ Node 安装前由 zsh 实际加载启动文件，读取最终生效的 `NVM_DIR`
 - 仅选择手动安装项目时，脚本不包含 Homebrew、`curl` 或下载命令。
 - 仅选择网页应用时，脚本只列出宿主浏览器和原地址，不尝试自动安装。
 - 自动安装开始前必须输入完整确认词 `install apps`。
-- 下载文件是 ZIP，确保解压后的 `.command` 保留可执行权限。
+- 下载文件是 ZIP，包含迁移脚本和首次运行说明，并确保解压后的 `.command` 保留可执行权限。
+- 新 Mac 若拦截未公证脚本，说明会引导用户通过右键或终端首次运行；脚本只处理自身隔离标记，不关闭 Gatekeeper。
 
 页面打开后，临时扫描目录会在 30 分钟后删除。页面已经读取的数据仍保留在当前标签页内，但此后不要刷新页面。
 
@@ -123,7 +124,7 @@ EASYMAC_SCAN_FIXTURE=/tmp/easymac-test/data.js \
 EASYMAC_REAL_NVM=1 node --test --test-name-pattern='real official nvm' test/core.test.cjs
 ```
 
-构建只依赖 macOS 自带的 `osacompile`、`sips`、`iconutil` 和 `codesign`。Ad-hoc 签名不需要 Apple 开发者账号。
+构建只依赖 macOS 自带的 `osacompile`、`sips`、`qlmanage`、`iconutil` 和 `codesign`。新版 macOS 的 `sips` 无法渲染 SVG 时会自动回退到 Quick Look。Ad-hoc 签名不需要 Apple 开发者账号。
 
 单独预览生成的 macOS 图标：
 
@@ -139,6 +140,12 @@ node scripts/update-cask-catalog.mjs
 
 该开发命令从 Homebrew 官方 API 生成一个压缩映射文件。用户扫描和页面使用过程只读取该本地文件，不会联网。
 
+## 更新说明
+
+`0.4.5`（2026-10-19）：修复新 Mac 打开导出迁移脚本时被 Gatekeeper 下载隔离拦截的问题；迁移 ZIP 增加首次运行说明，脚本只清理自身隔离标记，图标构建在 `sips` 失败时回退 Quick Look。旧 Mac 需使用 `0.4.5` 或更新版本重新导出，新 Mac 无需安装 EasyMac。
+
+- 完整版本历史：[`CHANGELOG.md`](CHANGELOG.md)
+
 ## 版本与发布
 
 版本由仓库根目录的 [`versions.json`](../versions.json) 统一管理：
@@ -151,8 +158,8 @@ node ../scripts/version.mjs check
 推送 `easymac-v<版本>` 标签后，GitHub Actions 会在 macOS Runner 上重新测试和构建，并创建 GitHub Release：
 
 ```bash
-git tag -a easymac-v0.3.3 -m "发布：EasyMac v0.3.3"
-git push origin easymac-v0.3.3
+git tag -a easymac-v0.4.5 -m "发布：EasyMac v0.4.5"
+git push origin easymac-v0.4.5
 ```
 
 Release 附件为版本化 ZIP 和对应的 SHA-256 文件，不使用或上传本地 `build/`、`dist/` 中的历史产物。

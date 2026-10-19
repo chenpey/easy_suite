@@ -16,7 +16,40 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p -- "$iconset"
-/usr/bin/sips -s format png "$SOURCE" --out "$master" >/dev/null
+
+render_master() {
+  local sips_log="$work_dir/sips.log"
+  local quicklook_log="$work_dir/qlmanage.log"
+  if /usr/bin/sips -s format png "$SOURCE" --out "$master" \
+    >/dev/null 2>"$sips_log"; then
+    return 0
+  fi
+
+  # Recent macOS versions may stop rendering SVG through sips. Quick Look is
+  # the built-in fallback and keeps the build independent of extra tooling.
+  local preview_dir="$work_dir/quicklook"
+  local preview
+  local ql_status=0
+  /bin/mkdir -p "$preview_dir"
+  if ! /usr/bin/qlmanage -t -s 1024 -o "$preview_dir" "$SOURCE" \
+    >/dev/null 2>"$quicklook_log"; then
+    ql_status=1
+  fi
+  preview="$preview_dir/${SOURCE:t}.png"
+  if (( ql_status != 0 )) || [[ ! -s "$preview" ]]; then
+    print -u2 -- "sips:"
+    [[ ! -s "$sips_log" ]] || /bin/cat "$sips_log" >&2
+    print -u2 -- "qlmanage:"
+    [[ ! -s "$quicklook_log" ]] || /bin/cat "$quicklook_log" >&2
+    return 1
+  fi
+  /bin/mv -- "$preview" "$master"
+}
+
+if ! render_master; then
+  print -u2 -- "无法从 $SOURCE 生成 PNG 图标。"
+  exit 1
+fi
 
 for size in 16 32 128 256 512; do
   /usr/bin/sips -z "$size" "$size" "$master" \

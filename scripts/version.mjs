@@ -28,7 +28,7 @@ const projects = {
     directory: 'easymac',
     readmePath: 'easymac/README.md',
     versionPath: 'easymac/VERSION',
-    notesPath: 'easymac/RELEASE_NOTES.md',
+    notesPath: 'easymac/CHANGELOG.md',
   },
   easytest: {
     title: 'EasyTest',

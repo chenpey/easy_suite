@@ -39,6 +39,43 @@ function writeExecutable(filename, content) {
   fs.writeFileSync(filename, content, { mode: 0o755 });
 }
 
+function readZipEntries(zip) {
+  const endOffset = zip.length - 22;
+  const endView = new DataView(zip.buffer, zip.byteOffset + endOffset, 22);
+  const entryCount = endView.getUint16(10, true);
+  let offset = endView.getUint32(16, true);
+  const entries = [];
+
+  for (let index = 0; index < entryCount; index += 1) {
+    const view = new DataView(zip.buffer, zip.byteOffset + offset);
+    assert.equal(view.getUint32(0, true), 0x02014b50);
+    const filenameLength = view.getUint16(28, true);
+    const extraLength = view.getUint16(30, true);
+    const commentLength = view.getUint16(32, true);
+    const contentLength = view.getUint32(24, true);
+    const localOffset = view.getUint32(42, true);
+    const filename = new TextDecoder().decode(
+      zip.subarray(offset + 46, offset + 46 + filenameLength),
+    );
+    const localView = new DataView(zip.buffer, zip.byteOffset + localOffset);
+    assert.equal(localView.getUint32(0, true), 0x04034b50);
+    const localFilenameLength = localView.getUint16(26, true);
+    const localExtraLength = localView.getUint16(28, true);
+    const contentOffset =
+      localOffset + 30 + localFilenameLength + localExtraLength;
+    entries.push({
+      filename,
+      mode: view.getUint32(38, true) >>> 16,
+      content: new TextDecoder().decode(
+        zip.subarray(contentOffset, contentOffset + contentLength),
+      ),
+    });
+    offset += 46 + filenameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
 test("decodes base64 scan payload without losing Unicode", () => {
   const scan = core.decodeScanPayload({
     schemaVersion: 1,
@@ -509,6 +546,132 @@ test("ZIP entry stores executable Unix permissions", () => {
 
   assert.equal(mode & 0o777, 0o755);
   assert.equal(Buffer.from(zip.subarray(0, 4)).toString("hex"), "504b0304");
+});
+
+test("migration ZIP includes safe first-run instructions for Gatekeeper", () => {
+  const zip = core.createMigrationZip(
+    "#!/bin/zsh\nprint ok\n",
+    new Date("2026-09-19T00:00:00Z"),
+  );
+
+  const entries = readZipEntries(zip);
+  assert.deepEqual(
+    entries.map(({ filename, mode }) => [filename, mode & 0o777]),
+    [
+      ["EasyMac-Migration.command", 0o755],
+      ["EasyMac-First-Run.txt", 0o644],
+    ],
+  );
+  const guide = entries[1].content;
+  assert.match(guide, /右键.*打开/);
+  assert.match(guide, /\/bin\/zsh/);
+  assert.match(guide, /不会关闭 Gatekeeper/);
+});
+
+test("migration command clears only its own quarantine after extraction", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easymac-quarantine-test-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const zipPath = path.join(root, "migration.zip");
+  const output = path.join(root, "output");
+  fs.mkdirSync(output);
+  fs.writeFileSync(
+    zipPath,
+    core.createMigrationZip(
+      core.generateInstallScript([item({ name: "Manual" })]),
+    ),
+  );
+
+  const archiveCheck = childProcess.spawnSync(
+    "/usr/bin/unzip",
+    ["-t", zipPath],
+    { encoding: "utf8" },
+  );
+  assert.equal(archiveCheck.status, 0, archiveCheck.stdout + archiveCheck.stderr);
+
+  const extraction = childProcess.spawnSync(
+    "/usr/bin/ditto",
+    ["-x", "-k", zipPath, output],
+    { encoding: "utf8" },
+  );
+  assert.equal(extraction.status, 0, extraction.stdout + extraction.stderr);
+
+  const commandPath = path.join(output, "EasyMac-Migration.command");
+  const siblingPath = path.join(output, "keep.command");
+  fs.writeFileSync(siblingPath, "keep");
+  for (const filename of [commandPath, siblingPath]) {
+    const mutation = childProcess.spawnSync(
+      "/usr/bin/xattr",
+      ["-w", "com.apple.quarantine", "0081;00000000;Safari;", filename],
+      { encoding: "utf8" },
+    );
+    assert.equal(mutation.status, 0, mutation.stdout + mutation.stderr);
+  }
+
+  const execution = childProcess.spawnSync("/bin/zsh", [commandPath], {
+    input: "\n",
+    encoding: "utf8",
+    timeout: 10000,
+    env: { ...process.env, HOME: root, ZDOTDIR: root },
+  });
+  assert.equal(execution.status, 0, execution.stdout + execution.stderr);
+
+  const commandXattr = childProcess.spawnSync(
+    "/usr/bin/xattr",
+    ["-p", "com.apple.quarantine", commandPath],
+    { encoding: "utf8" },
+  );
+  assert.notEqual(commandXattr.status, 0);
+  const siblingXattr = childProcess.spawnSync(
+    "/usr/bin/xattr",
+    ["-p", "com.apple.quarantine", siblingPath],
+    { encoding: "utf8" },
+  );
+  assert.equal(siblingXattr.status, 0, siblingXattr.stderr);
+  assert.match(siblingXattr.stdout, /0081;00000000;Safari;/);
+  assert.equal(fs.statSync(commandPath).mode & 0o777, 0o755);
+});
+
+test("quarantine cleanup failure warns but does not stop the migration", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "easymac-locked-test-"));
+  const commandPath = path.join(root, "EasyMac-Migration.command");
+  fs.writeFileSync(
+    commandPath,
+    core.generateInstallScript([item({ name: "Manual" })]),
+    { mode: 0o755 },
+  );
+  t.after(() => {
+    childProcess.spawnSync("/usr/bin/chflags", ["nouchg", commandPath]);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const mutation = childProcess.spawnSync(
+    "/usr/bin/xattr",
+    ["-w", "com.apple.quarantine", "0081;00000000;Safari;", commandPath],
+    { encoding: "utf8" },
+  );
+  assert.equal(mutation.status, 0, mutation.stdout + mutation.stderr);
+  const lock = childProcess.spawnSync(
+    "/usr/bin/chflags",
+    ["uchg", commandPath],
+    { encoding: "utf8" },
+  );
+  assert.equal(lock.status, 0, lock.stdout + lock.stderr);
+
+  const execution = childProcess.spawnSync("/bin/zsh", [commandPath], {
+    input: "\n",
+    encoding: "utf8",
+    timeout: 10000,
+    env: { ...process.env, HOME: root, ZDOTDIR: root },
+  });
+  assert.equal(execution.status, 0, execution.stdout + execution.stderr);
+  assert.match(execution.stderr, /无法移除.*下载隔离标记/);
+  const xattr = childProcess.spawnSync(
+    "/usr/bin/xattr",
+    ["-p", "com.apple.quarantine", commandPath],
+    { encoding: "utf8" },
+  );
+  assert.equal(xattr.status, 0, xattr.stderr);
+  assert.match(xattr.stdout, /0081;00000000;Safari;/);
 });
 
 test("bundled Cask catalog contains unique safe mappings", () => {

@@ -322,10 +322,7 @@
     const items = selectedItems();
     if (items.length === 0) return;
 
-    const zipBytes = EasyMacCore.createExecutableZip(
-      "EasyMac-Migration.command",
-      state.script,
-    );
+    const zipBytes = EasyMacCore.createMigrationZip(state.script);
     const blob = new Blob([zipBytes], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
