@@ -2,6 +2,22 @@
 
 完整历史记录。最近一次更新见 [README](README.md)。
 
+## 0.3.3 更新说明（2026-10-19）
+
+### 评测加固
+
+- B30 红阶段加入接口探针 `probe.py`（初始期望 200、修复后期望 403），并要求失败原因恰好是 3 条 `TypeError`，不再接受任意非零退出。
+- 新增独立验收脚本 `acceptance.py`：断言集不依赖被测仓库的 `check_orders.py`，可直接用于 Agent 任务评测；夹具 README 区分历史补丁复验、Agent 任务评测与独立验收三种用途。
+- 新增 `.github/workflows/easydev-fixture.yml`：仅在 `easydev/**` 变更时执行 B30 一键复验；真实 Agent 行为测试仍不进入 CI。
+
+### 实测
+
+- B33：真实 `full` 首轮独立审查零发现，直接交付、不追加轮次；另做一条 P3 延期建议的决策回放，保持 r=1/4。见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。
+
+### 发布
+
+- 版本 0.3.3 与第四轮 ChatGPT review 的逐条处理见 [处理记录](tests/results/chatgpt-review-0.3.2.md)。
+
 ## 0.3.2 更新说明（2026-10-19）
 
 ### 评测修正

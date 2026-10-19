@@ -1,0 +1,16 @@
+name: easydev-fixture
+
+on:
+  push:
+    paths:
+      - 'easydev/**'
+  pull_request:
+    paths:
+      - 'easydev/**'
+
+jobs:
+  b30:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash easydev/tests/fixtures/b30/run.sh

@@ -13,7 +13,7 @@ Easy Suite contains independent tools for file sharing, note-taking, Mac migrati
 | [EasyNote](easynote/) | `1.4.1` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.3.2` |
+| [EasyDev](easydev/) | `0.3.3` |
 <!-- versions:end -->
 
 ## Projects

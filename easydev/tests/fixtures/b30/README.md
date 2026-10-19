@@ -6,13 +6,15 @@
 
 ```text
 b30/
-├── initial/               初始仓库（含故意失败的 check_orders.py）
+├── initial/               初始仓库
 │   ├── app/{__init__,db,orders,api,admin}.py
 │   ├── docs/orders.md
-│   └── check_orders.py
+│   ├── check_orders.py    目标契约检查（初始必然失败）
+│   └── probe.py           接口探针：初始期望 200，修复后期望 403
 ├── solution.patch         初始状态 → 修复后实现的完整 diff
+├── acceptance.py          独立验收脚本（不依赖被测仓库的 check_orders.py）
 ├── reviewer-report.md     独立 Reviewer 原始报告（未改写）
-└── run.sh                 红 → 应用补丁 → 绿 的一键复验
+└── run.sh                 红 → 应用补丁 → 绿 → 独立验收 的一键复验
 ```
 
 ## 运行
@@ -23,16 +25,27 @@ bash tests/fixtures/b30/run.sh
 
 预期输出（顺序）：
 
-1. 初始状态直接返回 `o1` 订单，证明缺少所有权校验；
-2. `check_orders.py` 失败（红），退出码非 0；
+1. `probe.py 200`：他人读取返回 200，证明缺少所有权校验；
+2. `check_orders.py` 失败，且失败原因必须恰好是 3 条 `TypeError`（契约未实现），其他原因判为夹具异常；
 3. `git apply solution.patch` 成功；
-4. `check_orders.py` 输出 `PASS: 7/7 ownership and caller checks`（绿）。
+4. `probe.py 403`：修复后他人读取返回 403；
+5. `check_orders.py` 输出 `PASS: 7/7`；
+6. `acceptance.py` 输出 `PASS: 8/8 independent acceptance checks`。
 
 只需要 `bash`、`git` 与 Python 3，不安装依赖。脚本在 `mktemp` 临时目录内执行，不改动工作区。
 
+## 三种用途
+
+| 用途 | 使用材料 | 说明 |
+| --- | --- | --- |
+| 历史补丁复验 | `initial/` + `solution.patch` + `run.sh` | 重现 0.3.1 记录中的红绿过程 |
+| Agent 任务执行评测 | 只提供 `initial/` 与原始需求 | 不要把 `solution.patch` 暴露给被测 Agent |
+| 独立验收 | `acceptance.py`（放在 Agent 不可修改的位置） | 防止被测 Agent 自己定义验收标准 |
+
 ## 覆盖与限制
 
-- 检查覆盖：本人可读、他人被拒、缺失订单返回 `None`、接口 200/403、admin 导出、非 admin 拒绝。
-- 未覆盖：`request["user_id"]` 的上游可信性（夹具没有 HTTP/鉴权层，该项在记录中保持为待验证风险）；API 的 404 分支与缺失 `user_id` 分支。
-- 修复前基线 `check_orders.py` 已按目标两参契约编写，初始失败原因是契约尚未实现（`TypeError`），不是越权读取的运行证据；越权由 `run.sh` 的第一步与静态实现共同证明。
+- 检查覆盖：本人可读、他人被拒、缺失订单返回 `None`、接口 200/403/404、admin 导出、非 admin 拒绝。
+- 未覆盖：`request["user_id"]` 的上游可信性（夹具没有 HTTP/鉴权层，该项在记录中保持为待验证风险）；缺失 `user_id` 字段的分支。
+- 修复前基线 `check_orders.py` 已按目标两参契约编写，初始失败原因是契约尚未实现（`TypeError`），不是越权读取的运行证据；越权由 `probe.py 200` 与静态实现共同证明。
+- `run.sh` 只证明固定补丁能通过断言；独立 Reviewer 是否实际运行、Agent 是否遵守流程，需要另看执行记录，不能由本脚本推导。
 - 本夹具仅覆盖单次 `full` 工作流与公共契约调用方适配，不代表其他语言或真实鉴权环境。

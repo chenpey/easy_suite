@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.2`
+当前版本：`0.3.3`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -181,7 +181,7 @@ npx skills update easydev
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md) 与 [第三轮](tests/results/chatgpt-review-0.3.1.md)。B33、原生工作树及其他宿主兼容性仍需实测。
+0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md) 与 [第四轮](tests/results/chatgpt-review-0.3.2.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
 
 ## 适用范围
 
@@ -192,6 +192,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.3.3`（2026-10-19）：B30 红阶段校验失败原因并增加接口探针；新增独立验收脚本与夹具用途说明；新增 EasyDev 夹具 CI；补跑 B33（真实零发现收敛与 P3 决策回放）。
 
 `0.3.2`（2026-10-19）：更正 0.3.1 `full` 实验的交付状态为“部分完成/待确认”；B30 改为可复现夹具并收紧调用方验收条件；新增 B29a/B29b/B31/B32 实测。
 
@@ -225,11 +227,13 @@ easydev/
 ├── tests/results/baseline-0.3.0.md
 ├── tests/results/baseline-0.3.1.md
 ├── tests/results/routing-0.3.2.md
+├── tests/results/b33-convergence-0.3.3.md
 ├── tests/results/chatgpt-review-0.3.0.md
 ├── tests/results/chatgpt-review-0.3.1.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh
+│   ├── acceptance.py
 │   ├── initial/
 │   ├── solution.patch
 │   └── reviewer-report.md
