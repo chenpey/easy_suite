@@ -2,6 +2,20 @@
 
 完整历史记录。最近一次更新见 [README](README.md)。
 
+## 0.3.8 更新说明（2026-10-19）
+
+### B30 验收与夹具
+
+- 独立验收新增运行时生成订单，并分别改动固定/动态订单的实际所有者，拒绝把固定订单到用户的映射写死或使用导入时快照；缺失身份检查覆盖直接返回的标量订单字段。
+- `run.sh` 新增硬编码订单映射与标量泄露两类负向变体，负向伪修复共七类；断言计数改为运行时统计（当前 38 条）。
+- 夹具提交显式使用 `-c commit.gpgsign=false`，不再受安装者全局 Git 提交签名配置影响。
+
+### 安装与文档
+
+- 明确运行时最低文件集为 `SKILL.md`、`references/`、`models.json`；`agents/` 与 `examples/` 为可选扩展。
+- `references/setup.md` 的 Antigravity 示例改用仓库绝对链接，并说明最小安装缺少 `examples/` 时回退 `models.json` 的 `inherit` 默认值。
+- GPT 审计四条发现的复现、修复与验证见 [audit-fixes-0.3.7.md](tests/results/audit-fixes-0.3.7.md)。
+
 ## 0.3.7 更新说明（2026-10-19）
 
 ### 安全验收与审查反馈

@@ -13,7 +13,7 @@ cp -R "$here/initial/." "$work/"
 cd "$work"
 git init -q
 git add -A
-git -c user.email=fixture@example.com -c user.name=fixture commit -qm "b30 initial"
+git -c user.email=fixture@example.com -c user.name=fixture -c commit.gpgsign=false commit -qm "b30 initial"
 
 echo "== 红：初始代码缺少所有权校验，他人读取返回 200"
 python3 -B probe.py 200
@@ -104,6 +104,56 @@ expect_rejected "identity-omitting" "$bypass" \
   "missing request identity does not read order" \
   "none request identity does not read order"
 
+echo "== 负向：缺失身份时返回订单标量的实现必须被拒绝"
+bypass="$(new_bypass scalar-leak)"
+cat >"$bypass/app/orders.py" <<'PY'
+from app.db import find_order
+
+_MISSING = object()
+
+
+def get_order(order_id, current_user_id=_MISSING):
+    order = find_order(order_id)
+    if current_user_id is _MISSING or current_user_id in (None, ""):
+        return order["total"] if order is not None else None
+    if order is None or order["owner_id"] == current_user_id:
+        return order
+    raise PermissionError("order is not owned by the current user")
+
+
+def get_order_for_export(order_id, operator_role):
+    if operator_role != "admin":
+        raise PermissionError("export requires admin role")
+    return find_order(order_id)
+PY
+cat >"$bypass/app/admin.py" <<'PY'
+from app.orders import get_order_for_export
+
+
+def export_order(order_id, operator):
+    return get_order_for_export(order_id, operator.get("role"))
+PY
+cat >"$bypass/app/api.py" <<'PY'
+from app.orders import get_order
+
+
+def handle_show_order(request, order_id):
+    try:
+        order = get_order(order_id, request.get("user_id"))
+    except PermissionError:
+        return {"status": 403}
+    if order is None:
+        return {"status": 404}
+    return {"status": 200, "order": order}
+PY
+expect_rejected "scalar-leak" "$bypass" \
+  "missing identity does not read order" \
+  "none identity does not read order" \
+  "empty identity does not read order" \
+  "missing request identity does not read order" \
+  "none request identity does not read order" \
+  "empty request identity does not read order"
+
 echo "== 负向：把 user_id 当 admin 角色的实现必须被拒绝"
 bypass="$(new_bypass admin-user-id)"
 cat >"$bypass/app/orders.py" <<'PY'
@@ -193,6 +243,57 @@ expect_rejected "hardcoded-u1" "$bypass" \
   "first user denied on second order" \
   "second owner 200" \
   "first user 403 on second order"
+
+echo "== 负向：硬编码固定订单与用户的映射必须被拒绝"
+bypass="$(new_bypass hardcoded-owner-map)"
+cat >"$bypass/app/orders.py" <<'PY'
+from app.db import find_order
+
+OWNERS = {"o1": "u1", "o2": "u2"}
+
+
+def get_order(order_id, current_user_id=None):
+    if not current_user_id:
+        raise PermissionError("missing identity")
+    if order_id not in OWNERS:
+        return None
+    if OWNERS[order_id] != current_user_id:
+        raise PermissionError("order is not owned by the current user")
+    return find_order(order_id)
+
+
+def get_order_for_export(order_id, operator_role):
+    if operator_role != "admin":
+        raise PermissionError("export requires admin role")
+    return find_order(order_id)
+PY
+cat >"$bypass/app/admin.py" <<'PY'
+from app.orders import get_order_for_export
+
+
+def export_order(order_id, operator):
+    return get_order_for_export(order_id, operator.get("role"))
+PY
+cat >"$bypass/app/api.py" <<'PY'
+from app.orders import get_order
+
+
+def handle_show_order(request, order_id):
+    try:
+        order = get_order(order_id, request.get("user_id"))
+    except PermissionError:
+        return {"status": 403}
+    if order is None:
+        return {"status": 404}
+    return {"status": 200, "order": order}
+PY
+expect_rejected "hardcoded-owner-map" "$bypass" \
+  "dynamic owner reads own order" \
+  "dynamic other user denied" \
+  "dynamic owner 200" \
+  "dynamic other user 403" \
+  "previous owner denied after ownership change" \
+  "o1 previous owner denied after ownership change"
 
 echo "== 负向：缺少角色校验的导出实现必须被拒绝"
 bypass="$(new_bypass missing-role-export)"

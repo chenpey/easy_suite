@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.7`
+当前版本：`0.3.8`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -100,7 +100,7 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 
 ### 各 harness 的安装位置
 
-将运行所需的 `SKILL.md`、`references/`、`models.json`（可选 `agents/`、`examples/`）复制到目标 harness 的技能目录，保持相对位置；不要复制本地 `.pi/` 与 `tests/`：前者是宿主本地配置，后者是维护与评测材料。使用 CLI 从本地工作区安装后，请检查安装目录；若包含 `.pi/` 或 `tests/`，删除后再使用。
+运行时最低文件集是 `SKILL.md`、`references/` 与 `models.json`，复制到目标 harness 的技能目录并保持相对位置；`agents/` 与 `examples/` 是可选扩展，缺少时不影响技能加载，模型按 `models.json` 的 `inherit` 默认值运行。不要复制本地 `.pi/` 与 `tests/`：前者是宿主本地配置，后者是维护与评测材料。使用 CLI 从本地工作区安装后，请检查安装目录；若包含 `.pi/` 或 `tests/`，删除后再使用。
 
 只复制运行时文件的一行命令（在 EasyDev 目录执行，`DEST` 为技能父目录，如 `.agents/skills`，命令会创建 `$DEST/easydev/`）：
 
@@ -191,9 +191,10 @@ npx skills update easydev
 - 在仓库根目录运行 `node scripts/version.mjs check`，确认版本文件与各项目发布说明一致（CI 已接入）。
 - 解析 `models.json` 与 `examples/` 下全部 `models*.json`。
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
+- 仅复制运行时最低文件集（`SKILL.md`、`references/`、`models.json`）后，确认其中没有指向未复制文件的本地链接。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-持续回归当前只接入 B30 固定补丁复验，不会调用真实 Agent，也未覆盖 B01–B28 的持续行为评测。模型或宿主升级后的回归选择与记录要求见 [持续回归覆盖与缺口](tests/behavior.md#持续回归覆盖与缺口)。本轮审计意见的核实、修复及验证见 [审计问题处理记录](tests/results/audit-fixes-0.3.6.md)。
+持续回归当前只接入 B30 固定补丁复验，不会调用真实 Agent，也未覆盖 B01–B28 的持续行为评测。模型或宿主升级后的回归选择与记录要求见 [持续回归覆盖与缺口](tests/behavior.md#持续回归覆盖与缺口)。本轮审计意见的核实、修复及验证见 [审计问题处理记录](tests/results/audit-fixes-0.3.7.md)。
 
 0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md)、[第五轮](tests/results/chatgpt-review-0.3.3.md) 与 [Gemini review](tests/results/gemini-review-0.3.4.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
 
@@ -206,6 +207,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.3.8`（2026-10-19）：B30 独立验收增加固定/动态订单归属变更与标量泄露检查，夹具提交禁用签名；统一最小安装与可选示例的引用规则。审计复现与验证见 [audit-fixes-0.3.7.md](tests/results/audit-fixes-0.3.7.md)。
 
 `0.3.7`（2026-10-19）：B30 独立验收扩到 23 条并增加五类负向伪修复；审查反馈纪律迁入 execution；修正 Antigravity 升级审查模型与模型契约；移除本地凭证写白名单。审查记录见 [gemini-review-0.3.6.md](tests/results/gemini-review-0.3.6.md)。
 
@@ -259,6 +262,7 @@ easydev/
 ├── tests/results/audit-fixes-0.3.4.md
 ├── tests/results/audit-fixes-0.3.6.md
 ├── tests/results/gemini-review-0.3.6.md
+├── tests/results/audit-fixes-0.3.7.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh
@@ -278,6 +282,6 @@ easydev/
     └── worktree.md
 ```
 
-`agents/openai.yaml` 是 Codex 的可选展示元数据，其余文件构成通用 Skill 内容。
+`agents/openai.yaml` 是 Codex 的可选展示元数据，`examples/` 是可选模型示例；运行时最低文件集见[各 harness 的安装位置](#各-harness-的安装位置)。
 
 流程方法参考 [Superpowers](https://github.com/obra/superpowers)；最小完整实现、测试驱动、根因排障、审查反馈与工作计划规则已内置于 `references/`，运行时不依赖其他技能包。
