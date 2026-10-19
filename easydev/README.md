@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -51,7 +51,7 @@ SKILL.md 选择路径与完成边界
 | `spike` | 只要可行性结论或快速实验 | 最小实验与结论，产物标记 `throwaway` |
 | `audit` | 全仓或指定目录审计 | 一次性只读报告，不修改代码 |
 
-路径按任务选择，风险优先于文件数。鉴权、支付、敏感数据、并发一致性、破坏性数据操作和迁移兼容即使只改一行，也进入 `full`。
+路径按任务选择，风险优先于文件数；涉及 [高风险边界](SKILL.md#入口与任务分流) 即使只改一行，也进入 `full`。
 
 ### 开发与审查闭环
 
@@ -77,7 +77,7 @@ SKILL.md 选择路径与完成边界
 
 - 聊天表达内置 `normal`、`lite`、`ultra` 三档。`normal` 默认，`lite` 用于日常状态与局部修复，`ultra` 仅在用户明确要求时启用。
 - 表达压缩只影响聊天冗余，不省略否定、数字、单位、代码、路径、错误原文、风险和验证结果。
-- 实现可附加 `lite` 或 `ultra` 档位；`full` 只代表开发—审查闭环，不是实现档位。
+- 档位语法与持续范围见 [入口规则](SKILL.md#入口与任务分流)。`full` 只代表开发—审查闭环。
 
 ## 安装
 
@@ -191,7 +191,7 @@ npx skills update easydev
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-0.2.0 已运行 B01–B21 行为回归，覆盖分流、授权、基线、审查预算、表达、审计、探针、TDD、反馈核实、计划契约和工作区收尾。B21 当前验证了无原生工具时的 fallback；原生 worktree 工具优先路径仍需在对应宿主中实测。
+0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。原生工作树及其他宿主兼容性仍需实测。
 
 ## 适用范围
 
@@ -202,6 +202,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.2.1`（2026-10-19）：修复路由与独立审查边界，区分 quick/full 尝试预算，统一档位持续规则，并补充可追溯验证记录。
 
 `0.2.0`（2026-10-19）：新增 `spike` 与 `audit` 路径；聊天表达统一为 `normal`/`lite`/`ultra` 三档；补齐根因排障、TDD 红绿证据、审查反馈核实、可交接计划、工作区收尾、技能共存与 B01–B21 行为回归；修正 DeepSeek 安装路径并移除重复模型示例。
 
@@ -221,6 +223,9 @@ easydev/
 ├── examples/models.cross-provider.json
 ├── agents/openai.yaml
 ├── tests/behavior.md
+├── tests/results/opus-review.md
+├── tests/results/opus-followup.md
+├── tests/results/opus-followup-evidence.md
 └── references/
     ├── planning.md
     ├── execution.md
