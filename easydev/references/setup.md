@@ -15,3 +15,10 @@
 选择不继承完整会话的选项时，以实际接口支持为准；不支持该选项就说明隔离限制，不伪称干净上下文。角色至少用不同实例分离，参与某次实现的实例不得审查自己写的结果。
 
 创建子代理不等于创建新的用户聊天。仅在用户明确要求新聊天时使用聊天管理工具。
+
+## Google Antigravity（AGY）
+
+- 安装位置按 [官方 Skills 文档](https://antigravity.google/docs/skills)：项目级为 `.agents/skills/easydev/`；App/IDE 用户级为 `~/.gemini/config/skills/easydev/`，CLI 用户级为 `~/.gemini/antigravity-cli/skills/easydev/`。保持 `SKILL.md` 与 `references/` 等运行时文件的相对位置；安装步骤及 Skills CLI 旧目录映射见 [README](../README.md#各-harness-的安装位置)。
+- 先确认宿主已发现技能，App/CLI 可通过 `/easydev` 显式调用。目录存在或文档兼容不代表当前宿主已加载、激活或通过行为回归。
+- 原生委派按 [官方 Subagents 文档](https://antigravity.google/docs/subagents)：使用当前工具实际暴露的 `invoke_subagent`；自定义代理的 `subagent` 必须允许调用。将开发/审查角色映射为独立实例，审查仅给必要材料与只读权限，不因工具同名假定各版本参数相同。
+- `models.json` 的模型 ID、推理深度及工作区隔离选项须逐项核对宿主工具能力；不能把模型层级当成任意供应商 ID，或静默忽略不支持的设置。无法满足时沿用本文件的受阻规则，不虚称独立审查通过。
