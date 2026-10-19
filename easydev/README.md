@@ -2,9 +2,82 @@
 
 当前版本：`0.2.0`
 
-一个 Skill 入口完成设计、编码、排障、验证和独立审查。简单修改直接处理，复杂任务按需进入开发、审查、修复闭环。
+面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
-EasyDev 是纯文件的 Agent Skill。宿主指令、用户要求与适用项目偏好优先；最小实现与聊天表达使用内置规则，不依赖另行安装的外部技能。流程调度与共存边界见 [SKILL.md](SKILL.md#与其他技能共存)。
+EasyDev 不接管宿主，不安装插件，也不替代项目自身的规则、工具或测试。宿主指令、用户要求与适用项目偏好始终优先；Skill 负责流程调度、完成边界和质量证据。
+
+## 目录
+
+[工作原理](#工作原理) · [核心能力](#核心能力) · [安装](#安装) · [使用](#使用) · [模型配置](#模型配置) · [工作区与收尾](#工作区与收尾) · [更新与迁移](#更新与迁移) · [验证](#验证) · [适用范围](#适用范围) · [更新说明](#更新说明) · [目录结构](#目录结构)
+
+## 工作原理
+
+```text
+用户请求
+   │
+   ▼
+SKILL.md 选择路径与完成边界
+   ├── quick      局部低风险实施、验证与自查
+   ├── full       开发、独立审查、有限修复与复审
+   ├── design     只交付设计、权衡、契约与验收
+   ├── plan       只交付依赖、边界、步骤与验证
+   ├── debug      先取证定位，再按授权决定是否修复
+   ├── review     只读审查，输出有证据的发现
+   ├── spike      最小实验与可行性结论
+   └── audit      全仓或指定目录的一次性只读审计
+          │
+          ▼
+按需加载 references/ 中的模块
+          │
+          ▼
+实际改动、验证证据、审查状态与收尾说明
+```
+
+核心约束是“最小充分”和“可验证”：只补足完成目标所需的代码、测试与文档，不扩大范围；不能把自查说成独立审查，也不能把模型复述规则当成行为通过。
+
+## 核心能力
+
+### 任务分流
+
+| 路径 | 适用场景 | 完成边界 |
+| --- | --- | --- |
+| `auto` | 默认入口，由当前任务决定后续路径 | 不提前承诺流程，按风险选择 |
+| `quick` | 目标明确、范围局部、验证简单 | 当前代理实施、验证与自查，明确不做独立审查 |
+| `full` | 非平凡功能、跨文件行为变化、复杂修复或高风险改动 | 开发、独立审查、修复、复审，共用四轮审核预算 |
+| `design` | 只要方案，或实现前存在实质方案分歧 | 交付目标、权衡、契约与验收，不擅自实现 |
+| `plan` | 只要实施计划，或需要跨阶段交接 | 交付依赖、边界、接口与验证，不擅自实现 |
+| `debug` | 异常行为、测试失败、性能退化或根因不明 | 先定位偏离层与根因；“只定位”不修改代码 |
+| `review` | 单次代码、设计、PR 或上线前审查 | 只读交付排名发现，用户授权后才进入修复 |
+| `spike` | 只要可行性结论或快速实验 | 最小实验与结论，产物标记 `throwaway` |
+| `audit` | 全仓或指定目录审计 | 一次性只读报告，不修改代码 |
+
+路径按任务选择，风险优先于文件数。鉴权、支付、敏感数据、并发一致性、破坏性数据操作和迁移兼容即使只改一行，也进入 `full`。
+
+### 开发与审查闭环
+
+- `full` 使用独立实例分离开发与审查，最多四轮正式审核；模型升级、换实例和多个审核者不增加轮数。
+- 审查发现先核实，再澄清、修复或有依据反驳；P0/P1 与范围内 P2 必须处理，不影响验收的 P3 作为未实施建议记录。
+- 没有子代理能力时完成授权内实施与自查，明确报告独立审查受阻，不由同一实例切换口吻冒充独立审核。
+- 预算耗尽或关键证据缺失时报告未完成，不以轮数、测试数量或“无重大问题”推导可以发布。
+
+### 工程纪律
+
+- 先记录任务基线和已有改动，保护用户未提交内容；能由已记录提交可靠重建的干净文件复用 Git 基线，其他情况保存原内容。
+- 新功能与非平凡行为先构造最小失败测试，确认失败原因是功能缺失，再做最小实现并使测试通过。
+- Bug 修复先复现症状，区分代码根因、环境故障与外部依赖；同一问题重复失败时回到假设与证据，不随机试补丁。
+- 证据记录实际命令、工作目录、退出状态、关键输出和对应版本；测试通过、构建通过、验收满足与独立审查完成分别判断。
+
+### 交付边界
+
+- `design`、`plan`、`spike`、`review` 和 `audit` 各有独立交付范围，不因流程结束自动进入实现。
+- 实验产物不并入产品代码；只读审查与审计不修改代码、索引、快照或外部系统。
+- 高风险或易错操作先写清步骤、限制与恢复方式，不用简短表达省略安全信息。
+
+### 表达与实现档位
+
+- 聊天表达内置 `normal`、`lite`、`ultra` 三档。`normal` 默认，`lite` 用于日常状态与局部修复，`ultra` 仅在用户明确要求时启用。
+- 表达压缩只影响聊天冗余，不省略否定、数字、单位、代码、路径、错误原文、风险和验证结果。
+- 实现可附加 `lite` 或 `ultra` 档位；`full` 只代表开发—审查闭环，不是实现档位。
 
 ## 安装
 
@@ -18,7 +91,7 @@ EasyDev 是纯文件的 Agent Skill。宿主指令、用户要求与适用项目
 npx skills add ./easydev --skill easydev
 ```
 
-按提示选择需要的 harness 和安装方式；默认安装到当前项目，加 `--global` 安装到用户级目录。安装源路径可改为你的 EasyDev 文件夹绝对路径；在目标项目目录执行，安装到该项目。
+按提示选择 harness 和安装方式；默认安装到当前项目，加 `--global` 安装到用户级目录。安装源路径可改为 EasyDev 文件夹的绝对路径；在目标项目目录执行，则安装到该项目。
 
 明确指定一个或多个 harness：
 
@@ -42,14 +115,14 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 
 下表给出可用于手动复制的默认位置；项目级路径相对于目标项目，`~` 表示用户主目录。Skills CLI 会将支持共享目录的客户端安装到 `.agents/skills`（用户级为 `~/.agents/skills`）；实际位置以安装输出为准。
 
-| Harness          | Skills CLI ID          | 项目级目录                                      | 用户级目录                                          |
-| ---------------- | ---------------------- | ----------------------------------------------- | --------------------------------------------------- |
-| Codex            | `codex`              | `.agents/skills/easydev/`                     | `~/.agents/skills/easydev/`                       |
-| Claude Code      | `claude-code`        | `.claude/skills/easydev/`                     | `~/.claude/skills/easydev/`                       |
-| OpenCode         | `opencode`           | `.agents/skills/easydev/`                     | `~/.config/opencode/skills/easydev/`              |
-| Pi               | `pi`                 | `.agents/skills/easydev/`                     | `~/.agents/skills/easydev/`                       |
+| Harness | Skills CLI ID | 项目级目录 | 用户级目录 |
+| --- | --- | --- | --- |
+| Codex | `codex` | `.agents/skills/easydev/` | `~/.agents/skills/easydev/` |
+| Claude Code | `claude-code` | `.claude/skills/easydev/` | `~/.claude/skills/easydev/` |
+| OpenCode | `opencode` | `.agents/skills/easydev/` | `~/.config/opencode/skills/easydev/` |
+| Pi | `pi` | `.agents/skills/easydev/` | `~/.agents/skills/easydev/` |
 | DeepSeek Harness | 使用原生目录或共享目录 | `.dsh/skills/easydev/` 或 `.agents/skills/easydev/` | `~/.dsh/skills/easydev/` 或 `~/.agents/skills/easydev/` |
-| Cursor           | `cursor`             | `.agents/skills/easydev/`                     | `~/.cursor/skills/easydev/`                       |
+| Cursor | `cursor` | `.agents/skills/easydev/` | `~/.cursor/skills/easydev/` |
 
 CLI 目录映射见 [Skills CLI 官方文档](https://github.com/vercel-labs/skills#supported-agents)；[Pi 官方文档](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md)也明确支持 `.agents/skills`。手动复制只需文件系统操作。安装后按宿主方式刷新技能或开启新会话；Pi 可运行 `/reload`。
 
@@ -71,23 +144,25 @@ DeepSeek Harness 的运行配置需加载 `@deepseek-ai/dsh-skill`、`@deepseek-
 使用 easydev audit，审计 data-service 目录并给出排名问题。
 ```
 
-也可使用宿主的技能调用入口：Codex 中写 `$easydev review 审查当前改动`，Pi 使用 `/skill:easydev review 审查当前改动`，DeepSeek Harness 使用 `/easydev review 审查当前改动`。后两者的入口分别见上述 Pi 文档与 DeepSeek Harness tool-skill 文档；某客户端的 `$` 或 `/` 语法按该客户端的约定使用。
+也可使用宿主的技能调用入口：Codex 中写 `$easydev review 审查当前改动`，Pi 使用 `/skill:easydev review 审查当前改动`，DeepSeek Harness 使用 `/easydev review 审查当前改动`。某客户端的 `$` 或 `/` 语法按该客户端的约定使用。
 
-路径分流（`auto`/`quick`/`full`/`design`/`plan`/`debug`/`review`/`spike`/`audit`）的选择条件与完成边界、实现档位 `lite`/`ultra`、审核预算与收敛规则，全部以 [SKILL.md](SKILL.md) 及其按需加载的模块为唯一来源，本文件不再复述。
+路径选择条件与完成边界以 [SKILL.md](SKILL.md#入口与任务分流) 为唯一来源。需要隔离工作区时，按 [工作区与收尾](references/worktree.md) 优先使用宿主原生工具；同时安装其他开发或审查技能时，按 [技能共存规则](SKILL.md#与其他技能共存) 只保留一个流程控制者。
 
-同时安装 Superpowers、旧 dev-review-loop 或独立审查技能时的分流、优先级与冲突处理见 [SKILL.md 的“与其他技能共存”](SKILL.md#与其他技能共存)。
+## 模型配置
 
-## 自定义模型
-
-默认开发和审核都继承宿主模型，可换成任意供应商。复制 [默认配置](models.json) 或 [跨模型示例](examples/models.cross-provider.json) 到你的用户配置位置，再修改模型 ID：
+默认开发和审核都继承宿主模型，可换成任意供应商。复制 [默认配置](models.json) 或 [跨模型示例](examples/models.cross-provider.json) 到用户配置位置，再修改模型 ID：
 
 - macOS/Linux：`~/.config/easydev/models.json`；设置了 `XDG_CONFIG_HOME` 时使用 `$XDG_CONFIG_HOME/easydev/models.json`。
 - Windows：`%APPDATA%/easydev/models.json`；APPDATA 未设置时使用用户主目录下的 `.config/easydev/models.json`。
 - 也可在对话中指定一个可访问的配置文件，例如“使用 easydev，模型配置用 `/path/to/my-models.json`”。
 
-字段含义、优先级、校验规则与示例见 [模型配置规则](references/models.md)，这里不复述。
+字段含义、优先级、校验规则与升级阶段见 [模型配置规则](references/models.md)。配置由代理读取，个人配置应放在安装目录之外，更新 Skill 时保持原样。Skill 只读取模型 ID 与推理深度，密钥留在供应商自己的配置里。
 
-配置由代理读取，**个人配置放在安装目录之外，更新 Skill 时保持原样。**多个 harness 可以共用它，也可在各自对话中指定不同文件。Skill 只读取模型 ID 与推理深度，密钥留在你自己的供应商配置里。
+## 工作区与收尾
+
+局部改动可直接在当前工作区完成。需要隔离或任务较长时，优先使用宿主原生工作树工具；没有原生工具时再回退 `git worktree add`，不创建宿主无法追踪的重复工作区。
+
+完成改动后先运行本任务验证，再呈现“本地合并 / 推送并创建 PR / 保留现状”供用户选择。合并、推送和清理都需要明确授权；清理被拒绝时列出未提交内容，绝不擅自使用 `--force` 或丢弃分支。完整规则见 [worktree.md](references/worktree.md)。
 
 ## 更新与迁移
 
@@ -97,13 +172,46 @@ DeepSeek Harness 的运行配置需加载 `@deepseek-ai/dsh-skill`、`@deepseek-
 npx skills update easydev
 ```
 
-更新会替换安装目录内容；个人模型配置放在上述外部路径，曾直接改过安装目录内 `models.json` 的话先把它迁移出去。手动复制安装的用户，备份后替换整个文件夹即可。
+更新会替换安装目录内容；个人模型配置放在上述外部路径即可保留。曾直接修改安装目录内 `models.json` 的用户，应先将其迁移到外部位置。手动复制安装时，备份后替换整个文件夹。
 
-## 目录
+版本变化与具体改动见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 验证
+
+修改流程、角色边界、表达规则或工作区行为后，按 [行为回归用例](tests/behavior.md) 在独立上下文和临时工作区验证。执行者只拿到 Skill 路径、用户请求、原始材料和真实工具约束，不提前获得通过条件；结果记录实际文件、diff、工具调用、命令输出和未验证项。
+
+发布前至少完成：
+
+- `git diff --check`，确认没有空白错误。
+- 解析 `models.json` 与 `examples/models.cross-provider.json`。
+- 检查 Markdown 本地链接、目录树和新增文件是否一致。
+- 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
+
+0.2.0 已运行 B01–B21 行为回归，覆盖分流、授权、基线、审查预算、表达、审计、探针、TDD、反馈核实、计划契约和工作区收尾。B21 当前验证了无原生工具时的 fallback；原生 worktree 工具优先路径仍需在对应宿主中实测。
+
+## 适用范围
+
+- 适合需要统一设计、实施、验证与审查口径的编码 Agent。
+- 不提供模型、密钥、网络、沙箱、子代理或工作树能力；这些均由宿主和实际配置决定。
+- 没有独立子代理时仍可完成实施与自查，但不能宣称 `full` 闭环完成。
+- 行为回归验证的是 Skill 的行为边界，不证明每个宿主都已正确加载，也不替代项目自身的测试、构建、迁移或发布检查。
+- 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
+
+## 更新说明
+
+`0.2.0`（2026-10-19）：新增 `spike` 与 `audit` 路径；聊天表达统一为 `normal`/`lite`/`ultra` 三档；补齐根因排障、TDD 红绿证据、审查反馈核实、可交接计划、工作区收尾、技能共存与 B01–B21 行为回归；修正 DeepSeek 安装路径并移除重复模型示例。
+
+- 完整版本历史：[`CHANGELOG.md`](CHANGELOG.md)
+- 流程入口与完成边界：[`SKILL.md`](SKILL.md)
+- 模型配置：[`references/models.md`](references/models.md)
+- 行为回归：[`tests/behavior.md`](tests/behavior.md)
+
+## 目录结构
 
 ```text
 easydev/
 ├── README.md
+├── CHANGELOG.md
 ├── SKILL.md
 ├── models.json
 ├── examples/models.cross-provider.json
@@ -123,8 +231,4 @@ easydev/
 
 `agents/openai.yaml` 是 Codex 的可选展示元数据，其余文件构成通用 Skill 内容。
 
-设计参考 [Superpowers](https://github.com/obra/superpowers) 的流程方法；最小完整实现与测试驱动原则已内置于 [execution.md](references/execution.md)，工作区隔离与分支收尾见 [worktree.md](references/worktree.md)，聊天表达内置 `normal`/`lite`/`ultra` 三档，运行时不依赖另行安装。
-
-## 维护验证
-
-修改流程、角色边界或表达规则后，按 [行为回归用例](tests/behavior.md) 选择受影响场景，在独立上下文和临时工作区验证。用例覆盖分流、授权、证据、恢复和技能共存；记录实际产物与动作，不以“模型复述了规则”代替行为通过。链接、配置与 Skill 格式检查只证明结构有效，不能替代行为验证。
+流程方法参考 [Superpowers](https://github.com/obra/superpowers)；最小完整实现、测试驱动、根因排障、审查反馈与工作计划规则已内置于 `references/`，运行时不依赖其他技能包。
