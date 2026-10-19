@@ -362,6 +362,7 @@ function buildContents(parsed: Document, headings: HTMLElement[]): HTMLElement {
       const nested = (parent.lastElementChild?.tagName === 'OL'
         ? parent.lastElementChild
         : parent.appendChild(parsed.createElement('ol'))) as HTMLOListElement;
+      nested.className = 'note-toc-list';
       levels.push({ level, list: nested, item: null });
     }
     const item = parsed.createElement('li');

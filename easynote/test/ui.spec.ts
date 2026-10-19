@@ -906,9 +906,12 @@ test('a note contents directive builds a clickable table of contents', async ({ 
   await expect(contents).toHaveCount(1);
   await expect(contents).toHaveAttribute('aria-label', '笔记目录');
   await expect(contents.getByRole('link')).toHaveText(['第一章', '1.1 小节', '回到二级']);
-  // 跳级标题（一级 → 三级 → 二级）合并进同一个子列表，编号连续。
+  // 跳级标题（一级 → 三级 → 二级）合并进同一个子列表，缩进结构保持连续。
   await expect(contents.locator('ol > li > ol')).toHaveCount(1);
   await expect(contents.locator('ol > li > ol > li')).toHaveCount(2);
+  await expect(contents.locator('ol').first()).toHaveCSS('list-style-type', 'none');
+  await expect(contents.locator('ol > li > ol')).toHaveCSS('list-style-type', 'none');
+  await expect(contents.locator('ol > li > ol')).toHaveCSS('padding-left', '18px');
   // 引用块里的标题不算正文标题；代码块与行内提到的 [TOC] 保持原样。
   await expect(preview.locator('blockquote h2')).toHaveText('引用里的标题');
   await expect(preview.locator('pre code')).toContainText('[TOC]');

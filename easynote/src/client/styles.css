@@ -961,8 +961,8 @@ nav button.active svg { color: var(--accent); }
 .markdown a[data-private-file]::before { content: '↓ '; }
 .markdown .note-toc { margin: 0 0 1.6em; padding: 12px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
 .markdown .note-toc-title { margin: 0 0 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
-.markdown .note-toc-list { margin: 0; padding-left: 22px; }
-.markdown .note-toc-list .note-toc-list { margin: 2px 0; }
+.markdown .note-toc-list { margin: 0; padding-left: 0; list-style: none; }
+.markdown .note-toc-list .note-toc-list { margin: 2px 0; padding-left: 18px; }
 .markdown .note-toc li { margin: 2px 0; }
 .markdown .note-toc a { text-decoration: none; }
 .markdown .note-toc a:hover { text-decoration: underline; }

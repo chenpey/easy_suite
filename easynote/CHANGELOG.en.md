@@ -2,6 +2,12 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.4.1 Release Notes (2026-10-19)
+
+- Remove generated `1.` and `1.1` counters from the contents list and retain hierarchy through indentation, avoiding duplicate numbering when headings already include their own numbers.
+- Fix the nested contents lists missing their style class, so every level uses the same unnumbered indentation; navigation, shares, the reader window and PDF export are unchanged.
+- Frontend contents styling and regression coverage only. No database migration is required.
+
 ## 1.4.0 Release Notes (2026-10-19)
 
 - Add note contents: a `[TOC]` paragraph of its own (blank lines around it) builds a clickable table of contents in preview, read-only shares, the independent reader window and PDF export. Entries nest by heading level and scroll to their heading. Headings inside blockquotes are skipped, empty headings are dropped, `[TOC]` inside code blocks or inline text stays literal, and a note without headings shows "No headings".
