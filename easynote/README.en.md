@@ -8,7 +8,7 @@ A self-hosted Markdown note-taking application for individuals and small teams. 
 
 ## Contents
 
-[Implemented Features](#implemented-features) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Deploying to Cloudflare](#deploying-to-cloudflare) · [Configuration](#configuration) · [API](#api) · [Syntax Cheatsheet](#syntax-cheatsheet) · [Shortcuts](#shortcuts) · [Verification](#verification) · [Cost](#cost) · [Notes](#notes) · [Release Notes](#release-notes)
+[Implemented Features](#implemented-features) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Deploying to Cloudflare](#deploying-to-cloudflare) · [Configuration](#configuration) · [API](#api) · [Syntax Cheatsheet](#syntax-cheatsheet) · [Shortcuts](#shortcuts) · [Verification](#verification) · [Cost](#cost) · [Scope](#scope) · [Release Notes](#release-notes)
 
 ## Implemented Features
 
@@ -291,7 +291,7 @@ Typical usage:
 
 Autosave only rewrites the current body, while version slots are consumed by manual saves and AI writes, so setting `VERSIONS_KEPT` to 5–10 leaves plenty of D1 headroom. After going live, watch Workers Requests, CPU Time and Error 1027, D1 `rows_read`, `rows_written` and database size, plus R2 storage and operations — adjust `POLL_SECONDS`, `VERSIONS_KEPT` or the plan once any of them reaches 70% of the free tier. These figures exclude domains, taxes and external backup storage; your invoice is authoritative: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/).
 
-## Notes
+## Scope
 
 - The product focuses on Markdown notes, per-note read-only sharing and remote MCP; AI reaches a tenant through a restricted token the user creates.
 - The offline mirror inherits the security boundary of the browser profile and device account, so disk encryption is recommended on sensitive devices.

@@ -8,7 +8,7 @@
 
 ## 目录
 
-[已实现功能](#已实现功能) · [架构](#架构) · [快速开始](#快速开始) · [部署到 Cloudflare](#部署到-cloudflare) · [配置](#配置) · [API](#api) · [语法速查](#语法速查) · [快捷键](#快捷键) · [验证](#验证) · [费用](#费用) · [说明](#说明) · [更新说明](#更新说明)
+[已实现功能](#已实现功能) · [架构](#架构) · [快速开始](#快速开始) · [部署到 Cloudflare](#部署到-cloudflare) · [配置](#配置) · [API](#api) · [语法速查](#语法速查) · [快捷键](#快捷键) · [验证](#验证) · [费用](#费用) · [适用范围](#适用范围) · [更新说明](#更新说明)
 
 ## 已实现功能
 
@@ -291,7 +291,7 @@ API 测试运行在内存 D1 / R2 上；浏览器测试自动在 `127.0.0.1:8792
 
 自动保存只更新当前正文，历史槽位由手动保存和 AI 写入消耗，把 `VERSIONS_KEPT` 设为 5～10 可为 D1 留出充足余量。上线后观察 Workers 的 Requests、CPU Time 与 Error 1027，D1 的 `rows_read`、`rows_written` 与数据库大小，以及 R2 的存储与操作次数，任一达到免费额度 70% 时再调整 `POLL_SECONDS`、`VERSIONS_KEPT` 或套餐。以上不含域名、税费与外部备份存储；实际以当期账单为准：[Workers 定价](https://developers.cloudflare.com/workers/platform/pricing/)、[D1 定价](https://developers.cloudflare.com/d1/platform/pricing/)、[D1 限制](https://developers.cloudflare.com/d1/platform/limits/)、[R2 定价](https://developers.cloudflare.com/r2/pricing/)。
 
-## 说明
+## 适用范围
 
 - 产品定位聚焦 Markdown 笔记、单篇只读分享与远程 MCP；AI 通过用户主动创建的受限令牌访问所属租户。
 - 离线镜像沿用浏览器配置文件与设备账号的安全边界，敏感设备建议启用系统磁盘加密。
