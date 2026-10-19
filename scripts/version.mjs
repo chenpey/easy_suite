@@ -52,6 +52,7 @@ const projects = {
     title: 'EasyDev',
     directory: 'easydev',
     readmePath: 'easydev/README.md',
+    notesPath: 'easydev/CHANGELOG.md',
   },
 };
 

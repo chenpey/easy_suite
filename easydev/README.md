@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.0`
+当前版本：`0.3.1`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -176,11 +176,12 @@ npx skills update easydev
 发布前至少完成：
 
 - `git diff --check`，确认没有空白错误。
+- 在仓库根目录运行 `node scripts/version.mjs check`，确认版本文件与各项目发布说明一致（CI 已接入）。
 - 解析 `models.json` 与 `examples/models.cross-provider.json`。
 - 检查 Markdown 本地链接、目录树和新增文件是否一致。
 - 对受影响的行为用例实际执行，不用“模型复述规则”代替行为通过。
 
-0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。原生工作树及其他宿主兼容性仍需实测。
+0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的路由、复审与公共契约规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)，其中包含一次完整 `full` 开发—独立审查链路；第二轮 ChatGPT review 的逐条处理与未采纳项见 [处理记录](tests/results/chatgpt-review-0.3.0.md)。B31–B33、原生工作树及其他宿主兼容性仍需实测。
 
 ## 适用范围
 
@@ -191,6 +192,8 @@ npx skills update easydev
 - 用户明确选择其他流程时遵从该选择；EasyDev 不与其他开发闭环并行运行。
 
 ## 更新说明
+
+`0.3.1`（2026-10-19）：分流改按最小必要调查后的实际影响判定；明确用户限定流程与高风险边界的优先级；区分低影响 P3 延期与实质缺陷争议；B29 拆分为 B29a/B29b，新增 B30–B33；修复版本漂移并增加版本一致性 CI。
 
 `0.3.0`（2026-10-19）：删除实现档位（破坏性，路径后的 `lite`/`ultra` 不再改变实现取舍）；`full` 触发条件改为影响面、契约与不确定性；路径表与档位定义合并到唯一来源；新增 B29 与本次实测基线。
 
@@ -218,6 +221,8 @@ easydev/
 ├── tests/results/opus-followup.md
 ├── tests/results/opus-followup-evidence.md
 ├── tests/results/baseline-0.3.0.md
+├── tests/results/baseline-0.3.1.md
+├── tests/results/chatgpt-review-0.3.0.md
 └── references/
     ├── planning.md
     ├── execution.md
