@@ -1,16 +1,16 @@
 # EasyDev
 
-当前版本：`0.1.0`
+当前版本：`0.2.0`
 
 一个 Skill 入口完成设计、编码、排障、验证和独立审查。简单修改直接处理，复杂任务按需进入开发、审查、修复闭环。
 
-EasyDev 是纯文件的 Agent Skill，优先级为：用户显式要求 > 会话中已加载的同类技能 > 内置规则。
+EasyDev 是纯文件的 Agent Skill。宿主指令、用户要求与适用项目偏好优先；最小实现与聊天表达使用内置规则，不依赖另行安装的外部技能。流程调度与共存边界见 [SKILL.md](SKILL.md#与其他技能共存)。
 
 ## 安装
 
 ### 推荐：Skills CLI
 
-与 [Ponytail 的 Skills CLI 安装方式](https://github.com/DietrichGebert/ponytail/blob/main/INSTALL.md#skills-cli) 相同，使用通用安装工具选择目标 harness（即宿主），需要 Node.js/npm。
+使用通用安装工具选择目标 harness（即宿主），需要 Node.js/npm。
 
 已下载本仓库时，在仓库根目录执行：
 
@@ -48,7 +48,7 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 | Claude Code      | `claude-code`        | `.claude/skills/easydev/`                     | `~/.claude/skills/easydev/`                       |
 | OpenCode         | `opencode`           | `.agents/skills/easydev/`                     | `~/.config/opencode/skills/easydev/`              |
 | Pi               | `pi`                 | `.agents/skills/easydev/`                     | `~/.agents/skills/easydev/`                       |
-| DeepSeek Harness | 使用原生目录或共享目录 | `.dsh/skills/easydev/.agents/skills/easydev/` | `~/.dsh/skills/easydev/~/.agents/skills/easydev/` |
+| DeepSeek Harness | 使用原生目录或共享目录 | `.dsh/skills/easydev/` 或 `.agents/skills/easydev/` | `~/.dsh/skills/easydev/` 或 `~/.agents/skills/easydev/` |
 | Cursor           | `cursor`             | `.agents/skills/easydev/`                     | `~/.cursor/skills/easydev/`                       |
 
 CLI 目录映射见 [Skills CLI 官方文档](https://github.com/vercel-labs/skills#supported-agents)；[Pi 官方文档](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/skills.md)也明确支持 `.agents/skills`。手动复制只需文件系统操作。安装后按宿主方式刷新技能或开启新会话；Pi 可运行 `/reload`。
@@ -67,23 +67,15 @@ DeepSeek Harness 的运行配置需加载 `@deepseek-ai/dsh-skill`、`@deepseek-
 使用 easydev，为登录表单增加邮箱校验，并验证错误提示。
 使用 easydev debug，排查保存按钮偶尔重复提交的问题。
 使用 easydev review，审查当前改动，先不要修改代码。
+使用 easydev spike，快速验证当前方案能否支撑目标并发。
+使用 easydev audit，审计 data-service 目录并给出排名问题。
 ```
 
 也可使用宿主的技能调用入口：Codex 中写 `$easydev review 审查当前改动`，Pi 使用 `/skill:easydev review 审查当前改动`，DeepSeek Harness 使用 `/easydev review 审查当前改动`。后两者的入口分别见上述 Pi 文档与 DeepSeek Harness tool-skill 文档；某客户端的 `$` 或 `/` 语法按该客户端的约定使用。
 
-| 路径             | 作用                                   |
-| ---------------- | -------------------------------------- |
-| `auto`（默认） | 根据任务风险选择必要流程               |
-| `quick`        | 局部低风险修改，实施、验证与自查       |
-| `full`         | 开发、独立审查、修复与复审             |
-| `design`       | 只交付方案和权衡                       |
-| `plan`         | 只交付实施顺序、边界和验收方式         |
-| `debug`        | 先定位根因，再按授权修复               |
-| `review`       | 只读审查，列出有证据的缺陷与待验证风险 |
+路径分流（`auto`/`quick`/`full`/`design`/`plan`/`debug`/`review`/`spike`/`audit`）的选择条件与完成边界、实现档位 `lite`/`ultra`、审核预算与收敛规则，全部以 [SKILL.md](SKILL.md) 及其按需加载的模块为唯一来源，本文件不再复述。
 
-完整闭环最多四轮正式审核；模型升级、更换代理沿用同一预算，子代理在同一闭环内继续推进。宿主无法委派独立代理时，仍完成实施和自查，并如实报告独立审查受阻。
-
-路径后可附加实现档位 `lite`（更省的最小方案）或 `ultra`（先质疑需求），默认按 [执行与验证](references/execution.md) 的取用顺序实现。聊天表达可在简洁与完整之间切换，适用条件见 [聊天表达](references/expression.md)。
+同时安装 Superpowers、旧 dev-review-loop 或独立审查技能时的分流、优先级与冲突处理见 [SKILL.md 的“与其他技能共存”](SKILL.md#与其他技能共存)。
 
 ## 自定义模型
 
@@ -93,17 +85,7 @@ DeepSeek Harness 的运行配置需加载 `@deepseek-ai/dsh-skill`、`@deepseek-
 - Windows：`%APPDATA%/easydev/models.json`；APPDATA 未设置时使用用户主目录下的 `.config/easydev/models.json`。
 - 也可在对话中指定一个可访问的配置文件，例如“使用 easydev，模型配置用 `/path/to/my-models.json`”。
 
-```json
-{
-  "developer": { "model": "inherit", "reasoning_effort": "inherit" },
-  "reviewer": { "model": "inherit", "reasoning_effort": "inherit" },
-  "upgrades": []
-}
-```
-
-`developer` 设置开发/修复角色，`reviewer` 设置独立审核角色；`upgrades` 最多包含两组后续开发/审核配置。`inherit` 表示沿用宿主设置；模型 ID 和推理深度按目标 harness 支持的能力填写。当前主对话的模型在客户端里选择。
-
-优先级为：当前对话明确指定的角色设置，其次是所选配置文件。文件选择顺序为：对话指定路径、用户配置、包内默认配置；只读取一份完整文件（字段不合并）。所选配置无效或不可读时报告问题。详细字段见 [模型配置规则](references/models.md)。
+字段含义、优先级、校验规则与示例见 [模型配置规则](references/models.md)，这里不复述。
 
 配置由代理读取，**个人配置放在安装目录之外，更新 Skill 时保持原样。**多个 harness 可以共用它，也可在各自对话中指定不同文件。Skill 只读取模型 ID 与推理深度，密钥留在你自己的供应商配置里。
 
@@ -126,6 +108,7 @@ easydev/
 ├── models.json
 ├── examples/models.cross-provider.json
 ├── agents/openai.yaml
+├── tests/behavior.md
 └── references/
     ├── planning.md
     ├── execution.md
@@ -134,9 +117,14 @@ easydev/
     ├── review.md
     ├── expression.md
     ├── models.md
-    └── setup.md
+    ├── setup.md
+    └── worktree.md
 ```
 
 `agents/openai.yaml` 是 Codex 的可选展示元数据，其余文件构成通用 Skill 内容。
 
-设计参考 [Superpowers](https://github.com/obra/superpowers) 的流程方法、[Ponytail](https://github.com/DietrichGebert/ponytail) 的最小完整实现原则，以及 Caveman 的简洁表达原则；后两者的规则已内置于 [execution.md](references/execution.md) 与 [expression.md](references/expression.md)，运行时不依赖另行安装。
+设计参考 [Superpowers](https://github.com/obra/superpowers) 的流程方法；最小完整实现与测试驱动原则已内置于 [execution.md](references/execution.md)，工作区隔离与分支收尾见 [worktree.md](references/worktree.md)，聊天表达内置 `normal`/`lite`/`ultra` 三档，运行时不依赖另行安装。
+
+## 维护验证
+
+修改流程、角色边界或表达规则后，按 [行为回归用例](tests/behavior.md) 选择受影响场景，在独立上下文和临时工作区验证。用例覆盖分流、授权、证据、恢复和技能共存；记录实际产物与动作，不以“模型复述了规则”代替行为通过。链接、配置与 Skill 格式检查只证明结构有效，不能替代行为验证。
