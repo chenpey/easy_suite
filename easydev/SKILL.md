@@ -43,7 +43,7 @@ description: >-
 | 何时 | 模块 | 负责什么 |
 | --- | --- | --- |
 | 要设计、拆解或复杂实施 | [planning.md](references/planning.md) | 澄清、权衡、拆分与计划深度 |
-| 要改代码、运行验证或交付 | [execution.md](references/execution.md) | 基线、最小实现、测试证据、完成判断 |
+| 要改代码、运行验证或交付 | [execution.md](references/execution.md) | 基线、最小实现、审查反馈、测试证据、完成判断 |
 | 要排障或同一修复失败 | [debugging.md](references/debugging.md) | 根因、假设与最小实验 |
 | 进入 full、分派或升级 | [orchestration.md](references/orchestration.md) | 角色、交接、轮次、停止条件 |
 | 要分配模型或用户调整模型 | [models.md](references/models.md) | 用户配置优先，未提供时使用包内默认配置 |

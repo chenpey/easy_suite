@@ -30,8 +30,8 @@ bash tests/fixtures/b30/run.sh
 3. `git apply solution.patch` 成功；
 4. `probe.py 403`：修复后他人读取返回 403；
 5. `check_orders.py` 输出 `PASS: 7/7`；
-6. `acceptance.py` 输出 `PASS: 12/12 independent acceptance checks`；
-7. 负向变体：省略身份的伪修复被独立验收拒绝（非零退出，恰好 3 条失败，覆盖缺失身份、空身份与缺失 `request` 身份）。
+6. `acceptance.py` 输出 `PASS: 23/23 independent acceptance checks`；
+7. 负向变体：省略身份、把 `user_id` 当 admin 角色、硬编码 `u1` 所有权、缺少角色校验、空字符串身份绕过五类伪修复，均被独立验收拒绝（非零退出并命中对应失败标签）。
 
 只需要 `bash`、`git` 与 Python 3，不安装依赖。脚本在 `mktemp` 临时目录内执行，不改动工作区。
 
@@ -45,8 +45,9 @@ bash tests/fixtures/b30/run.sh
 
 ## 覆盖与限制
 
-- 检查覆盖：本人可读、他人被拒、缺失订单返回 `None`、缺失/空身份不返回订单（含部分字段与嵌套容器）、接口 200/403/404、admin 导出（含非本人订单）、非 admin 拒绝。
+- 检查覆盖：本人可读、他人被拒、第二个用户读取自己的订单、跨订单越权、缺失订单返回 `None`、缺失/空身份不返回订单（含部分字段与嵌套容器）、`user_id="admin"` 不获得订单所有权、接口 200/403/404、缺失 `request` 身份不返回订单（缺失键允许报错）、admin 导出（含非本人订单与缺失/空角色）、非 admin 拒绝。
 - 未覆盖：`request["user_id"]` 的上游可信性（夹具没有 HTTP/鉴权层，该项在记录中保持为待验证风险）；真实鉴权中间件与并发请求。
 - 修复前基线 `check_orders.py` 已按目标两参契约编写，初始失败原因是契约尚未实现（`TypeError`），不是越权读取的运行证据；越权由 `probe.py 200` 与静态实现共同证明。
-- `run.sh` 只证明固定补丁能通过断言、省略身份的伪修复会被拒绝；独立 Reviewer 是否实际运行、Agent 是否遵守流程，需要另看执行记录，不能由本脚本推导。
+- `run.sh` 只证明固定补丁能通过断言、五类伪修复会被拒绝；独立 Reviewer 是否实际运行、Agent 是否遵守流程，需要另看执行记录，不能由本脚本推导。
+- `acceptance.py` 设置 `sys.dont_write_bytecode = True`，`run.sh` 使用 `python3 -B` 与 `PYTHONDONTWRITEBYTECODE=1`，运行后不生成 `__pycache__`/`.pyc`，不污染被测工作区。
 - 本夹具仅覆盖单次 `full` 工作流与公共契约调用方适配，不代表其他语言或真实鉴权环境。

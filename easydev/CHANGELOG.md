@@ -2,6 +2,16 @@
 
 完整历史记录。最近一次更新见 [README](README.md)。
 
+## 0.3.7 更新说明（2026-10-19）
+
+### 安全验收与审查反馈
+
+- B30 独立验收扩到 23 条：新增第二订单、跨订单越权、`user_id="admin"`、None/空身份、缺失/空导出角色等断言；`run.sh` 增加五类负向伪修复并检查不生成 `__pycache__`/`.pyc`。
+- “处理审查反馈”实施纪律迁入 `references/execution.md`，`orchestration.md` 改为引用，`SKILL.md` 加载表补充，覆盖委派 developer 与 quick/B19。
+- Antigravity 示例升级阶段审查模型保持 `pro`；`models.md`/`setup.md` 修正 `inherit`、模型 ID 与层级契约，并补充宿主指令约束。
+- 移除本地 `.pi/sandbox.json` 对 `~/.dsh/.env` 的写白名单（本地配置不随 Git 发布）。
+- Gemini 审查核实与修复记录见 [gemini-review-0.3.6.md](tests/results/gemini-review-0.3.6.md)。
+
 ## 0.3.6 更新说明（2026-10-19）
 
 ### 安装与模型示例

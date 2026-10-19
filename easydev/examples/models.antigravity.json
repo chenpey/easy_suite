@@ -14,7 +14,7 @@
         "reasoning_effort": "inherit"
       },
       "reviewer": {
-        "model": "inherit",
+        "model": "pro",
         "reasoning_effort": "inherit"
       }
     }

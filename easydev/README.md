@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.3.6`
+当前版本：`0.3.7`
 
 面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
 
@@ -207,6 +207,8 @@ npx skills update easydev
 
 ## 更新说明
 
+`0.3.7`（2026-10-19）：B30 独立验收扩到 23 条并增加五类负向伪修复；审查反馈纪律迁入 execution；修正 Antigravity 升级审查模型与模型契约；移除本地凭证写白名单。审查记录见 [gemini-review-0.3.6.md](tests/results/gemini-review-0.3.6.md)。
+
 `0.3.6`（2026-10-19）：新增 Antigravity 模型配置示例与只复制运行时文件的安装命令；补充最小成本回归集合与成本基线记录要求；修复安装副本中的文档链接，发布前检查覆盖全部示例配置。审计记录见 [audit-fixes-0.3.6.md](tests/results/audit-fixes-0.3.6.md)。
 
 `0.3.5`（2026-10-19）：补充 Antigravity App/IDE 与 CLI 安装和适配说明；description 增加英文能力与排除边界；整理历史证据引用；明确持续 Agent 行为回归缺口及升级后的优先回归集合。流程正文不变，宿主行为与英文激活效果仍待实测。
@@ -256,6 +258,7 @@ easydev/
 ├── tests/results/gemini-review-0.3.4.md
 ├── tests/results/audit-fixes-0.3.4.md
 ├── tests/results/audit-fixes-0.3.6.md
+├── tests/results/gemini-review-0.3.6.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh

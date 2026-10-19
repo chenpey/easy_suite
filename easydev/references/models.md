@@ -15,7 +15,7 @@
 - `developer`：开发及修复角色，包含 `model`、`reasoning_effort`。
 - `reviewer`：独立审查及复审角色，字段同上。
 - `upgrades`：按顺序启用的升级阶段，默认空数组，最多两项；每项都包含完整的 `developer` 和 `reviewer`，避免角色互换时猜测审核者。
-- `model: "inherit"`：遵循宿主的模型继承规则，调用时不发送字符串 `inherit` 作为模型 ID。其他值须为宿主实际支持的完整模型 ID。
+- `model`：`"inherit"` 表示遵循宿主继承规则；调用时按宿主接口语义处理：接口把 `"inherit"` 作为合法枚举值时原样传入（如 Antigravity `invoke_subagent`），否则省略模型参数，不把字符串 `inherit` 当模型 ID。其他值须为宿主支持的完整模型 ID 或工具暴露的模型层级（如 AGY 的 `flash`/`pro`），实际可用值以 [setup.md](setup.md) 核对的工具接口为准。
 - `reasoning_effort: "inherit"`：不覆盖推理深度。其他可填写值为 `none / minimal / low / medium / high / xhigh / max / ultra`，实际有效值以所选模型与工具接口为准；配置解析通过不代表模型支持。此处的 `ultra` 是推理深度取值，与聊天表达档位无关。
 
 只接受以上键及类型。缺文件、无效 JSON、空模型名、缺字段、未知键或超过两个升级阶段时，指出文件和错误，暂停依赖配置的分派；其余工作继续。不要静默使用旧的硬编码路由，不为修复配置错误擅自改用户文件。
