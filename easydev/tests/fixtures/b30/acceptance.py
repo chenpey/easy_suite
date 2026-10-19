@@ -3,6 +3,7 @@
 用法：
     python3 acceptance.py <被测仓库目录>
 """
+import re
 import sys
 import uuid
 
@@ -39,6 +40,10 @@ known_order_values = {
     *dynamic_order.values(),
 }
 allowed_empty_keys = {"status", "error", "message", "detail", "code"}
+order_value_patterns = [
+    re.compile(rf"(?<![0-9A-Za-z]){re.escape(str(value))}(?![0-9A-Za-z])")
+    for value in known_order_values
+]
 checks = 0
 failures = []
 
@@ -88,6 +93,9 @@ def contains_order(value):
         return any(contains_order(item) for item in value.values())
     if isinstance(value, (list, tuple)):
         return any(contains_order(item) for item in value)
+    if isinstance(value, str):
+        # 错误文本也必须逐词扫描，避免把订单字段嵌进 message/error 绕过检查。
+        return any(pattern.search(value) for pattern in order_value_patterns)
     # 缺失身份时直接返回订单字段（如金额 120）也属于泄露，不能只查容器。
     return is_order_value(value)
 
