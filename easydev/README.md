@@ -1,10 +1,10 @@
 # EasyDev
 
-当前版本：`0.3.10`
+当前版本：`0.4.0`
 
-面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，再按任务风险选择必要流程，不把全部步骤机械套到每次修改上。
+面向编码 Agent 的纯文件 Skill。它把设计、实施、排障、验证、审查、探针与全仓审计收进一个入口，按任务风险选择必要流程，以最小完整实现交付可验证、便于人工接手的结果。
 
-EasyDev 不接管宿主，不安装插件，也不替代项目自身的规则、工具或测试。宿主指令、用户要求与适用项目偏好始终优先；Skill 负责流程调度、完成边界和质量证据。
+宿主指令、用户要求与适用项目偏好优先；EasyDev 统一管理流程、授权边界与质量证据，使用宿主提供的工具和项目已有测试。目标是在质量与效率保持的前提下减少返工和人工介入，实际收益以对照实验为准。
 
 ## 目录
 
@@ -45,17 +45,19 @@ SKILL.md 选择路径与完成边界
 
 ### 开发与审查闭环
 
-- `full` 使用独立实例分离开发与审查，最多四轮正式审核；模型升级、换实例和多个审核者不增加轮数。
-- 审查发现先核实，再澄清、修复或有依据反驳；P0/P1 与范围内 P2 必须处理，不影响验收的 P3 作为未实施建议记录。
+- `full` 默认连续实施、集成后初审、修复后定向复审；高风险公共契约可在后续阶段依赖前检查。四轮正式审核是共享上限，前置与阶段审查均计入，并为最终完整审查及必要复审预留两轮。安排见 [编排规则](references/orchestration.md#审查时机)。
+- 审查发现按处置矩阵先核实，再澄清、修复或有依据反驳；P0/P1 与范围内 P2 必须处理，不影响验收的 P3 作为未实施建议记录；主代理兼任作者时的争议排除必须附证据交下一轮独立确认。
 - 没有子代理能力时完成授权内实施与自查，明确报告独立审查受阻，不由同一实例切换口吻冒充独立审核。
 - 预算耗尽或关键证据缺失时报告未完成，不以轮数、测试数量或“无重大问题”推导可以发布。
 
 ### 工程纪律
 
-- 先记录任务基线和已有改动，保护用户未提交内容；能由已记录提交可靠重建的干净文件复用 Git 基线，其他情况保存原内容。
-- 新功能与非平凡行为先构造最小失败测试，确认失败原因是功能缺失，再做最小实现并使测试通过。
-- Bug 修复先复现症状，区分代码根因、环境故障与外部依赖；同一问题重复失败时回到假设与证据，不随机试补丁。
+- 单条命令采集任务基线与已有改动，并在修改前与交付前核对调用方、按类型证据及风险边界；干净文件复用 Git `HEAD` 基线，脏文件或敏感文件按仓库相对路径保存首次原内容并强制收紧私有权限（`0700/0600`）。
+- 新功能与非平凡行为先构造最小失败测试，确认失败原因是功能缺失，再做最小实现并使测试通过；重构验证既有契约与行为保持。
+- Bug 修复先复现症状，定位并修复**实际违反契约的位置**（共享源头失守修源头并查对称分支，调用方传参违约修调用方）；同一问题重复失败时回到假设与证据，不随机试补丁。
 - 证据记录实际命令、工作目录、退出状态、关键输出和对应版本；测试通过、构建通过、验收满足与独立审查完成分别判断。
+- 代码采用最少的必要实现和清晰控制流，注释简要解释原因与约束；文档用正向陈述说明行为、用法、适用条件和异常处理，随实现同步。完整标准见 [文档与人工接手](references/execution.md#文档与人工接手)。
+- 常规选择、需求内修复与阶段推进由代理完成；需要产品选择、额外授权、关键外部信息或预算耗尽时，按 [人工介入规则](references/planning.md#澄清与人工介入) 提出具体问题。交接与长日志采用摘要加可回查证据，保留精确契约和未确认条件。
 
 ### 交付边界
 
@@ -185,6 +187,8 @@ npx skills update easydev
 
 修改流程、角色边界、表达规则或工作区行为后，按 [行为回归用例](tests/behavior.md) 在独立上下文和临时工作区验证。执行者只拿到 Skill 路径、用户请求、原始材料和真实工具约束，不提前获得通过条件；结果记录实际文件、diff、工具调用、命令输出和未验证项。
 
+本次 0.4.0 融合规则的执行结果与验证边界见 [流程融合验证记录](tests/results/fusion-2026-10-20.md)。质量、效率、人工负担与费用按 [融合效果对照](tests/behavior.md#融合效果对照) 分别评估；保持质量和效率，费用可适度增加。先单独比较流程，再消融审查、表达压缩与模型分级。
+
 发布前至少完成：
 
 - `git diff --check`，确认没有空白错误。
@@ -196,7 +200,9 @@ npx skills update easydev
 
 持续回归当前只接入 B30 固定补丁复验，不会调用真实 Agent，也未覆盖 B01–B28 的持续行为评测。模型或宿主升级后的回归选择与记录要求见 [持续回归覆盖与缺口](tests/behavior.md#持续回归覆盖与缺口)。本轮审计意见的核实、修复及验证见 [审计问题处理记录](tests/results/audit-fixes-0.3.7.md)。
 
-0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md)、[第五轮](tests/results/chatgpt-review-0.3.3.md) 与 [Gemini review](tests/results/gemini-review-0.3.4.md)。成本与质量对照、真实 P3-only 审查、B32 的 full 对照、原生工作树及其他宿主兼容性仍需实测。
+2026-10-20 已完成一次 5 任务 × 3 组 × 3 次重复的 SWE-bench Lite 预实验：baseline 与 easydev 均为 7/15，checklist 为 6/15；easydev 平均输入 token 为 baseline 的 2.16 倍、平均耗时为 2.38 倍。该样本没有观察到解决率收益，不能据此判断 EasyDev 无效，也不能与官方 Verified 分数直接比较。协议、逐任务结果和置信区间见 [SWE-bench Lite 预实验记录](tests/results/swebench-lite-pilot-2026-10-20.md)。
+
+0.2.0 曾记载 B01–B21 已通过，但仓库未保留对应宿主、模型和执行证据，现标为历史结果不可核验，不能作为回归基线。本次核实与验证见 [审查意见处理记录](tests/results/opus-review.md)；后续复审及 B22–B28 验证见 [复审处理记录](tests/results/opus-followup.md)。0.3.0 的规则改动与实测基线见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。0.3.1 的规则改动见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)：`full` 工作流已执行，但因身份来源可信性未验证，交付状态为“部分完成/待确认”；可复现夹具在 [tests/fixtures/b30](tests/fixtures/b30/)。0.3.2 新增 B29a/B29b/B31/B32 实测，见 [路由与负向激活记录](tests/results/routing-0.3.2.md)。0.3.3 加固 B30 红阶段与独立验收，并补跑 B33（真实零发现收敛 + P3 决策回放），见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。各轮 review 的逐条处理见 [第二轮](tests/results/chatgpt-review-0.3.0.md)、[第三轮](tests/results/chatgpt-review-0.3.1.md)、[第四轮](tests/results/chatgpt-review-0.3.2.md)、[第五轮](tests/results/chatgpt-review-0.3.3.md) 与 [Gemini review](tests/results/gemini-review-0.3.4.md)。SWE-bench 小样本对照未观察到解决率收益且成本更高（见上段）；真实 P3-only 审查、B32 的 full 对照、更大规模基准、原生工作树及其他宿主兼容性仍需实测。
 
 ## 适用范围
 
@@ -267,6 +273,7 @@ easydev/
 ├── tests/results/audit-fixes-0.3.6.md
 ├── tests/results/gemini-review-0.3.6.md
 ├── tests/results/audit-fixes-0.3.7.md
+├── tests/results/fusion-2026-10-20.md
 ├── tests/fixtures/b30/
 │   ├── README.md
 │   ├── run.sh
@@ -288,4 +295,4 @@ easydev/
 
 `agents/openai.yaml` 是 Codex 的可选展示元数据，`examples/` 是可选模型示例；运行时最低文件集见[各 harness 的安装位置](#各-harness-的安装位置)。
 
-流程方法参考 [Superpowers](https://github.com/obra/superpowers)；最小完整实现、测试驱动、根因排障、审查反馈与工作计划规则已内置于 `references/`，运行时不依赖其他技能包。
+方法参考 [Superpowers](https://github.com/obra/superpowers) 的工程纪律、[Ponytail](https://github.com/DietrichGebert/ponytail) 的最小完整实现与 [Caveman](https://github.com/JuliusBrussee/caveman) 的表达压缩，按本项目的授权、风险与审查边界整合。运行规则内置于 `references/`，EasyDev 保持唯一调度入口，运行时不依赖这些外部技能包。
