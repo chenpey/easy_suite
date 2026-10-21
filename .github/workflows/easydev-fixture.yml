@@ -15,3 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash easydev/tests/cases/public-contract-callers/run.sh
+      - name: Offline unit tests
+        run: |
+          python3 -m unittest discover -s easydev/tests/experiments/agent_runner -p 'test_*.py' -v
+          python3 -m unittest discover -s easydev/tests/experiments/swebench -p 'test_*.py' -v

@@ -44,6 +44,16 @@ order_value_patterns = [
     re.compile(rf"(?<![0-9A-Za-z]){re.escape(str(value))}(?![0-9A-Za-z])")
     for value in known_order_values
 ]
+
+
+def track_order_value(value):
+    """登记后来出现的订单相关值，让返回值与错误文本扫描同步覆盖它。"""
+    known_order_values.add(value)
+    order_value_patterns.append(
+        re.compile(rf"(?<![0-9A-Za-z]){re.escape(str(value))}(?![0-9A-Za-z])")
+    )
+
+
 checks = 0
 failures = []
 
@@ -212,7 +222,7 @@ expect("dynamic admin export works", lambda: export_order(dynamic_order["id"], {
 
 previous_owner = dynamic_order["owner_id"]
 dynamic_order["owner_id"] = other_user
-known_order_values.add(other_user)
+track_order_value(other_user)
 expect_raises(
     "previous owner denied after ownership change",
     lambda: get_order(dynamic_order["id"], previous_owner),
@@ -224,7 +234,7 @@ expect("new owner 200 after ownership change", lambda: handle_show_order({"user_
 
 # 审计原始场景：直接改动固定订单的实际所有者，混合硬编码（固定映射 + 动态回退）也应被拒绝。
 fixed_new_owner = f"fixed-{suffix}"
-known_order_values.add(fixed_new_owner)
+track_order_value(fixed_new_owner)
 for fixed_order, old_owner in ((order, "u1"), (order2, "u2")):
     db_order = next(item for item in db.ORDERS if item["id"] == fixed_order["id"])
     db_order["owner_id"] = fixed_new_owner

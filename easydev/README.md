@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.8.0`
+当前版本：`0.8.1`
 
 EasyDev 是面向编码 Agent 的纯文件 Skill。它把需求设计、实施、排障、验证、独立审查、可行性探针和全仓审计收进一个入口，按任务风险选择必要流程，并以可核验的改动和证据交付。
 
@@ -189,7 +189,14 @@ npx skills add https://github.com/chenpey/easy_suite/tree/main/easydev --skill e
 npx skills update easydev
 ```
 
-从本地工作区安装后检查目标目录；若出现 `.pi/` 或 `tests/`，删除后再使用。
+从本地工作区安装后检查目标目录；若出现 `.pi/` 或 `tests/`，删除后再使用。`DEST` 为已安装的 `easydev` 目录，可用下面命令确认安装结果：
+
+```bash
+DEST=/path/to/skills/easydev
+test -f "$DEST/SKILL.md" && test ! -d "$DEST/tests" && test ! -d "$DEST/.pi"
+```
+
+从本地工作区安装可能带上 `tests/`、`.pi/`；不通过校验就删掉这两个目录再继续。需要可重复的最小安装时，优先用下方[手动安装](#手动安装)的 rsync 命令。
 
 ### 手动安装
 
@@ -326,7 +333,7 @@ node ../scripts/version.mjs check
 
 ### 公共契约与调用方固定补丁复验
 
-当前 CI 只接入 `public-contract-callers` 固定补丁复验，不调用真实 Agent：
+当前 CI 运行 `public-contract-callers` 固定补丁复验与 agent_runner、swebench 离线单测；版本校验与版本脚本单测在 `version-check` 工作流；真实 Agent 行为回归尚未接入。
 
 ```bash
 bash tests/cases/public-contract-callers/run.sh
@@ -364,7 +371,7 @@ python3 -m unittest discover \
 
 ### 行为回归
 
-[tests/behavior.md](tests/behavior.md) 定义 B01-B29b、B31-B48 行为场景以及语义化的 `public-contract-callers` 场景，覆盖：
+[tests/behavior.md](tests/behavior.md) 定义 B01-B29b、B31-B49 行为场景以及语义化的 `public-contract-callers` 场景，覆盖：
 
 - 低风险与高风险分流、quick 升级 full。
 - 只定位、设计、计划、审查、审计和可行性探针的交付边界。
@@ -469,7 +476,7 @@ python3 tests/experiments/swebench/analyze_events.py \
 
 - 无独立子代理时不能完成 `full` 闭环，只能完成实现与自查。
 - 行为 runner 目前只覆盖 Codex CLI 和四个场景，真实模型运行尚未建立持续结果。
-- 当前 CI 只复验 `public-contract-callers` 固定补丁，不运行真实 Agent。
+- CI 运行 `public-contract-callers` 固定补丁复验与 agent_runner、swebench 离线单测；真实 Agent 行为回归尚未接入。
 - SWE-bench 运行器和审查消融协议未提供当前版本的实验结论。
 - 宿主升级后仍需重新核对技能发现、模型覆盖、推理深度、并发和隔离能力。
 - 安装指引不证明宿主加载成功，也不替代目标项目自身的测试、构建、迁移和发布检查。
@@ -535,7 +542,7 @@ easydev/
 - 版本历史、已修正问题和发布说明写入 [CHANGELOG.md](CHANGELOG.md)，不在 README 重复完整历史。
 - 修改分流、澄清、预算、审查、表达或测试规则时，同步更新 `SKILL.md`、相关 `references/`、行为用例和 README。
 - 修改运行时文件后检查本地 Markdown 链接，并确认最小安装副本没有指向未复制文件。
-- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。
+- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。Node 单测在仓库根执行 `node --test test/*.test.mjs`，在 `easydev/` 目录执行 `node --test ../test/*.test.mjs`；`node --test test/` 在 Node 24 会被当成模块入口而失败，CI 固定 Node 20。
 - 行为结论必须来自当前版本的实际执行记录；未执行的用例、隐藏验收和消融实验明确写“未运行”或“待验证”。
 
 EasyDev 的工程纪律参考了 Superpowers、Ponytail 和 Caveman 的相关思路，并按本项目的风险分流、授权边界和审查规则重新组织。运行时只依赖本目录 Skill 文件与宿主能力，不依赖这些外部技能包。

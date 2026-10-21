@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { bumpVersion, extractReleaseNotes } from '../scripts/version.mjs';
+import { bumpVersion, extractReleaseNotes, skillFrontmatterVersion, updateSkillFrontmatterVersion } from '../scripts/version.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 
@@ -52,6 +52,81 @@ test('extractReleaseNotes throws on non-existent version', () => {
     () => extractReleaseNotes(sampleNotes, '0.9.9'),
     /Release notes for version 0\.9\.9 not found/
   );
+});
+
+function frontmatterSkill(...frontmatterLines) {
+  return ['---', ...frontmatterLines, '---', '', '# demo', ''].join('\n');
+}
+
+// version: null marks a frontmatter whose metadata block carries no direct
+// version child, so both reading and writing must reject it.
+const metadataCases = [
+  {
+    name: 'top-level metadata.version',
+    lines: ['name: demo', 'metadata:', '  version: "1.2.3"'],
+    version: '1.2.3',
+  },
+  {
+    name: 'nested metadata block',
+    lines: ['runtime:', '  metadata:', '    version: "1.2.3"'],
+    version: null,
+  },
+  {
+    name: 'version under another metadata key',
+    lines: ['name: demo', 'metadata:', '  other:', '    version: "1.2.3"'],
+    version: null,
+  },
+  {
+    name: 'unindented comment and blank line inside metadata',
+    lines: ['metadata:', '# skill version', '', '  version: "1.2.3"'],
+    version: '1.2.3',
+  },
+  {
+    name: 'metadata is not the first key',
+    lines: ['name: demo', 'description: demo skill.', 'metadata:', '  version: "1.2.3"'],
+    version: '1.2.3',
+  },
+];
+
+test('skillFrontmatterVersion reads only a direct metadata.version child', () => {
+  for (const { name, lines, version } of metadataCases) {
+    const content = frontmatterSkill(...lines);
+    if (version === null) {
+      assert.throws(
+        () => skillFrontmatterVersion(content, 'SKILL.md'),
+        /SKILL\.md frontmatter is missing/,
+        name
+      );
+    } else {
+      assert.equal(skillFrontmatterVersion(content, 'SKILL.md'), version, name);
+    }
+  }
+});
+
+test('skillFrontmatterVersion reports the missing metadata.version message', () => {
+  const content = frontmatterSkill('metadata:', '  owner: demo');
+  assert.throws(
+    () => skillFrontmatterVersion(content, 'SKILL.md'),
+    /SKILL\.md frontmatter is missing metadata\.version\./
+  );
+});
+
+test('updateSkillFrontmatterVersion rewrites only the version line', () => {
+  for (const { name, lines, version } of metadataCases) {
+    const content = frontmatterSkill(...lines);
+    if (version === null) {
+      assert.throws(
+        () => updateSkillFrontmatterVersion(content, '9.9.9', 'SKILL.md'),
+        /SKILL\.md frontmatter is missing/,
+        name
+      );
+      continue;
+    }
+    const updated = updateSkillFrontmatterVersion(content, '9.9.9', 'SKILL.md');
+    assert.equal(skillFrontmatterVersion(updated, 'SKILL.md'), '9.9.9', name);
+    const withoutVersion = (text) => text.split('\n').filter((line) => !line.includes('version:'));
+    assert.deepEqual(withoutVersion(updated), withoutVersion(content), name);
+  }
 });
 
 test('bumpVersion increments semantic versions correctly', () => {

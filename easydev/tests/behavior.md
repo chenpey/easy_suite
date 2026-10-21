@@ -15,7 +15,7 @@
 
 ## 持续回归覆盖与缺口
 
-当前 CI 仍只运行 [public-contract-callers 固定补丁复验](cases/public-contract-callers/README.md)，检查已保存补丁的红、绿、独立验收与伪修复拒绝，不会启动 Agent。`tests/experiments/agent_runner/` 已提供 B01、B02、B16、public-contract-callers 的隔离准备、Codex CLI 适配、事件归因与场景验收入口，并有离线自测；真实模型运行尚未执行，因此历史记录不能证明模型或宿主升级后仍通过，静态文本匹配也不能替代行为验收。
+当前 CI 运行 [public-contract-callers 固定补丁复验](cases/public-contract-callers/README.md) 与 agent_runner、swebench 两组 Python 离线单测：前者检查已保存补丁的红、绿、独立验收与伪修复拒绝，离线单测验证隔离准备、事件归因与实验运行器的静态契约；真实 Agent 未接入，都不会启动 Agent。`tests/experiments/agent_runner/` 已提供 B01、B02、B16、public-contract-callers 的隔离准备、Codex CLI 适配、事件归因与场景验收入口，并有离线自测；真实模型运行尚未执行，因此历史记录不能证明模型或宿主升级后仍通过，静态文本匹配也不能替代行为验收。
 
 模型或宿主大版本升级时，优先复跑 B01（低风险）、B02（高风险）、B07（无子代理）、B12（表达边界）、B31（跨文件机械改动）；涉及基线或审核状态规则时补 B06/B09/B10/B14/B25/B27/B28。逐项按上方执行与判定记录真实动作及失败证据；没有对应宿主能力的项目标为回放或受阻，不合并成“全套通过”。
 
@@ -68,6 +68,8 @@ python3 tests/experiments/agent_runner/runner.py run \
 - **结论边界**：报告任务级配对差异与不确定性；小样本未发现显著下降不证明不劣。费用不完整时不判成本达标，无真实人工观测时不声称已减少人工时间。先用小样本筛明显退化，再扩独立任务确认；样本量按所需检出差异确定，不以固定题数保证结论。
 
 ## 场景
+
+当前只有 B01、B02、B16 与 `public-contract-callers` 具备可执行载体，其余场景在补齐夹具前只是文字规约，不得视为已受回归保护。
 
 | 用例 | 输入与准备 | 通过条件 |
 | --- | --- | --- |

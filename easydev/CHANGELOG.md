@@ -2,6 +2,27 @@
 
 版本变更记录。最近一次更新见 [README](README.md)。
 
+## 0.8.1 更新说明（2026-10-21）
+
+本次发布修复审计发现的规则冲突、验证载体与维护脚本缺陷。
+
+- `SKILL.md`：quick 收尾按暴露内容分流（高风险边界或公共契约影响升级 `full`，仅验证或实现细节超出内联核心时加载模块并留在 `quick`），删除「复杂 quick」表述；`full` 选择条件补上高风险边界；按需加载的 execution 行改为同一表述；模型配置来源段只在需要字段校验、用户指定模型或升级规则时读取 `models.md`；收尾段补上 `debug（仅定位）`；聊天表达段说明用户只写 `ultra` 时按表达档位处理并说明推理深度未改变。
+- `references/orchestration.md`：审查轮次改为发起即记 `r/4`（占用）、完成后更新为（完成）或（受阻），连续重连超过 2 次按环境故障报告受阻；强度分档链接改指 `review.md#强度分档`。
+- `references/planning.md`：范围与授权链接文本改为「全程约束中的范围与授权」；「未答默认」只在用户明确表示跳过/继续时生效，用户未回应时依赖该项的实现保持暂停。
+- `references/execution.md`：既有 `quick` 历史不占 `full` 阶段 0 的试修预算（配置 `upgrades` 时该阶段为 1 次），也不消耗无 `upgrades` 时的三次预算。
+- `references/setup.md`：新增「Codex 与 Pi」小节，记录可验证的分派字段与「审查实例只读、与实现实例不同」的要求，不写未验证的工具签名。
+- `tests/experiments/swebench/run.py`：模板解包允许指向包内相对路径的软链与硬链，拒绝绝对路径、空或含 NUL 的目标，以及词法上或解析后逃出目标目录的链接（`..` 逃逸、经由已有包内软链的逃逸、硬链指向归档外路径）；软链目标按链接所在目录、硬链目标按归档根解析；解包按归档成员顺序逐个校验并立即提取，避免归档内后建链接绕过预扫描，无 `data_filter` 的运行时同样安全，目录成员只建目录、不在写入阶段改权限，所有成员提取完后，目录属性使用创建时解析的规范路径并在应用前复核包含性，按深度降序应用目录的 mode 与 mtime（单个目录失败不中断其余目录），保留只读目录归档的可用性，支持的 Python 版本在 `extract` 时传 `filter="data"`；Codex 运行目录收紧到 `0700`；先原子写入 `protected-modes.json` 再 `chmod(0)`，实验开始时按记录恢复被中断运行留下的 0 权限。`test_run_protocol.py` 的 tar 链接用例从 1 条扩展到 8 条（包内软链/硬链、子目录相对软链、`..` 逃逸、绝对路径、硬链逃逸、归档内后建链接链的两种成员顺序），并新增只读目录（0555）、嵌套只读目录（0500/0500）、逃出目标目录的目录成员、目录属性落在创建时规范路径、目录属性按深度降序共五条用例。
+- `scripts/version.mjs`：`version` 必须位于 `metadata:` 块内，块内缺失或版本挂到其他顶层键时校验失败；`sync` 用同一规则定位再写入。`test/version.test.mjs` 新增合法与错位两条用例。
+- `tests/cases/public-contract-callers/acceptance.py`：新增 `track_order_value`，让后来出现的所有者值同时进入值集合与文本扫描正则。
+- `.github/workflows/easydev-fixture.yml`：新增 agent_runner、swebench 离线单测；`.github/workflows/version-check.yml` 固定 Node 20 并新增 `node --test test/version.test.mjs`。
+- `tests/behavior.md` 与 README：说明当前只有 B01、B02、B16 与 `public-contract-callers` 具备可执行载体；README 行为场景编号改到 B49，Skills CLI 安装补安装后校验命令，维护条目补 Node 单测的版本约束。
+- 独立审查 r1 修正：`run.py` 把 `protected-modes.json` 的恢复移到读取 `dataset.json`/`task-baselines` 之前，中断重跑不再因数据文件为 mode 0 直接 `PermissionError`；恢复只处理当前 mode 为 0 的路径（不覆盖用户后来收紧的权限），记录必须是「路径→0..0o777 整数」的 JSON 对象，损坏时抛可执行的 `RuntimeError`，正常结束删除记录（`lock_protected_paths`）。`scripts/version.mjs` 只认顶层 `metadata:` 的直接子键 `version`，块扫描跳过空行与 `#` 注释行，`check`/`sync` 共用同一套定位（新增 `updateSkillFrontmatterVersion`）。`SKILL.md` 按需加载表 models 行改为「需要字段校验、用户指定/调整模型、配置异常或需要升级时的来源核对与应用」，与第 33 行一致。版本脚本单测从 `easydev-fixture.yml` 移到对所有 push/PR 生效的 `version-check.yml`。README 维护段区分仓库根与 `easydev/` 目录的 Node 测试命令；`references/execution.md` 恢复 `quick`/`full`/`upgrades` 反引号；`references/setup.md` 补 Pi 字段以宿主当前工具 schema 为准。新增 `test_run_protected_modes.py` 与 `test/version.test.mjs` 表驱动用例。
+- 独立审查 r2 修正：`run.py` 锁定前用 `expanduser().resolve()` 把保护路径（含 `--protect-paths` 与 `experiment` 派生路径）规范化为去重的绝对路径，锁定时归并为不重叠集合（祖先已在集合时丢弃其后代，只锁父目录）；恢复只接受绝对路径条目，遇到相对路径抛 `RuntimeError` 并给出记录路径与手工 `chmod` 出口，不再按当前工作目录解释旧记录；恢复与 `finally` 还原按路径深度升序执行，祖先先于后代，父目录为 mode 0 也不再阻断子路径。`test_run_protected_modes.py` 新增相对路径记录、旧格式拒绝、父子归并与恢复顺序、跨目录重启五条用例。README、`tests/behavior.md` 与本节 CI 说明按实际工作流同步：固定补丁复验与 agent_runner、swebench 离线单测在 `easydev-fixture.yml`，版本校验与版本脚本单测在 `version-check.yml`，真实 Agent 行为回归尚未接入。
+- 独立审查 r3 修正：`run.py` 的 `lock_protected_paths` 在写入记录与任何 `chmod` 之前，把 `protected-modes.json` 与归并后的保护路径都 `resolve()` 比较，保护路径是记录的祖先（含记录文件本身）时抛 `RuntimeError`，消息写明被拒绝的保护路径、记录路径、原因（记录会被锁住导致中断后无法恢复）与出口（改为保护更具体的子路径，或不要保护实验目录），拒绝时不写记录也不改权限；符号链接别名经 `resolve()` 同样被拦住。`restore_protected_modes` 的校验循环拒绝含 `..` 组件的记录条目（与相对条目同一处置：抛 `RuntimeError` 并给出记录路径、原路径与手工 `chmod` 出口），不在可能含符号链接的旧路径上做词法折叠；所有条目先全部校验通过再 `chmod`，不会先恢复部分条目。`test_run_protected_modes.py` 新增保护实验目录、保护其祖先、保护指向它的符号链接、旧记录含 `..` 条目四条拒绝用例与保护 `task-baselines` 子路径仍允许的对照用例。
+- 独立审查 r4 修正：`run.py` 的 `lock_protected_paths` 在写入记录与任何 `chmod` 之前，发现记录路径本身是符号链接（用 `os.path.lexists` 覆盖悬空链接）就抛 `RuntimeError`，消息说明记录路径必须是普通文件、链接可能来自旧运行或外部预置，并给出出口（删除链接让工具重建记录，或手工 `chmod` 恢复权限后重跑）；`reject_record_inside_protected_paths` 改用 `record_path.parent.resolve() / record_path.name`（`os.replace` 的实际落点）与保护路径比较，不再用会跟随链接的 `resolve()` 结果，避免「记录位于被保护目录内」被放行后记录实际落回实验目录、中断时被 mode 0 遮住。`test_run_protected_modes.py` 新增五条用例：记录路径是指向实验目录外有效 JSON 的链接时分别保护实验目录与保护 `task-baselines` 子路径都被拒、悬空链接同样被拒、同结构下普通（不存在）记录路径正常锁定与清理的对照，以及落点包含判断的直测。
+
+验证：`node scripts/version.mjs check` 通过；`node --test 'test/*.test.mjs'`（14 项）、agent_runner（12 项）与 swebench（63 项）离线单测通过；`tests/cases/public-contract-callers/run.sh` 在本机用显式 `/tmp` 模板的 `mktemp` 包装后通过（macOS `mktemp` 忽略 `TMPDIR`，夹具本身未改）；本地 Markdown 链接与锚点检查 0 失效；tar 包内软链/硬链与子目录相对软链三条允许用例在一律拒绝链接的旧实现下报 `RuntimeError`（已复现），三条拒绝用例在移除逃逸检查后不再抛 `RuntimeError`，其中逃逸软链会留下指向目标目录外的软链、绝对路径软链会留下指向 `/etc/passwd` 的软链（已复现），`test_run_protected_modes.py` 的新用例分别在移除对应修复后按预期失败（已复现：去掉 r3 的前置拒绝后，保护实验目录、保护其祖先、保护指向它的符号链接三条拒绝用例报「RuntimeError not raised」；去掉 `..` 条目拒绝后，该用例报「RuntimeError not raised」，且正常条目被提前恢复为 `0o644`，而拒绝后才保持 `0`；r4 的两点修复同时去掉后，记录链接的三条拒绝用例报「RuntimeError not raised」，只去掉叶节点拒绝后保护实验目录的用例改报包含判断的消息、子路径与悬空链接两条仍报「RuntimeError not raised」，只把落点换回 `resolve()` 时落点直测报「RuntimeError not raised」）。本轮把模板解包改为逐成员校验并立即提取后，新增的链接链用例在「全量预扫描 + `extractall`」的旧实现下报「RuntimeError not raised」，同一归档会把 `pwn` 写到目标目录外（已复现），恢复后通过；把目录成员改回逐个 `archive.extract()`（立即应用归档 mode）后，只读目录与嵌套只读目录两条用例在 Python 3.9 与 3.12 上都报 `PermissionError`（已复现：`repo/file.txt` 写入与 `a/b` 建目录被拒），恢复逆序应用后通过；本轮把目录属性改为「创建时解析的规范路径 + 应用前复核」后，把属性阶段改回字面路径并去掉复核时，目录属性用例因目标目录外哨兵目录的 mode 与 mtime 被改（0o750→0o500、mtime→归档值）而失败（已复现），改回 `reversed()` 时先子目录后父目录的顺序用例报「0o755 != 0o500」（已复现），恢复后通过。r4 的两点修复与本轮解包顺序修复为自查复现，尚未经过下一轮独立审查。行为场景与真实宿主回归未运行。
+
 ## 0.8.0 更新说明（2026-10-21）
 
 本次发布补上「意图不清时怎么问」的缺失环节：此前只有「何时可以请求用户决定」，没有提问格式与禁止猜测的约束，模型倾向按自己的理解继续。

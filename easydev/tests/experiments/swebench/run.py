@@ -218,15 +218,90 @@ def load_tasks(dataset: Path, task_ids: Sequence[str]) -> Dict[str, Dict[str, An
     return tasks
 
 
+def _inside_destination(destination: Path, candidate: Path) -> bool:
+    # realpath keeps both sides comparable when /tmp is a symlink to /private/tmp,
+    # and it does not require the candidate to exist yet (member order is arbitrary).
+    root = os.path.realpath(destination)
+    resolved = os.path.realpath(candidate)
+    return resolved == root or resolved.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def _link_escape_reason(destination: Path, member: tarfile.TarInfo) -> Optional[str]:
+    """Why a link member would leave destination, or None when it stays inside."""
+    linkname = member.linkname
+    if not linkname or "\x00" in linkname:
+        return "empty or invalid link target"
+    if os.path.isabs(linkname):
+        return "link escapes destination"
+    target = destination / member.name
+    # A symlink target is relative to the directory holding the link; a hardlink
+    # target is relative to the archive root (tar semantics).
+    base = target.parent if member.issym() else destination
+    if _inside_destination(destination, base / linkname):
+        return None
+    return "link escapes destination"
+
+
+def _extract_filter() -> Dict[str, str]:
+    # filter="data" drops absolute or escaping members and unsafe metadata, but
+    # tarfile.extract only accepts the keyword where data_filter exists (3.12+).
+    return {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+
+
 def extract_template(template: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
+    # Validate and extract one member at a time in archive order: links created by
+    # earlier members are on disk when later members are checked, so a later
+    # member cannot reach outside through a link the archive itself just created.
+    # The per-member checks also cover Python versions without data_filter.
+    extract_kwargs = _extract_filter()
+    # Directories are created at the default mode and get their archived mode and
+    # mtime after every member is written: a read-only archive directory (0555)
+    # must not block the files it contains, which is what tarfile.extractall does
+    # with its set_attrs=False pass followed by a reverse-order attrs pass.
+    # Each entry keeps the path resolved now, not the member name: a later member
+    # that changes an intermediate component can move what the name means, and
+    # the delayed attribute calls must still land on the directory created here.
+    directories: List[Tuple[Path, int, int, str]] = []
     with tarfile.open(template, "r") as archive:
         for member in archive.getmembers():
-            target = destination / member.name
-            resolved = target.resolve()
-            if destination.resolve() not in resolved.parents and resolved != destination.resolve():
+            if not _inside_destination(destination, destination / member.name):
                 raise RuntimeError(f"unsafe tar member: {member.name}")
-        archive.extractall(destination)
+            if member.isdir():
+                path = (destination / member.name).resolve()
+                if not _inside_destination(destination, path):
+                    raise RuntimeError(f"unsafe tar member: {member.name}")
+                path.mkdir(parents=True, exist_ok=True)
+                directories.append((path, member.mode, int(member.mtime), member.name))
+                continue
+            if member.issym() or member.islnk():
+                reason = _link_escape_reason(destination, member)
+                if reason is not None:
+                    raise RuntimeError(
+                        f"unsafe tar member (link): {member.name} ({reason})"
+                    )
+            archive.extract(member, destination, **extract_kwargs)
+    # Archive order says nothing about depth, and a read-only parent (0500, 0400)
+    # blocks the attributes of its children, so apply deepest first. Containment is
+    # re-checked for every recorded path before the first attribute call: the
+    # attribute calls follow links, and the recorded path is the one that must sit
+    # inside the destination. An archive member cannot reach this branch today (a
+    # resolved path holds no link that a later member can retarget, and extraction
+    # cannot turn an existing directory into one), so the guard keeps a later
+    # refactor from applying attributes to a path that left the destination.
+    for path, _, _, name in directories:
+        if not _inside_destination(destination, path):
+            raise RuntimeError(f"unsafe tar member: {name}")
+    for path, mode, mtime, _ in sorted(
+        directories, key=lambda entry: len(entry[0].parts), reverse=True
+    ):
+        # A directory whose attributes cannot be applied does not stop the rest,
+        # matching extractall; member errors above are never swallowed.
+        try:
+            os.chmod(path, mode & 0o7777)
+            os.utime(path, (mtime, mtime))
+        except OSError:
+            pass
 
 
 def prepare_runtime_files(workdir: Path, task_id: str) -> None:
@@ -381,6 +456,9 @@ def codex_env(workdir: Path, venv: Path, run_dir: Path) -> Dict[str, str]:
     home = run_dir / "home"
     codex_home.mkdir(parents=True, exist_ok=True)
     home.mkdir(parents=True, exist_ok=True)
+    codex_home.chmod(0o700)
+    home.chmod(0o700)
+    run_dir.chmod(0o700)
     auth = Path.home() / ".codex" / "auth.json"
     if not auth.exists():
         raise RuntimeError(f"missing Codex auth file: {auth}")
@@ -909,8 +987,150 @@ def run_one(
     return result
 
 
+def restore_protected_modes(record_path: Path) -> None:
+    """Reopen paths a previous interrupted run left locked at mode 0."""
+    if not record_path.exists():
+        return
+    try:
+        payload = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"cannot read protected mode record {record_path}: {error}. "
+            f"Restore those modes with chmod yourself, or delete {record_path}."
+        ) from error
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"protected mode record {record_path} must map paths to modes. "
+            f"Restore those modes with chmod yourself, or delete {record_path}."
+        )
+    modes: Dict[Path, int] = {}
+    for raw_path, mode in payload.items():
+        if isinstance(mode, bool) or not isinstance(mode, int) or not 0 <= mode <= 0o777:
+            raise RuntimeError(
+                f"invalid recorded mode {mode!r} for {raw_path} in {record_path}. "
+                f"Restore those modes with chmod yourself, or delete {record_path}."
+            )
+        path = Path(raw_path).expanduser()
+        # A relative entry would be resolved against whatever directory this
+        # process runs in, so recovery would chmod a different file and leave
+        # the locked one at mode 0.
+        if not path.is_absolute():
+            raise RuntimeError(
+                f"protected mode record {record_path} contains the relative "
+                f"path {raw_path!r}. The record was written by an older version "
+                f"or by a run started from another directory; restore those "
+                f"modes with chmod yourself from the directory that run used, "
+                f"or delete {record_path}."
+            )
+        # `..` only resolves through the file system, and an old path may hold a
+        # symlink where the parent now is, so folding the entry lexically could
+        # chmod a different file. Keeping it also breaks ancestor-first order:
+        # the lexical entry is longer than the ancestor it really points into.
+        if ".." in path.parts:
+            raise RuntimeError(
+                f"protected mode record {record_path} contains the path "
+                f"{raw_path!r} with a '..' component. Restore those modes with "
+                f"chmod yourself, or delete {record_path}."
+            )
+        modes[path] = mode
+    # Mode 0 is the marker an interrupted run leaves behind; a path whose mode
+    # the user changed afterwards must keep the user's mode. Ancestors come
+    # first: a mode-0 ancestor hides its descendants, and a hand-edited or old
+    # record may still hold both.
+    for path in sorted(modes, key=lambda entry: len(entry.parts)):
+        mode = modes[path]
+        if path.exists() and (path.stat().st_mode & 0o777) == 0:
+            path.chmod(mode)
+
+
+def reject_symlinked_record(record_path: Path) -> None:
+    """Refuse a record path that is a symlink, dangling or not."""
+    # `os.path.lexists` also sees a dangling link, which `record_path.exists()`
+    # reports as absent; write_json would still replace the link with a file.
+    if os.path.lexists(record_path) and record_path.is_symlink():
+        raise RuntimeError(
+            f"refusing to use the protected mode record {record_path}: it is a "
+            f"symlink, and the record path must be a regular file. Writing the "
+            f"record replaces the link itself, so an interrupted run would "
+            f"leave the record outside the experiment directory and the next "
+            f"start could not restore the protected paths automatically. The "
+            f"link may be left over from an older run or placed from outside; "
+            f"delete it so the tool rebuilds the record, or restore the "
+            f"protected modes with chmod yourself and rerun."
+        )
+
+
+def reject_record_inside_protected_paths(
+    protected_paths: Iterable[Path], record_path: Path
+) -> None:
+    """Refuse protection that would hide the record from a later restart."""
+    # write_json replaces the record's directory entry, so a symlinked record
+    # lands beside the link and not at its target. The containment check has to
+    # compare that landing spot, otherwise following the link would let a
+    # record inside a protected path pass and then be locked at mode 0.
+    record = record_path.parent.resolve() / record_path.name
+    for path in protected_paths:
+        if record == path or path in record.parents:
+            raise RuntimeError(
+                f"refusing to protect {path}: the protected mode record {record} "
+                f"is inside it, so an interrupted run would lock the record "
+                f"itself at mode 0 and the next start could not restore the "
+                f"protected paths automatically. Protect a more specific "
+                f"subpath, or do not protect the experiment directory."
+            )
+
+
+def normalize_protected_paths(paths: Iterable[Path]) -> List[Path]:
+    """Resolve protected paths and drop duplicates and covered descendants."""
+    resolved: List[Path] = []
+    for path in paths:
+        candidate = Path(path).expanduser().resolve()
+        if candidate not in resolved:
+            resolved.append(candidate)
+    # Locking an ancestor already hides everything below it, and keeping both
+    # would lock or restore a child through a mode-0 parent.
+    return [
+        path
+        for path in resolved
+        if not any(ancestor in resolved for ancestor in path.parents)
+    ]
+
+
+@contextmanager
+def lock_protected_paths(paths: Iterable[Path], record_path: Path) -> Iterator[None]:
+    """Lock existing paths at mode 0 for the run and restore them afterwards."""
+    # Refuse a symlinked record before anything is written or chmod-ed: the
+    # check above cannot see through `os.replace`, which overwrites the link.
+    reject_symlinked_record(record_path)
+    merged = normalize_protected_paths(paths)
+    # Refuse before the record is written: the record has to outlive the lock to
+    # be useful, and a protected ancestor of it would be chmod-ed to 0 after the
+    # write, leaving an interrupted run no way back.
+    reject_record_inside_protected_paths(merged, record_path)
+    original_modes = {
+        path: path.stat().st_mode & 0o777 for path in merged if path.exists()
+    }
+    # Record the modes before locking the paths: an interrupted run would
+    # otherwise leave them at mode 0 with no way to recover them.
+    write_json(record_path, {str(path): mode for path, mode in original_modes.items()})
+    for path in original_modes:
+        path.chmod(0)
+    try:
+        yield
+    finally:
+        for path in sorted(original_modes, key=lambda entry: len(entry.parts)):
+            path.chmod(original_modes[path])
+    # Only a run that reached its end still needs the record; deleting here also
+    # keeps a delete error from masking the failure that interrupted the run.
+    record_path.unlink(missing_ok=True)
+
+
 def run_experiment(args: argparse.Namespace) -> None:
     experiment = args.experiment
+    protect_record = experiment / "protected-modes.json"
+    # Recover before reading anything: an interrupted run left dataset.json and
+    # task-baselines at mode 0, so reading them first would fail permanently.
+    restore_protected_modes(protect_record)
     tasks = load_tasks(experiment / "dataset.json", args.tasks)
     baselines: Dict[str, Dict[str, Any]] = {}
     for task_id in tasks:
@@ -948,17 +1168,10 @@ def run_experiment(args: argparse.Namespace) -> None:
         experiment / "gold",
         *args.protect_paths,
     ]
-    original_modes = {
-        path: path.stat().st_mode & 0o777
-        for path in protected_paths
-        if path.exists()
-    }
-    for path in original_modes:
-        path.chmod(0)
 
-    log(f"running {len(jobs)} jobs with concurrency={args.concurrency}")
-    failures: List[str] = []
-    try:
+    with lock_protected_paths(protected_paths, protect_record):
+        log(f"running {len(jobs)} jobs with concurrency={args.concurrency}")
+        failures: List[str] = []
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=args.concurrency
         ) as executor:
@@ -988,11 +1201,8 @@ def run_experiment(args: argparse.Namespace) -> None:
                 except Exception as error:  # noqa: BLE001 - keep other jobs running
                     failures.append(f"{task_id} {arm} r{repeat}: {error}")
                     log(f"{task_id} {arm} r{repeat}: ERROR {error}")
-    finally:
-        for path, mode in original_modes.items():
-            path.chmod(mode)
-    if failures:
-        raise SystemExit("run failures:\n" + "\n".join(failures))
+        if failures:
+            raise SystemExit("run failures:\n" + "\n".join(failures))
 
 
 def read_results(experiment: Path) -> List[Dict[str, Any]]:

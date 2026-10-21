@@ -134,23 +134,66 @@ function versionReadmeEnLine(version) {
 }
 
 // Installed copies ship SKILL.md only, so the version must be readable from it.
-function skillVersionLinePattern() {
-  return /^([ \t]+)version:[ \t]*"?([^"\n]+?)"?[ \t]*$/m;
-}
-
+// Only a version that is a direct child of the top-level metadata block counts:
+// a nested metadata: or a version: under another metadata key is not the skill
+// version and must not be accepted.
 function skillFrontmatter(content, label) {
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(content);
   if (!frontmatter) fail(`${label} has no frontmatter block.`);
   return frontmatter;
 }
 
-function skillFrontmatterVersion(content, label) {
-  const frontmatter = skillFrontmatter(content, label);
-  const match = skillVersionLinePattern().exec(frontmatter[1]);
-  if (!match || !/^metadata:[ \t]*$/m.test(frontmatter[1])) {
-    fail(`${label} frontmatter is missing metadata.version.`);
+function isIgnoredFrontmatterLine(line) {
+  return !line.trim() || /^[ \t]*#/.test(line);
+}
+
+function metadataVersionLine(lines, label) {
+  const metadataIndex = lines.findIndex((line) => /^metadata:[ \t]*$/.test(line));
+  if (metadataIndex === -1) fail(`${label} frontmatter is missing the metadata block.`);
+  let blockEnd = lines.length;
+  for (let index = metadataIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isIgnoredFrontmatterLine(line)) continue;
+    if (!/^[ \t]/.test(line)) {
+      blockEnd = index;
+      break;
+    }
   }
-  return match[2];
+  let childIndent = null;
+  for (let index = metadataIndex + 1; index < blockEnd; index += 1) {
+    if (isIgnoredFrontmatterLine(lines[index])) continue;
+    childIndent = /^[ \t]*/.exec(lines[index])[0].length;
+    break;
+  }
+  if (childIndent !== null) {
+    for (let index = metadataIndex + 1; index < blockEnd; index += 1) {
+      const match = /^([ \t]*)version:[ \t]*"?([^"\n]+?)"?[ \t]*$/.exec(lines[index]);
+      if (match && match[1].length === childIndent) {
+        return { index, indent: match[1], version: match[2] };
+      }
+    }
+  }
+  fail(`${label} frontmatter is missing metadata.version.`);
+}
+
+export function skillFrontmatterVersion(content, label) {
+  const frontmatter = skillFrontmatter(content, label);
+  return metadataVersionLine(frontmatter[1].split('\n'), label).version;
+}
+
+// Shares the reader above so check and sync cannot disagree about what the
+// skill version is or which line carries it.
+export function updateSkillFrontmatterVersion(content, version, label) {
+  const frontmatter = skillFrontmatter(content, label);
+  const lines = frontmatter[1].split('\n');
+  const current = metadataVersionLine(lines, label);
+  lines[current.index] = `${current.indent}version: "${version}"`;
+  const bodyStart = frontmatter.index + '---\n'.length;
+  return [
+    content.slice(0, bodyStart),
+    lines.join('\n'),
+    content.slice(bodyStart + frontmatter[1].length),
+  ].join('');
 }
 
 function rootReadmeBlock(versions) {
@@ -265,14 +308,7 @@ async function syncSkillVersion(project, version) {
   if (!project.skillPath) return;
   const path = resolve(root, project.skillPath);
   const content = await readFile(path, 'utf8');
-  skillFrontmatterVersion(content, project.skillPath);
-  const [block] = skillFrontmatter(content, project.skillPath);
-  const body = content.slice(block.length);
-  const updated = block.replace(
-    skillVersionLinePattern(),
-    (_match, indent) => `${indent}version: "${version}"`,
-  );
-  await writeIfChanged(path, `${updated}${body}`);
+  await writeIfChanged(path, updateSkillFrontmatterVersion(content, version, project.skillPath));
 }
 
 async function syncProjectReadme(project, version) {

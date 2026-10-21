@@ -10,17 +10,21 @@ test, dataset, and event evidence.
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from protocol import is_valid_invocation, is_valid_result
 from run import (
     baseline_eligible_p2p,
     capture_patch,
+    extract_template,
     init_repo,
     markdown_report,
     parse_events,
@@ -563,6 +567,362 @@ class BaselineSelectionTest(unittest.TestCase):
                 "tests/test_x.py::test_skipped",
             ],
         )
+
+
+def add_file(archive: tarfile.TarFile, name: str, payload: bytes) -> None:
+    file_info = tarfile.TarInfo(name)
+    file_info.size = len(payload)
+    archive.addfile(file_info, io.BytesIO(payload))
+
+
+def add_directory(archive: tarfile.TarFile, name: str, mode: int) -> None:
+    directory_info = tarfile.TarInfo(name)
+    directory_info.type = tarfile.DIRTYPE
+    directory_info.mode = mode
+    directory_info.mtime = 1_000_000
+    archive.addfile(directory_info)
+
+
+def add_link(
+    archive: tarfile.TarFile,
+    name: str,
+    linkname: str,
+    link_type: bytes,
+) -> None:
+    link_info = tarfile.TarInfo(name)
+    link_info.type = link_type
+    link_info.linkname = linkname
+    archive.addfile(link_info)
+
+
+def write_template(
+    template: Path,
+    files: dict[str, bytes],
+    links: list[tuple[str, str, bytes]],
+) -> None:
+    with tarfile.open(template, "w") as archive:
+        for name, payload in files.items():
+            add_file(archive, name, payload)
+        for name, linkname, link_type in links:
+            add_link(archive, name, linkname, link_type)
+
+
+def without_data_filter():
+    """Force extract_template down the _extract_filter() branch without a filter."""
+    return mock.patch("run._extract_filter", return_value={})
+
+
+class TemplateExtractionTest(unittest.TestCase):
+    def assert_rejected(self, template: Path, destination: Path) -> None:
+        with self.assertRaisesRegex(RuntimeError, "unsafe tar member"):
+            extract_template(template, destination)
+        self.assertEqual(list(destination.rglob("*")), [])
+
+    def test_extract_template_allows_symlink_inside_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            write_template(
+                template,
+                {"repo/target.txt": b"content\n"},
+                [("repo/link.txt", "target.txt", tarfile.SYMTYPE)],
+            )
+            destination = root / "out"
+
+            extract_template(template, destination)
+
+            link = destination / "repo" / "link.txt"
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.read_text(encoding="utf-8"), "content\n")
+
+    def test_extract_template_allows_hardlink_inside_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            write_template(
+                template,
+                {"repo/a.txt": b"content\n"},
+                [("repo/b.txt", "repo/a.txt", tarfile.LNKTYPE)],
+            )
+            destination = root / "out"
+
+            extract_template(template, destination)
+
+            source = destination / "repo" / "a.txt"
+            link = destination / "repo" / "b.txt"
+            self.assertFalse(link.is_symlink())
+            self.assertEqual(link.read_text(encoding="utf-8"), "content\n")
+            self.assertEqual(link.stat().st_ino, source.stat().st_ino)
+
+    def test_extract_template_rejects_symlink_with_parent_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            # Three levels up from repo/sub leaves the destination directory.
+            write_template(
+                template,
+                {},
+                [("repo/sub/link", "../../../outside", tarfile.SYMTYPE)],
+            )
+            destination = root / "out"
+
+            self.assert_rejected(template, destination)
+
+            self.assertFalse((root / "outside").exists())
+
+    def test_extract_template_rejects_absolute_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            write_template(
+                template,
+                {},
+                [("repo/escape", "/etc/passwd", tarfile.SYMTYPE)],
+            )
+            destination = root / "out"
+
+            self.assert_rejected(template, destination)
+
+            self.assertFalse((destination / "repo" / "escape").exists())
+
+    def test_extract_template_rejects_hardlink_escaping_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            root = temporary_root / "work"
+            root.mkdir()
+            template = root / "template.tar"
+            # A hardlink target is relative to the archive root, so two parents up
+            # leave the destination even though the member sits under repo/.
+            outside = temporary_root / "outside.txt"
+            outside.write_text("outside\n", encoding="utf-8")
+            write_template(
+                template,
+                {},
+                [("repo/b.txt", "../../outside.txt", tarfile.LNKTYPE)],
+            )
+            destination = root / "out"
+
+            self.assert_rejected(template, destination)
+
+            self.assertEqual(outside.read_text(encoding="utf-8"), "outside\n")
+            self.assertFalse((destination / "repo").exists())
+
+    def test_extract_template_allows_symlink_in_subdirectory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            write_template(
+                template,
+                {"repo/target.txt": b"content\n"},
+                [("repo/sub/link", "../target.txt", tarfile.SYMTYPE)],
+            )
+            destination = root / "out"
+
+            extract_template(template, destination)
+
+            link = destination / "repo" / "sub" / "link"
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.read_text(encoding="utf-8"), "content\n")
+
+    def test_extract_template_rejects_link_chain_built_during_extraction(self) -> None:
+        # Both link targets are lexically contained, but: a -> . makes the link
+        # resolve to the destination itself, so a/.. is the parent directory and
+        # b/pwn would be written outside. A pre-pass over the whole archive cannot
+        # see this; validating each member before writing it does.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_link(archive, "a", ".", tarfile.SYMTYPE)
+                add_link(archive, "b", "a/..", tarfile.SYMTYPE)
+                add_file(archive, "b/pwn", b"pwn\n")
+            destination = root / "out"
+
+            with without_data_filter():
+                with self.assertRaisesRegex(RuntimeError, "unsafe tar member"):
+                    extract_template(template, destination)
+
+            self.assertFalse((root / "pwn").exists())
+            self.assertEqual(
+                sorted(path.name for path in root.iterdir()),
+                ["out", "template.tar"],
+            )
+
+    def test_extract_template_rejects_link_chain_after_earlier_file(self) -> None:
+        # Reverse order: the regular file lands first, then the links arrive. The
+        # later link must either be rejected or handled without touching anything
+        # outside; any non-RuntimeError failure would escape the documented mode.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_file(archive, "b/pwn", b"pwn\n")
+                add_link(archive, "a", ".", tarfile.SYMTYPE)
+                add_link(archive, "b", "a/..", tarfile.SYMTYPE)
+            destination = root / "out"
+
+            with without_data_filter():
+                try:
+                    extract_template(template, destination)
+                except RuntimeError as error:
+                    self.assertIn("unsafe tar member", str(error))
+
+            self.assertFalse((root / "pwn").exists())
+            self.assertFalse((destination / "b").is_symlink())
+            self.assertEqual(
+                sorted(path.name for path in root.iterdir()),
+                ["out", "template.tar"],
+            )
+
+    def test_extract_template_writes_files_before_read_only_directory_mode(
+        self,
+    ) -> None:
+        # A repo/ entry archived at 0555 is legal. Applying that mode as the
+        # directory member is extracted blocks repo/file.txt on runtimes without
+        # data_filter, so the mode is applied after the whole archive is written.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_directory(archive, "repo/", 0o555)
+                add_file(archive, "repo/file.txt", b"content\n")
+            destination = root / "out"
+            repository = destination / "repo"
+
+            try:
+                with without_data_filter():
+                    extract_template(template, destination)
+
+                self.assertEqual(
+                    (repository / "file.txt").read_text(encoding="utf-8"),
+                    "content\n",
+                )
+                self.assertEqual(repository.stat().st_mode & 0o7777, 0o555)
+            finally:
+                # The archived mode denies writes, so cleanup needs it back.
+                repository.chmod(0o755)
+
+    def test_extract_template_applies_nested_read_only_directories(self) -> None:
+        # Both directories deny writes; the file inside the inner one must still
+        # be written, and the recorded modes land deepest first.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_directory(archive, "a/", 0o500)
+                add_directory(archive, "a/b/", 0o500)
+                add_file(archive, "a/b/file.txt", b"nested\n")
+            destination = root / "out"
+            outer = destination / "a"
+            inner = outer / "b"
+
+            try:
+                with without_data_filter():
+                    extract_template(template, destination)
+
+                self.assertEqual(
+                    (inner / "file.txt").read_text(encoding="utf-8"),
+                    "nested\n",
+                )
+                self.assertEqual(outer.stat().st_mode & 0o7777, 0o500)
+                self.assertEqual(inner.stat().st_mode & 0o7777, 0o500)
+            finally:
+                # The archived modes deny writes, so cleanup needs them back. A
+                # failed extraction may not have created the inner directory.
+                outer.chmod(0o755)
+                if inner.exists():
+                    inner.chmod(0o755)
+
+    def test_extract_template_applies_directory_attributes_to_created_path(
+        self,
+    ) -> None:
+        # u names the destination itself while u/sub is created, so the directory
+        # member means <destination>/sub. Retargeting u to x/.. and then pointing x
+        # at the destination moves that same name to <base>/sub, a directory
+        # outside the destination with its own mode and mtime. The delayed
+        # attributes must reach the directory the member created, not whatever the
+        # name resolves to later.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "sub"
+            outside.mkdir()
+            outside.chmod(0o750)
+            os.utime(outside, (1_234_567, 1_234_567))
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_link(archive, "u", ".", tarfile.SYMTYPE)
+                add_directory(archive, "u/sub/", 0o500)
+                add_link(archive, "u", "x/..", tarfile.SYMTYPE)
+                add_link(archive, "x", ".", tarfile.SYMTYPE)
+            destination = root / "out"
+            created = destination / "sub"
+
+            try:
+                # The data filter rewrites the retargeted link, so the drift only
+                # happens where the archive reaches the member unchanged.
+                with without_data_filter():
+                    extract_template(template, destination)
+
+                self.assertEqual(created.stat().st_mode & 0o7777, 0o500)
+                self.assertEqual(outside.stat().st_mode & 0o7777, 0o750)
+                self.assertEqual(int(outside.stat().st_mtime), 1_234_567)
+                self.assertEqual(
+                    sorted(path.name for path in root.iterdir()),
+                    ["out", "sub", "template.tar"],
+                )
+            finally:
+                # The archived mode denies writes, so cleanup needs it back.
+                if created.exists():
+                    created.chmod(0o755)
+
+    def test_extract_template_applies_child_directory_before_parent(self) -> None:
+        # The child is archived before its parent and both deny writes, so archive
+        # order would apply the parent's mode first and lose the child's; only a
+        # depth order reaches both. 0o400 on the parent also denies search, so the
+        # parent mode is restored before the child mode is read.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_directory(archive, "parent/child/", 0o500)
+                add_directory(archive, "parent/", 0o400)
+                add_file(archive, "parent/child/file.txt", b"nested\n")
+            destination = root / "out"
+            parent = destination / "parent"
+            child = parent / "child"
+
+            try:
+                with without_data_filter():
+                    extract_template(template, destination)
+
+                self.assertEqual(parent.stat().st_mode & 0o7777, 0o400)
+                parent.chmod(0o700)
+                self.assertEqual(child.stat().st_mode & 0o7777, 0o500)
+            finally:
+                # The archived modes deny access, so cleanup needs them back.
+                if parent.exists():
+                    parent.chmod(0o755)
+                if child.exists():
+                    child.chmod(0o755)
+
+    def test_extract_template_rejects_directory_escaping_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            root = temporary_root / "work"
+            root.mkdir()
+            template = root / "template.tar"
+            with tarfile.open(template, "w") as archive:
+                add_directory(archive, "../evil/", 0o755)
+                add_file(archive, "../evil/pwn", b"pwn\n")
+            destination = root / "out"
+
+            self.assert_rejected(template, destination)
+
+            self.assertFalse((temporary_root / "evil").exists())
+            self.assertEqual(
+                sorted(path.name for path in root.iterdir()),
+                ["out", "template.tar"],
+            )
 
 
 @unittest.skipUnless(os.name == "posix", "Git shells are POSIX-specific")
