@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: node scripts/version.mjs check
       - name: Repository script tests
         run: node --test test/version.test.mjs test/reset.test.mjs

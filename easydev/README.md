@@ -544,7 +544,7 @@ easydev/
 - 版本历史、已修正问题和发布说明写入 [CHANGELOG.md](CHANGELOG.md)，不在 README 重复完整历史。
 - 修改分流、澄清、预算、审查、表达或测试规则时，同步更新 `SKILL.md`、相关 `references/`、行为用例和 README。
 - 修改运行时文件后检查本地 Markdown 链接，并确认最小安装副本没有指向未复制文件。
-- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。Node 单测在仓库根执行 `node --test test/*.test.mjs`，在 `easydev/` 目录执行 `node --test ../test/*.test.mjs`；`node --test test/` 在 Node 24 会被当成模块入口而失败，CI 固定 Node 20。
+- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。Node 单测在仓库根执行 `node --test test/*.test.mjs`，在 `easydev/` 目录执行 `node --test ../test/*.test.mjs`；`node --test test/` 在 Node 24 会被当成模块入口而失败；reset 相关脚本要求 Node ≥ 22.12，CI 固定 Node 22。
 - 行为结论必须来自当前版本的实际执行记录；未执行的用例、隐藏验收和消融实验明确写“未运行”或“待验证”。
 
 EasyDev 的工程纪律参考了 Superpowers、Ponytail 和 Caveman 的相关思路，并按本项目的风险分流、授权边界和审查规则重新组织。运行时只依赖本目录 Skill 文件与宿主能力，不依赖这些外部技能包。
