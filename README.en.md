@@ -13,7 +13,7 @@ Easy Suite contains independent tools for file sharing, note-taking, Mac migrati
 | [EasyNote](easynote/) | `1.4.1` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.4.1` |
+| [EasyDev](easydev/) | `0.5.0` |
 <!-- versions:end -->
 
 ## Projects
@@ -68,9 +68,9 @@ See [EasyTest README](easytest/README.md) for details.
 
 ### [EasyDev](easydev/)
 
-EasyDev is an all-in-one coding skill for AI agents. It selects the necessary design, implementation, debugging, verification, and independent review steps. A separate JSON file configures developer, reviewer, and upgrade models; defaults inherit the host model.
+EasyDev is an all-in-one coding skill for AI agents. It selects the necessary design, implementation, debugging, verification, and independent review steps. An optional JSON file outside the installation directory can configure developer, reviewer, and upgrade models; without it, roles inherit the host model.
 
-Supports Codex, Claude Code, OpenCode, Pi, DeepSeek Harness, and Cursor. From the repository root, run `npx skills add ./easydev --skill easydev` and select CLI-supported harnesses. DeepSeek Harness can reuse the shared skill directory or use a manual copy; see the installation guide. Personal model configuration lives outside the installation directory.
+Supports Codex, Claude Code, OpenCode, Pi, DeepSeek Harness, Cursor, and Google Antigravity App/IDE or CLI. From the repository root, run `npx skills add ./easydev --skill easydev` and select CLI-supported harnesses. DeepSeek Harness can reuse the shared skill directory or use a manual copy; see the installation guide. Personal model configuration lives outside the installation directory.
 
 See [EasyDev installation and usage (Chinese)](easydev/README.md).
 

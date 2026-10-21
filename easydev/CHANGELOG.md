@@ -1,6 +1,55 @@
 # 更新日志
 
-完整历史记录。最近一次更新见 [README](README.md)。
+版本变更记录。最近一次更新见 [README](README.md)。
+
+## 未发布（2026-10-21）
+
+- 取消包内 `models.json`：默认行为恒为角色 `inherit` 且 `upgrades` 为空，已由内置规则覆盖，不再需要实体文件。
+- 模型配置优先级简化为两级：当前对话明确指定的文件 > 用户外部配置（`~/.config/easydev/models.json` 等）；两者均未提供时直接使用内置 `inherit` 默认值，不读取包内 JSON。默认结构模板移至 `examples/models.default.json`，仍不自动加载。
+- 运行时最低文件集缩减为 `SKILL.md` 与 `references/`；安装说明、校验命令、目录结构、评测脚本（agent_runner、SWE-bench）及行为用例同步更新。
+
+- 清理历史项目测评报告与审查记录，移除相关文档引用；保留测试用例、夹具、脚本及 CI。
+- 将当前固定测试材料从 `tests/fixtures/b30/` 迁移到语义化目录 `tests/cases/public-contract-callers/`，场景 ID 同步改为 `public-contract-callers`；runner 的 `--fixture-root` 改为 `--case-root`，默认目录改为 `tests/cases`。历史版本记录中的 B30 名称保留为当时事实。
+- 修复 SWE-bench 完整数据集与任务子集同时使用时的契约加载：`summarize` 按实验 manifest 与实际 run 的任务并集校验，事件归因按实际 run 校验；没有 manifest 时按实际 run 或全部数据集行回退，不再要求未纳入实验的任务存在 baseline。报告任务数取自实际结果，P2P 回归分母只包含官方任务列出的测试。
+- 独立验收补充异常对象及 `error.args` 的订单值泄露检查，并新增 `error-text-leak` 与 `other-user-error-text-leak` 两类伪修复回归；B16 不再让“其余检查项未发现缺陷/问题/异常”等局部结论否决有效发现。
+- SWE-bench 补丁采集改用任务运行前的可信 Git 配置，并禁用 Agent 可注入的 hooks、fsmonitor 与外部 Git 配置/attributes；补充 hook 和 clean filter 回归测试。
+
+- 在 `SKILL.md` 增加所有路径及子代理适用的测试硬约束：按验收行为定粒度，同语义输入优先参数化，禁止围绕实现细节机械拆测；保留独立失败诊断与必要边界覆盖。
+- 新增测试须证明相对现有覆盖的增量价值，并从需求、契约或独立参考取得预期结果；禁止镜像实现、自设需求或按数量凑测试，已有有效覆盖时不要求新增测试。
+- 独立检查必须在稳定快照上批量并行并收齐结果；串行仅限有具体依据的依赖、共享资源冲突、资源或工具限制，局部冲突不串行化全部检查。
+- 移除审查反馈“一次改一项并验证”的固定要求，同步 quick、实施计划、full 编排与 README，补充 B43–B45 行为回归定义；新增用例尚未执行真实 Agent 回归。
+
+## 0.5.0 更新说明（2026-10-20）
+
+### 离线归因与行为回归
+
+- 新增 `tests/experiments/swebench/analyze_events.py`：按运行统计 reviewer 实例、报告、P0–P3、reference 文件访问、usage、缓存率、耗时、声明路径与升级行为；子代理不可见 token 保持未知。
+- 新增 `tests/experiments/agent_runner/`：提供 B01、B02、B16、B30 的隔离准备、Codex CLI 适配、事件归因与场景验收入口；离线自测覆盖四个场景，真实模型运行尚未执行。
+- 新增 [四臂审查消融协议](tests/experiments/review-ablation/README.md)，明确无审查、同模型审查、同强度跨模型审查、弱开发加强审查四组，不包含伪造实验结果。
+- reviewer 只按 `completed` 状态和实际报告计数，重复快照去重；顶层与嵌套事件形状均校验，malformed/空事件流不记为有效调用。SWE-bench runner 只接受带 `result_protocol=2` 的完整结果，行为 runner 使用独立的 `behavior_result_protocol=behavior-v1`，两者历史结果仅作事件归因并单独统计历史 resolved。
+- SWE-bench 存储结果必须与真实 `events.jsonl` 的有效事件数、malformed 数和 `turn.completed` 交叉一致；分析器与 SWE-bench runner 同时校验任务、臂、重复目录身份及 F2P/P2P 契约，避免只信任可单独改写的 `result.json`。行为 runner 的结果计数直接取自当次事件解析，恢复语义不按 SWE-bench 结果协议处理。
+- 读取归因覆盖 `time`/`nice` 等包装命令、Python 脚本参数及 `git diff -p`/`--patch-with-stat` 等内容输出；B30 增加 `gold`、`runs/`、`result.json`、`agent.patch`、JUnit/pytest 产物等标记，区分摘要命令与真实内容读取，并记录失败命令中的访问尝试及 `cd`/`pushd`/`popd` 与嵌套 shell 的目录上下文。
+- 初始 `quick`、最终 `full` 与否定升级语句分别判定；B02/B30 接受真实的 quick 到 full 迁移，拒绝“不升级/禁止升级”等伪升级，`full-local`/`full-staged` 不冒充正式 `full`。B16 的具体发现块排除限制性标题、未覆盖和零发现伪装，同时允许“具体发现 + 未检查边界”。
+- 行为 runner 对安装后的运行时 Skill 做前后内容快照，Git 排除规则不能隐藏 Skill 篡改；`result.json` 改为同目录临时文件加原子替换，截断或非法结果会被忽略并允许重跑。
+- 结果协议校验 usage 非负整数、缓存数不超过输入数、测试状态枚举、F2P 与 `resolved` 语义、有限墙钟时间及任务/臂/重复目录身份；reviewer 完成只接受 `wait`/`close` 的 `completed` 状态，不接受 `spawn_agent` 伪造。
+- 超时清理轮询记录后代 PID，并按进程组、根进程和已记录后代分别发送 `SIGTERM`/`SIGKILL`；发信号前复核 PID 身份，覆盖调用 `setsid()` 的已跟踪后代并降低 PID 复用误杀风险。快速双 fork 并被 init 收养等逃逸仍需 OS 级沙箱兜底。
+- B16 对排除 `.git` 后的全工作区做前后指纹，除 Git diff 与索引外还能发现 `.pytest_cache`、`__pycache__` 等 ignored 路径变化。
+- B01/B02/B30 的验收子进程使用 `python -S -B`，阻止工作区 `sitecustomize.py` 与字节码产物劫持或污染只读检查；捕获路径之外的全工作区变化同样会使验收失败。
+
+### 运行文本与模型配置
+
+- 将 `normal`/`lite`/`ultra` 三档聊天表达完整内联到 `SKILL.md`，删除 `references/expression.md`，quick 不再为表达规则额外读取文件。
+- 将 clean quick 执行闭环内联到 `SKILL.md`；把脏文件、敏感快照、无 Git 与恢复规则拆到 `references/baseline-safety.md`，仅在需要时加载。
+- 删除 `shortcut:` 强制注释格式，改为在注释或文档中说明实际限制与升级条件；收尾不可计量的 token、耗时、模型或深度统一标未知。
+- 默认包内 `inherit` 配置不再强制读取 `models.md`/`setup.md`；用户指定模型、外部配置、配置错误或升级时才加载。`examples/` 永不自动加载；删除 Antigravity 专用模型示例，默认让所有 harness 继承宿主模型，跨角色分流由用户自行修改外部配置。
+- `full-local`/`full-staged` 仍作为消融后的候选方案记录，不进入当前运行规则；在真实行为、隐藏验收和成本证据满足采用门槛前，`full` 不拆分内部档位。
+- 最小安装的 rsync 示例排除可选的 `agents/` 与 `examples/`，与运行时最低文件集保持一致。
+
+### 验证与限制
+
+- `git diff --check`、两份剩余模型 JSON 解析、离线事件归因/协议自测与 runner 离线自测通过。
+- 行为 runner 只验证夹具准备、隔离和固定验收，不证明真实 Agent 会按 Skill 执行；真实 Agent、网络配置实测、文件系统硬隔离、隐藏验收和四臂消融均未执行。
+- 历史 pilot 使用 `0.3.10` 且禁止修改测试，不能用于证明 TDD、独立审查收益或当前版本效果。
 
 ## 0.4.1 更新说明（2026-10-20）
 
@@ -13,7 +62,7 @@
 - full 采用集成初审与定向复审，高风险公共契约按需提前检查；前置、阶段与最终审查共享预算，保留最终完整变更覆盖。
 - 明确人工介入条件与可回查的精简交接，按故障原因补上下文、取证或升级。
 - 将最小易读代码、精简注释、正向且完备的文档与人工接手纳入实现和审查标准。
-- 补充融合效果的四维对照协议与行为用例；执行范围与限制见 [流程融合验证记录](tests/results/fusion-2026-10-20.md)，效果收益仍待对照评测。
+- 补充融合效果的四维对照协议与行为用例；效果收益仍待对照评测。
 
 ## 0.3.10 更新说明（2026-10-19）
 
@@ -21,7 +70,6 @@
 
 - 缺失身份的错误文本现在按词边界扫描已知订单字段值，拦截把订单 ID、所有者或金额写进 `error`/`message`/`detail` 的实现（如 `"denied for o1 total 120"`）。
 - `run.sh` 新增 `text-leak` 负向变体，负向伪修复共九类；断言仍为 38 条。
-- 独立审查复核与残余风险见 [audit-fixes-0.3.7.md](tests/results/audit-fixes-0.3.7.md)。
 
 ## 0.3.9 更新说明（2026-10-19）
 
@@ -29,7 +77,6 @@
 
 - 0.3.8 推送后复测发现：缺失身份返回变形后的嵌套订单字段（如 `{"status": 200, "order": {"total": 121}}`）仍能通过。已改为限定缺失身份允许的结果：报错、`None`、空容器，或仅含 4xx `status` 与错误文本的字典。
 - `run.sh` 新增 `transformed-leak` 负向变体，负向伪修复共八类；断言仍为 38 条。
-- 复现、修复与验证追加到 [audit-fixes-0.3.7.md](tests/results/audit-fixes-0.3.7.md)。
 
 ## 0.3.8 更新说明（2026-10-19）
 
@@ -43,7 +90,6 @@
 
 - 明确运行时最低文件集为 `SKILL.md`、`references/`、`models.json`；`agents/` 与 `examples/` 为可选扩展。
 - `references/setup.md` 的 Antigravity 示例改用仓库绝对链接，并说明最小安装缺少 `examples/` 时回退 `models.json` 的 `inherit` 默认值。
-- GPT 审计四条发现的复现、修复与验证见 [audit-fixes-0.3.7.md](tests/results/audit-fixes-0.3.7.md)。
 
 ## 0.3.7 更新说明（2026-10-19）
 
@@ -53,7 +99,6 @@
 - “处理审查反馈”实施纪律迁入 `references/execution.md`，`orchestration.md` 改为引用，`SKILL.md` 加载表补充，覆盖委派 developer 与 quick/B19。
 - Antigravity 示例升级阶段审查模型保持 `pro`；`models.md`/`setup.md` 修正 `inherit`、模型 ID 与层级契约，并补充宿主指令约束。
 - 移除本地 `.pi/sandbox.json` 对 `~/.dsh/.env` 的写白名单（本地配置不随 Git 发布）。
-- Gemini 审查核实与修复记录见 [gemini-review-0.3.6.md](tests/results/gemini-review-0.3.6.md)。
 
 ## 0.3.6 更新说明（2026-10-19）
 
@@ -68,7 +113,6 @@
 - `tests/behavior.md` 新增“最小成本回归集合与记录”：定义每次升级的最低复跑集合 B01/B02/B09/B13/B16/B25q、与大版本升级集合的并集关系及去重项，并要求在 `tests/results/` 记录成本基线。
 - 发布前检查改为解析 `examples/` 下全部 `models*.json`；目录树补充新示例与本轮审计记录。
 - 清理 `references/orchestration.md` 中与“默认至多 4 轮正式审核”重复的旧句，预算规则不变。
-- 审计与修复记录见 [audit-fixes-0.3.6.md](tests/results/audit-fixes-0.3.6.md)。
 
 ## 0.3.5 更新说明（2026-10-19）
 
@@ -81,7 +125,6 @@
 
 - 历史 Opus 输出的仓库引用改为相对路径，临时产物链接改为普通文本，并声明路径整理不代表重新执行。
 - 明确 B30 CI 仅复验固定补丁，不调用 Agent；补充模型/宿主升级后的优先回归集合。持续 Agent 行为回归套件仍未建立。
-- 审计意见处理、验证与独立复审见 [处理记录](tests/results/audit-fixes-0.3.4.md)。
 
 ## 0.3.4 更新说明（2026-10-19）
 
@@ -96,7 +139,7 @@
 
 ### 发布
 
-- 版本 0.3.4；Gemini review 的逐条处理与独立审查见 [处理记录](tests/results/gemini-review-0.3.4.md)。
+- 版本 0.3.4。
 
 ## 0.3.3 更新说明（2026-10-19）
 
@@ -106,13 +149,9 @@
 - 新增独立验收脚本 `acceptance.py`：断言集不依赖被测仓库的 `check_orders.py`，可直接用于 Agent 任务评测；夹具 README 区分历史补丁复验、Agent 任务评测与独立验收三种用途。
 - 新增 `.github/workflows/easydev-fixture.yml`：仅在 `easydev/**` 变更时执行 B30 一键复验；真实 Agent 行为测试仍不进入 CI。
 
-### 实测
-
-- B33：真实 `full` 首轮独立审查零发现，直接交付、不追加轮次；另做一条 P3 延期建议的决策回放，保持 r=1/4。见 [B33 收敛记录](tests/results/b33-convergence-0.3.3.md)。
-
 ### 发布
 
-- 版本 0.3.3 与第四轮 ChatGPT review 的逐条处理见 [处理记录](tests/results/chatgpt-review-0.3.2.md)。
+- 版本 0.3.3。
 
 ## 0.3.2 更新说明（2026-10-19）
 
@@ -121,13 +160,9 @@
 - 更正 0.3.1 完整 `full` 实验的交付状态：工作流已执行、功能检查通过、独立审查完成，但身份来源可信性未验证，按完成边界记为“部分完成/待确认”，不新增规则。
 - B30 改为可复现夹具：`tests/fixtures/b30/` 提供初始仓库、完整补丁、审查原文与红绿运行脚本；验收条件收紧为必须适配仓库内调用方并验证原有调用路径，无法确认的外部调用方须记录兼容性风险，未经授权的破坏性变更不能仅靠披露风险过关。
 
-### 新增实测
-
-- B29a（纯非开发问题）、B29b（规则咨询）、B31（五文件机械改名仍为 `quick`）、B32（根因初始未知）实测通过，见 [0.3.2 路由与负向激活记录](tests/results/routing-0.3.2.md)。B33 仍未执行。
-
 ### 发布
 
-- 版本 0.3.2；第三轮 ChatGPT review 的逐条处理与未完成项见 [处理记录](tests/results/chatgpt-review-0.3.1.md)。
+- 版本 0.3.2。
 
 ## 0.3.1 更新说明（2026-10-19）
 
@@ -142,8 +177,6 @@
 - B29 拆分为 B29a（纯非开发问题，不读取 `references`）与 B29b（规则咨询可读取相关文档，但不进入开发流程）。
 - 新增 B30（公共契约与调用方检查）、B31（跨文件机械改动仍为 `quick`）、B32（根因初始未知）、B33（仅可延期 P3 不追加复审）。
 - 修复版本漂移：`versions.json` 对齐 0.3.1；`scripts/version.mjs` 为 EasyDev 增加 CHANGELOG 发布说明校验；新增版本一致性 CI。
-- 实测一条完整 `full` 开发—独立审查链路（r=1/4，无 P0–P2 缺陷，1 条延期 P3 与 1 条待验证风险）见 [0.3.1 全链路记录](tests/results/baseline-0.3.1.md)。
-- 第二轮 ChatGPT review 的逐条处理、未采纳项与剩余缺口见 [处理记录](tests/results/chatgpt-review-0.3.0.md)。
 
 ## 0.3.0 更新说明（2026-10-19）
 
@@ -155,15 +188,14 @@
 ### 其他改动
 
 - 合并重复定义：路径表、表达档位与 `full` 边界以 SKILL.md 及各模块为唯一来源，README 不再复制。
-- 新增 B29 负向激活用例与结果落盘要求；规则改动实测见 [0.3.0 行为基线](tests/results/baseline-0.3.0.md)。
+- 新增 B29 负向激活用例与结果落盘要求。
 
 ## 0.2.1 更新说明（2026-10-19）
 
 - 修正授权修复路由、技能控制边界、作者隔离与默认主代理开发规则。
 - 明确档位语法、任务级持续范围、统一修复计数和可恢复账本位置。
 - 拆分原生/fallback 工作区用例，补充针对性场景，撤回缺少证据的历史通过声明。
-- 补充作者争议的独立确认、quick/full 预算隔离、review 转修复的审核计数、敏感基线保护及 B27/B28 场景；验证范围见 [复审记录](tests/results/opus-followup.md)。
-- 逐条判断及本次验证证据见 [处理记录](tests/results/opus-review.md)。
+- 补充作者争议的独立确认、quick/full 预算隔离、review 转修复的审核计数、敏感基线保护及 B27/B28 场景。
 
 ## 0.2.0 更新说明（2026-10-19）
 

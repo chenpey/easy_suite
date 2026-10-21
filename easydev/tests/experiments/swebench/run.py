@@ -18,8 +18,28 @@ import sys
 import tarfile
 import tempfile
 import time
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
+
+EXPERIMENTS_ROOT = Path(__file__).resolve().parents[1]
+if str(EXPERIMENTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(EXPERIMENTS_ROOT))
+
+from process_control import (  # noqa: E402
+    terminate_process,
+    wait_for_process,
+)
+from protocol import (  # noqa: E402
+    RESULT_PROTOCOL,
+    TOKEN_FIELDS,
+    is_valid_event,
+    is_valid_invocation,
+    is_valid_result,
+    is_valid_stored_result,
+    load_task_contracts,
+)
 
 
 DEFAULT_TASKS = [
@@ -68,10 +88,29 @@ def run_command(
     timeout: int = 120,
     check: bool = False,
 ) -> subprocess.CompletedProcess:
+    command = list(args)
+    effective_env = env
+    if command and Path(command[0]).name == "git":
+        command[1:1] = [
+            "-c",
+            f"core.hooksPath={os.devnull}",
+            "-c",
+            "core.fsmonitor=false",
+        ]
+        effective_env = os.environ.copy() if env is None else dict(env)
+        effective_env["GIT_CONFIG_NOSYSTEM"] = "1"
+        effective_env["GIT_CONFIG_GLOBAL"] = os.devnull
+        effective_env["GIT_ATTR_SYSTEM"] = os.devnull
+        effective_env["GIT_ATTR_GLOBAL"] = os.devnull
+        effective_env.pop("GIT_CONFIG_COUNT", None)
+        effective_env.pop("GIT_CONFIG_PARAMETERS", None)
+        for key in list(effective_env):
+            if key.startswith(("GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")):
+                effective_env.pop(key, None)
     result = subprocess.run(
-        list(args),
+        command,
         cwd=str(cwd),
-        env=env,
+        env=effective_env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -87,11 +126,72 @@ def run_command(
     return result
 
 
+@contextmanager
+def _trusted_git_config(workspace: Path, content: bytes) -> Iterator[None]:
+    git_dir = workspace / ".git"
+    if git_dir.is_symlink() or not git_dir.is_dir():
+        raise RuntimeError("Git metadata directory changed before capture")
+
+    config_path = git_dir / "config"
+    backup_path = git_dir / f".runner-config-{uuid.uuid4().hex}"
+    had_config = os.path.lexists(config_path)
+    if had_config:
+        os.replace(config_path, backup_path)
+    temporary_path: Optional[Path] = None
+    try:
+        fd, name = tempfile.mkstemp(prefix=".runner-config-", dir=git_dir)
+        temporary_path = Path(name)
+        with os.fdopen(fd, "wb") as target:
+            target.write(content)
+            target.flush()
+            os.fsync(target.fileno())
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, config_path)
+        temporary_path = None
+        yield
+    finally:
+        try:
+            if os.path.lexists(config_path):
+                if config_path.is_dir() and not config_path.is_symlink():
+                    shutil.rmtree(config_path)
+                else:
+                    config_path.unlink()
+        finally:
+            if had_config and os.path.lexists(backup_path):
+                os.replace(backup_path, config_path)
+            if temporary_path is not None and os.path.lexists(temporary_path):
+                temporary_path.unlink()
+
+
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    temporary: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as target:
+            temporary = Path(target.name)
+            target.write(payload)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+
+
+def read_json_object(path: Path) -> Dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def sha256_file(path: Path) -> str:
@@ -186,7 +286,6 @@ def copy_easydev(skill_root: Path, workdir: Path) -> None:
     destination = workdir / ".agents" / "skills" / "easydev"
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(skill_root / "SKILL.md", destination / "SKILL.md")
-    shutil.copy2(skill_root / "models.json", destination / "models.json")
     shutil.copytree(
         skill_root / "references",
         destination / "references",
@@ -211,17 +310,36 @@ def parse_events(events_path: Path) -> Dict[str, Any]:
     tool_calls = 0
     final_message = ""
     events = 0
+    malformed_event_lines = 0
     easydev_mentions = 0
     turn_completed = False
+    if not events_path.exists():
+        return {
+            "events": 0,
+            "malformed_event_lines": 0,
+            "tool_calls": 0,
+            "final_message": "",
+            "usage": {},
+            "easydev_mentions": 0,
+            "turn_completed": False,
+        }
     for line in events_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
+            malformed_event_lines += 1
             continue
+        if not is_valid_event(event):
+            malformed_event_lines += 1
+            continue
+        event_type = event["type"]
+        item = event.get("item")
+        usage_value = event.get("usage")
         events += 1
-        event_type = event.get("type")
         if event_type == "item.completed":
-            item = event.get("item", {})
+            item = item or {}
             if item.get("type") in {
                 "command_execution",
                 "file_change",
@@ -237,17 +355,25 @@ def parse_events(events_path: Path) -> Dict[str, Any]:
             turn_completed = True
             usage = {
                 key: int(value)
-                for key, value in event.get("usage", {}).items()
-                if isinstance(value, int)
+                for key, value in (usage_value or {}).items()
+                if key in TOKEN_FIELDS
+                and isinstance(value, int)
+                and not isinstance(value, bool)
             }
     return {
         "events": events,
+        "malformed_event_lines": malformed_event_lines,
         "tool_calls": tool_calls,
         "final_message": final_message,
         "usage": usage,
         "easydev_mentions": easydev_mentions,
         "turn_completed": turn_completed,
     }
+
+
+def _terminate_process(process: subprocess.Popen, grace_seconds: float = 5.0) -> None:
+    """Compatibility wrapper for tests and callers of the old helper."""
+    terminate_process(process, grace_seconds=grace_seconds)
 
 
 def codex_env(workdir: Path, venv: Path, run_dir: Path) -> Dict[str, str]:
@@ -309,6 +435,8 @@ def run_agent(
         f'model_reasoning_effort="{reasoning_effort}"',
         "-c",
         f'openai_base_url="{base_url}"',
+        "-c",
+        "sandbox_workspace_write.network_access=false",
         "-o",
         str(last_message_path),
         prompt,
@@ -328,12 +456,12 @@ def run_agent(
                 stderr=stderr_file,
                 text=True,
                 errors="replace",
+                start_new_session=os.name == "posix",
             )
-            try:
-                returncode = process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
+            returncode, tracked = wait_for_process(process, timeout)
+            if returncode is None:
                 timed_out = True
-                process.kill()
+                terminate_process(process, tracked=tracked)
                 returncode = process.wait()
     except Exception as error:  # noqa: BLE001 - recorded as experiment data
         returncode = -1
@@ -373,24 +501,28 @@ def capture_patch(
     workdir: Path,
     base_sha: str,
     task: Dict[str, Any],
+    trusted_git_config: bytes,
 ) -> Dict[str, Any]:
-    run_command(["git", "add", "-A"], workdir, check=True)
-    changed = run_command(
-        ["git", "diff", "--cached", "--name-only", base_sha],
-        workdir,
-        timeout=60,
-        check=True,
-    ).stdout.splitlines()
-    excluded = sorted(
-        set(test_patch_files(task)).union(path for path in changed if is_test_path(path))
-    )
-    pathspec = ["."] + [f":(exclude){path}" for path in excluded]
-    result = run_command(
-        ["git", "diff", "--cached", "--binary", base_sha, "--", *pathspec],
-        workdir,
-        timeout=60,
-        check=True,
-    )
+    with _trusted_git_config(workdir, trusted_git_config):
+        run_command(["git", "add", "-A"], workdir, check=True)
+        changed = run_command(
+            ["git", "diff", "--cached", "--name-only", base_sha],
+            workdir,
+            timeout=60,
+            check=True,
+        ).stdout.splitlines()
+        excluded = sorted(
+            set(test_patch_files(task)).union(
+                path for path in changed if is_test_path(path)
+            )
+        )
+        pathspec = ["."] + [f":(exclude){path}" for path in excluded]
+        result = run_command(
+            ["git", "diff", "--cached", "--binary", base_sha, "--", *pathspec],
+            workdir,
+            timeout=60,
+            check=True,
+        )
     return {
         "patch": result.stdout,
         "excluded_test_paths": excluded,
@@ -402,10 +534,6 @@ def parse_test_output(output: str) -> Dict[str, str]:
     for match in TEST_SUMMARY_RE.finditer(output):
         statuses[match.group("nodeid")] = match.group("status")
     return statuses
-
-
-def is_valid_result(result: Dict[str, Any]) -> bool:
-    return result.get("agent_returncode") == 0 and bool(result.get("turn_completed"))
 
 
 def task_pythonpath(task_id: str, workdir: Path) -> str:
@@ -431,6 +559,17 @@ def test_scope(task: Dict[str, Any]) -> List[str]:
         if file_path not in files:
             scope.append(nodeid)
     return scope
+
+
+def baseline_eligible_p2p(
+    task: Dict[str, Any],
+    statuses: Dict[str, str],
+) -> List[str]:
+    return sorted(
+        nodeid
+        for nodeid in task["PASS_TO_PASS"]
+        if statuses.get(nodeid) in {"PASSED", "SKIPPED", "XFAIL"}
+    )
 
 
 def pytest_command(venv: Path, nodeids: Sequence[str], junit: Path) -> List[str]:
@@ -560,12 +699,7 @@ def baseline_status(
     (out_dir / "pytest.stdout.log").write_text(result.stdout, encoding="utf-8")
     (out_dir / "pytest.stderr.log").write_text(result.stderr, encoding="utf-8")
     statuses = parse_test_output(result.stdout)
-    f2p = set(task["FAIL_TO_PASS"])
-    eligible = sorted(
-        nodeid
-        for nodeid, status in statuses.items()
-        if nodeid not in f2p and status in {"PASSED", "SKIPPED", "XFAIL"}
-    )
+    eligible = baseline_eligible_p2p(task, statuses)
     excluded = [
         {"nodeid": nodeid, "status": statuses.get(nodeid, "MISSING")}
         for nodeid in task["PASS_TO_PASS"]
@@ -600,7 +734,7 @@ def calibrate(args: argparse.Namespace) -> None:
         "protocol": {
             "arms": DEFAULT_ARMS,
             "source_only": True,
-            "network_policy": "prohibited_by_prompt_not_os_enforced",
+            "network_policy": "codex_sandbox_requested_not_verified",
             "resolved": "all FAIL_TO_PASS pass and no eligible PASS_TO_PASS regressions",
         },
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -654,8 +788,16 @@ def run_one(
     run_dir = experiment / "runs" / task_id / arm / f"r{repeat}"
     result_path = run_dir / "result.json"
     if result_path.exists():
-        existing = json.loads(result_path.read_text(encoding="utf-8"))
-        if is_valid_result(existing):
+        existing = read_json_object(result_path)
+        if is_valid_stored_result(
+            existing,
+            result_path,
+            expected_task_id=task_id,
+            expected_arm=arm,
+            expected_repeat=repeat,
+            expected_f2p=task["FAIL_TO_PASS"],
+            expected_p2p=baseline["eligible_p2p"],
+        ):
             return existing
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -664,6 +806,7 @@ def run_one(
         shutil.rmtree(workdir)
     extract_template(experiment / "templates" / f"{task_id}.tar", workdir)
     base_sha = init_repo(workdir, task_id)
+    trusted_git_config = (workdir / ".git" / "config").read_bytes()
     if arm == "easydev":
         copy_easydev(args.skill_root, workdir)
 
@@ -679,18 +822,43 @@ def run_one(
         base_url=args.base_url,
         timeout=args.agent_timeout,
     )
-    captured = capture_patch(workdir, base_sha, task)
+    captured = capture_patch(workdir, base_sha, task, trusted_git_config)
     patch = captured["patch"]
     (run_dir / "agent.patch").write_text(patch, encoding="utf-8")
-    if agent["returncode"] != 0 or not agent.get("turn_completed"):
+    invocation = {
+        "result_protocol": RESULT_PROTOCOL,
+        "agent_returncode": agent["returncode"],
+        "turn_completed": agent.get("turn_completed", False),
+        "agent_timed_out": agent.get("timed_out", False),
+        "events": agent.get("events", 0),
+        "malformed_event_lines": agent.get("malformed_event_lines", 0),
+    }
+    if not is_valid_invocation(invocation):
+        reasons = []
+        if agent["returncode"] != 0:
+            reasons.append(f"returncode={agent['returncode']}")
+        if not agent.get("turn_completed"):
+            reasons.append("turn.completed is missing")
+        if agent.get("timed_out"):
+            reasons.append("agent timed out")
+        if agent.get("events", 0) <= 0:
+            reasons.append("event stream is empty")
+        if agent.get("malformed_event_lines", 0) != 0:
+            reasons.append(
+                f"malformed_event_lines={agent.get('malformed_event_lines')}"
+            )
+        reason = "; ".join(reasons) or "invalid agent invocation"
         invalid_result = {
             "task_id": task_id,
             "arm": arm,
             "repeat": repeat,
+            "result_protocol": RESULT_PROTOCOL,
             "agent_returncode": agent["returncode"],
             "agent_timed_out": agent["timed_out"],
             "turn_completed": agent.get("turn_completed", False),
             "events": agent.get("events", 0),
+            "malformed_event_lines": agent.get("malformed_event_lines", 0),
+            "reason": reason,
             "stderr_tail": (
                 (run_dir / "stderr.log").read_text(encoding="utf-8", errors="replace")[-4000:]
                 if (run_dir / "stderr.log").exists()
@@ -698,11 +866,7 @@ def run_one(
             ),
         }
         write_json(run_dir / "invalid-result.json", invalid_result)
-        raise RuntimeError(
-            f"agent invocation failed: returncode={agent['returncode']} "
-            f"turn_completed={agent.get('turn_completed', False)} "
-            f"events={agent.get('events', 0)}"
-        )
+        raise RuntimeError(f"agent invocation failed: {reason}")
     grade = grade_patch(
         template=experiment / "templates" / f"{task_id}.tar",
         task=task,
@@ -719,6 +883,7 @@ def run_one(
         "repo": task["repo"],
         "arm": arm,
         "repeat": repeat,
+        "result_protocol": RESULT_PROTOCOL,
         "resolved": bool(grade["f2p_pass"] and not grade["p2p_regressions"]),
         "f2p_pass": grade["f2p_pass"],
         "f2p_status": grade.get("f2p_status", {}),
@@ -730,6 +895,8 @@ def run_one(
         "agent_returncode": agent["returncode"],
         "agent_timed_out": agent["timed_out"],
         "turn_completed": agent.get("turn_completed", False),
+        "events": agent.get("events", 0),
+        "malformed_event_lines": agent.get("malformed_event_lines", 0),
         "wall_seconds": agent["wall_seconds"],
         "tool_calls": agent["tool_calls"],
         "usage": agent.get("usage", {}),
@@ -762,8 +929,16 @@ def run_experiment(args: argparse.Namespace) -> None:
                 result_path = run_dir / "result.json"
                 complete = False
                 if result_path.exists():
-                    existing = json.loads(result_path.read_text(encoding="utf-8"))
-                    complete = is_valid_result(existing)
+                    existing = read_json_object(result_path)
+                    complete = is_valid_stored_result(
+                        existing,
+                        result_path,
+                        expected_task_id=task_id,
+                        expected_arm=arm,
+                        expected_repeat=repeat,
+                        expected_f2p=tasks[task_id]["FAIL_TO_PASS"],
+                        expected_p2p=baselines[task_id]["eligible_p2p"],
+                    )
                 if not complete:
                     jobs.append((task_id, arm, repeat))
 
@@ -821,10 +996,58 @@ def run_experiment(args: argparse.Namespace) -> None:
 
 
 def read_results(experiment: Path) -> List[Dict[str, Any]]:
+    result_paths = sorted((experiment / "runs").glob("*/*/r*/result.json"))
+    run_task_ids = sorted(
+        {
+            path.parent.parent.parent.name
+            for path in result_paths
+            if re.fullmatch(r"r\d+", path.parent.name)
+        }
+    )
+    manifest_path = experiment / "manifest.json"
+    if manifest_path.exists():
+        manifest = read_json_object(manifest_path)
+        manifest_tasks = manifest.get("tasks")
+        if not (
+            isinstance(manifest_tasks, list)
+            and manifest_tasks
+            and all(isinstance(task_id, str) and task_id for task_id in manifest_tasks)
+            and len(manifest_tasks) == len(set(manifest_tasks))
+        ):
+            raise ValueError(f"invalid experiment manifest tasks: {manifest_path}")
+        task_ids: Optional[Sequence[str]] = sorted(
+            set(manifest_tasks).union(run_task_ids)
+        )
+    else:
+        # Without a manifest, known run tasks define the selected subset. If
+        # there are no runs yet, validate every dataset row instead of silently
+        # accepting missing or inconsistent baseline contracts.
+        task_ids = run_task_ids or None
+    task_contracts = load_task_contracts(experiment, task_ids=task_ids)
+    if task_contracts is None:
+        raise ValueError(f"experiment dataset is required: {experiment / 'dataset.json'}")
+
     results = []
-    for path in sorted((experiment / "runs").glob("*/*/r*/result.json")):
-        result = json.loads(path.read_text(encoding="utf-8"))
-        if is_valid_result(result):
+    for path in result_paths:
+        result = read_json_object(path)
+        repeat_match = re.fullmatch(r"r(\d+)", path.parent.name)
+        if repeat_match is None:
+            continue
+        expected_repeat = int(repeat_match.group(1))
+        task_id = path.parent.parent.parent.name
+        expected = task_contracts.get(task_id)
+        if expected is None:
+            continue
+        expected_f2p, expected_p2p = expected or (None, None)
+        if is_valid_stored_result(
+            result,
+            path,
+            expected_task_id=task_id,
+            expected_arm=path.parent.parent.name,
+            expected_repeat=expected_repeat,
+            expected_f2p=expected_f2p,
+            expected_p2p=expected_p2p,
+        ):
             results.append(result)
     return results
 
@@ -921,6 +1144,7 @@ def arm_summary(results: Sequence[Dict[str, Any]], arm: str) -> Dict[str, Any]:
 def markdown_report(experiment: Path, results: Sequence[Dict[str, Any]]) -> str:
     arms = sorted({result["arm"] for result in results})
     summaries = {arm: arm_summary(results, arm) for arm in arms}
+    task_count = len({result["task_id"] for result in results})
     lines = [
         "# SWE-bench Lite 小样本实验报告",
         "",
@@ -932,15 +1156,18 @@ def markdown_report(experiment: Path, results: Sequence[Dict[str, Any]]) -> str:
     manifest_path = experiment / "manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_task_count = len(manifest.get("tasks", []))
         lines.extend(
             [
                 f"- 模型：`{manifest.get('model')}`",
                 f"- 推理深度：`{manifest.get('reasoning_effort')}`",
-                f"- 任务数：{len(manifest.get('tasks', []))}",
+                f"- 任务数：{task_count}",
                 f"- 重复次数：{max((result['repeat'] for result in results), default=0)}",
-                "",
             ]
         )
+        if manifest_task_count != task_count:
+            lines.append(f"- 校准清单：{manifest_task_count} 个任务")
+        lines.append("")
     lines.extend(
         [
             "## 判定与统计",
@@ -949,8 +1176,8 @@ def markdown_report(experiment: Path, results: Sequence[Dict[str, Any]]) -> str:
             "PASS_TO_PASS 无回归。",
             "- 同一任务的重复 run 先取解决率，再做任务级配对比较，避免把重复运行"
             "误当作独立任务。",
-            "- 配对区间使用 10,000 次任务级 bootstrap；5 个任务下区间很粗，只用于"
-            "显示不确定性，不作显著性声明。",
+            "- 配对区间使用 10,000 次任务级 bootstrap；"
+            f"{task_count} 个任务下区间很粗，只用于显示不确定性，不作显著性声明。",
             "",
             "## 主结果",
             "",
@@ -1074,7 +1301,8 @@ def markdown_report(experiment: Path, results: Sequence[Dict[str, Any]]) -> str:
             "",
             "## 解释边界",
             "",
-            "- 本实验只覆盖 5 个 SWE-bench Lite 任务，不足以支持总体解决率结论。",
+            f"- 本实验只覆盖 {task_count} 个 SWE-bench Lite 任务，"
+            "不足以支持总体解决率结论。",
             "- `PASS_TO_PASS` 按本机基线筛选；环境不可用测试已排除，不能与官方 Docker 分数直接比较。",
             "- 单一模型、单一宿主，不代表其他模型或 harness。",
             "- token 只报告现有事件中的 usage，不包含供应商侧隐藏计费或未暴露缓存成本。",

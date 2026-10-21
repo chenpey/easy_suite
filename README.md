@@ -13,7 +13,7 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 | [EasyNote](easynote/) | `1.4.1` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.4.1` |
+| [EasyDev](easydev/) | `0.5.0` |
 <!-- versions:end -->
 
 ## 项目目录
@@ -68,9 +68,9 @@ EasyTest 是一个面向接口和业务流程测试的 Python 工具。测试人
 
 ### [EasyDev](easydev/)
 
-EasyDev 是面向 AI 编码代理的一体化 Skill，按任务风险组织设计、实现、排障、验证和独立审查。模型分配通过独立 JSON 文件自定义，默认继承宿主模型。
+EasyDev 是面向 AI 编码代理的一体化 Skill，按任务风险组织设计、实现、排障、验证和独立审查。模型分配可通过安装目录外的可选 JSON 文件自定义，未配置时继承宿主模型。
 
-支持 Codex、Claude Code、OpenCode、Pi、DeepSeek Harness、Cursor。在仓库根目录运行 `npx skills add ./easydev --skill easydev`，选择 CLI 支持的 harness；DeepSeek Harness 可复用共享技能目录或手动复制，详见安装说明。个人模型配置独立于安装目录保存。
+支持 Codex、Claude Code、OpenCode、Pi、DeepSeek Harness、Cursor、Google Antigravity App/IDE 与 CLI。在仓库根目录运行 `npx skills add ./easydev --skill easydev`，选择 CLI 支持的 harness；DeepSeek Harness 可复用共享技能目录或手动复制，详见安装说明。个人模型配置独立于安装目录保存。
 
 详细说明见 [EasyDev 安装与使用](easydev/README.md)。
 

@@ -63,11 +63,15 @@ def expect(label, fn, expected):
         failures.append(f"{label}: expected {expected!r}, got {actual!r}")
 
 
-def expect_raises(label, fn, exc_type):
+def expect_raises(label, fn, exc_type, *, no_order=False):
     count_check()
     try:
         actual = fn()
-    except exc_type:
+    except exc_type as error:
+        if no_order and (
+            contains_order(str(error)) or contains_order(error.args)
+        ):
+            failures.append(f"{label}: error leaked order data {error!r}")
         return
     except Exception as error:  # noqa: BLE001 - 验收脚本
         failures.append(f"{label}: expected {exc_type.__name__}, got {type(error).__name__}: {error}")
@@ -123,7 +127,9 @@ def expect_no_order(label, fn):
     count_check()
     try:
         actual = fn()
-    except Exception:  # noqa: BLE001 - 验收脚本
+    except Exception as error:  # noqa: BLE001 - 验收脚本
+        if contains_order(str(error)) or contains_order(error.args):
+            failures.append(f"{label}: error leaked order data {error!r}")
         return
     # 先限定结果形状，避免变形后的订单字段藏在任意嵌套容器里。
     if not is_empty_result(actual):
@@ -135,13 +141,28 @@ def expect_no_order(label, fn):
 
 expect("owner reads own order", lambda: get_order("o1", "u1"), order)
 expect("second owner reads own order", lambda: get_order("o2", "u2"), order2)
-expect_raises("other user denied", lambda: get_order("o1", "u2"), PermissionError)
-expect_raises("first user denied on second order", lambda: get_order("o2", "u1"), PermissionError)
+expect_raises(
+    "other user denied",
+    lambda: get_order("o1", "u2"),
+    PermissionError,
+    no_order=True,
+)
+expect_raises(
+    "first user denied on second order",
+    lambda: get_order("o2", "u1"),
+    PermissionError,
+    no_order=True,
+)
 expect("missing order returns None", lambda: get_order("nope", "u1"), None)
 expect_no_order("missing identity does not read order", lambda: get_order("o1"))
 expect_no_order("none identity does not read order", lambda: get_order("o1", None))
 expect_no_order("empty identity does not read order", lambda: get_order("o1", ""))
-expect_raises("admin user_id is not owner in get_order", lambda: get_order("o1", "admin"), PermissionError)
+expect_raises(
+    "admin user_id is not owner in get_order",
+    lambda: get_order("o1", "admin"),
+    PermissionError,
+    no_order=True,
+)
 expect("owner 200", lambda: handle_show_order({"user_id": "u1"}, "o1"), {"status": 200, "order": order})
 expect("second owner 200", lambda: handle_show_order({"user_id": "u2"}, "o2"), {"status": 200, "order": order2})
 expect("other user 403", lambda: handle_show_order({"user_id": "u2"}, "o1"), {"status": 403})
@@ -153,13 +174,38 @@ expect_no_order("none request identity does not read order", lambda: handle_show
 expect_no_order("empty request identity does not read order", lambda: handle_show_order({"user_id": ""}, "o1"))
 expect("admin export works", lambda: export_order("o1", {"role": "admin"}), order)
 expect("admin exports another user's order", lambda: export_order("o2", {"role": "admin"}), order2)
-expect_raises("missing role export denied", lambda: export_order("o1", {}), PermissionError)
-expect_raises("none role export denied", lambda: export_order("o1", {"role": None}), PermissionError)
-expect_raises("non-admin export denied", lambda: export_order("o1", {"role": "viewer"}), PermissionError)
+expect_raises(
+    "missing role export denied",
+    lambda: export_order("o1", {}),
+    PermissionError,
+    no_order=True,
+)
+expect_raises(
+    "none role export denied",
+    lambda: export_order("o1", {"role": None}),
+    PermissionError,
+    no_order=True,
+)
+expect_raises(
+    "non-admin export denied",
+    lambda: export_order("o1", {"role": "viewer"}),
+    PermissionError,
+    no_order=True,
+)
 
 expect("dynamic owner reads own order", lambda: get_order(dynamic_order["id"], dynamic_order["owner_id"]), dynamic_order)
-expect_raises("dynamic other user denied", lambda: get_order(dynamic_order["id"], other_user), PermissionError)
-expect_raises("fixed user denied on dynamic order", lambda: get_order(dynamic_order["id"], "u1"), PermissionError)
+expect_raises(
+    "dynamic other user denied",
+    lambda: get_order(dynamic_order["id"], other_user),
+    PermissionError,
+    no_order=True,
+)
+expect_raises(
+    "fixed user denied on dynamic order",
+    lambda: get_order(dynamic_order["id"], "u1"),
+    PermissionError,
+    no_order=True,
+)
 expect("dynamic owner 200", lambda: handle_show_order({"user_id": dynamic_order["owner_id"]}, dynamic_order["id"]), {"status": 200, "order": dynamic_order})
 expect("dynamic other user 403", lambda: handle_show_order({"user_id": other_user}, dynamic_order["id"]), {"status": 403})
 expect("dynamic admin export works", lambda: export_order(dynamic_order["id"], {"role": "admin"}), dynamic_order)
@@ -167,7 +213,12 @@ expect("dynamic admin export works", lambda: export_order(dynamic_order["id"], {
 previous_owner = dynamic_order["owner_id"]
 dynamic_order["owner_id"] = other_user
 known_order_values.add(other_user)
-expect_raises("previous owner denied after ownership change", lambda: get_order(dynamic_order["id"], previous_owner), PermissionError)
+expect_raises(
+    "previous owner denied after ownership change",
+    lambda: get_order(dynamic_order["id"], previous_owner),
+    PermissionError,
+    no_order=True,
+)
 expect("new owner reads after ownership change", lambda: get_order(dynamic_order["id"], other_user), dynamic_order)
 expect("new owner 200 after ownership change", lambda: handle_show_order({"user_id": other_user}, dynamic_order["id"]), {"status": 200, "order": dynamic_order})
 
@@ -182,6 +233,7 @@ for fixed_order, old_owner in ((order, "u1"), (order2, "u2")):
         f"{fixed_order['id']} previous owner denied after ownership change",
         lambda order_id=fixed_order["id"], user_id=old_owner: get_order(order_id, user_id),
         PermissionError,
+        no_order=True,
     )
     expect(
         f"{fixed_order['id']} new owner reads after ownership change",

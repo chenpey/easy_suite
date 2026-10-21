@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  b30:
+  public-contract-callers:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash easydev/tests/fixtures/b30/run.sh
+      - run: bash easydev/tests/cases/public-contract-callers/run.sh

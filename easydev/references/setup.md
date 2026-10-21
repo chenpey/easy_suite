@@ -18,8 +18,8 @@
 
 ## Google Antigravity（AGY）
 
-- 安装位置按 [官方 Skills 文档](https://antigravity.google/docs/skills)：项目级为 `.agents/skills/easydev/`；App/IDE 用户级为 `~/.gemini/config/skills/easydev/`，CLI 用户级为 `~/.gemini/antigravity-cli/skills/easydev/`。保持 `SKILL.md` 与 `references/` 等运行时文件的相对位置；安装步骤及 Skills CLI 旧目录映射见 [README](https://github.com/chenpey/easy_suite/blob/main/easydev/README.md#各-harness-的安装位置)。
+- 安装位置按 [官方 Skills 文档](https://antigravity.google/docs/skills)：项目级为 `.agents/skills/easydev/`；App/IDE 用户级为 `~/.gemini/config/skills/easydev/`，CLI 用户级为 `~/.gemini/antigravity-cli/skills/easydev/`。保持 `SKILL.md` 与 `references/` 等运行时文件的相对位置；安装步骤及 Skills CLI 目录映射见 [README](https://github.com/chenpey/easy_suite/blob/main/easydev/README.md#常见目录)。
 - 先确认宿主已发现技能，App/CLI 可通过 `/easydev` 显式调用。目录存在或文档兼容不代表当前宿主已加载、激活或通过行为回归。
 - 原生委派按 [官方 Subagents 文档](https://antigravity.google/docs/subagents)：使用当前工具实际暴露的 `invoke_subagent`；自定义代理的 `subagent` 必须允许调用。将开发/审查角色映射为独立实例，审查仅给必要材料与只读权限，不因工具同名假定各版本参数相同。
-- `models.json` 的模型 ID、推理深度及工作区隔离选项须逐项核对宿主工具能力；不能把模型层级当成任意供应商 ID，或静默忽略不支持的设置。无法满足时沿用本文件的受阻规则，不虚称独立审查通过。
-- 以降低 `full` 成本为目标（效果待 [成本基线](https://github.com/chenpey/easy_suite/blob/main/easydev/tests/behavior.md#最小成本回归集合与记录) 验证），可复制 [Antigravity 模型示例](https://github.com/chenpey/easy_suite/blob/main/easydev/examples/models.antigravity.json) 到用户配置：开发用 `flash`，审查用 `pro`，升级阶段只提升开发到 `pro`，审查保持 `pro`。该示例是可选扩展；最小安装未包含 `examples/` 时，按 [models.json](../models.json) 的 `inherit` 默认值运行，或从上述链接另行获取。示例使用 `invoke_subagent` 当前暴露的层级（`inherit/flash_lite/flash/pro`）；`inherit` 是该接口的合法枚举值，但配置文件中的层级覆盖仍受宿主工具指令约束，若工具要求默认 `inherit` 或对话未显式要求切换，以宿主指令为准。工具接口若变化需重新核对。当前接口没有推理深度参数，`reasoning_effort` 保持 `inherit`，不得声称已按深度生效；以工具返回的实际模型为准，未返回则标未知。
+- 配置中的模型 ID、推理深度及工作区隔离选项须逐项核对宿主工具能力；不能把模型层级当成任意供应商 ID，或静默忽略不支持的设置。无法满足时沿用本文件的受阻规则，不虚称独立审查通过。
+- Antigravity 默认使用内置 `inherit` 默认值，不附带专用模型示例。若用户主动需要按角色选择模型，可在 Skill 安装目录外创建或修改自己的 `easydev/models.json`；模型层级、推理深度及覆盖是否生效须以当前 `invoke_subagent` 工具接口和宿主指令为准，未回传实际模型时标为未知。
