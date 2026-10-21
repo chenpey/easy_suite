@@ -1,136 +1,268 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  loadTarget,
-  parseArguments,
-  parseD1Rows,
-  projects,
-  resetLocal,
-  resetRemote,
-} from "../scripts/reset.mjs";
+import { fileURLToPath } from "node:url";
+import { projects, resetRemote } from "../scripts/reset.mjs";
 
-const root = new URL("..", import.meta.url).pathname;
+// The CLI needs an interactive terminal before it will touch data. Tests that
+// run the real command provide one through this preload instead of a pty;
+// everything else (arguments, config loading, file changes, output) stays real.
+const repository = fileURLToPath(new URL("..", import.meta.url));
+const temporaryDirectories = [];
 const accountId = "a".repeat(32);
 const databaseId = "12345678-1234-4234-8234-123456789abc";
-const temporaryDirectories = [];
+const credentials = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CF_API_TOKEN", "CF_API_KEY"];
+
+const terminalStub = `for (const stream of [process.stdin, process.stdout, process.stderr]) {
+  try { Object.defineProperty(stream, "isTTY", { value: true, configurable: true }); } catch {}
+}
+`;
 
 after(async () => {
   await Promise.all(temporaryDirectories.map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-test("reset command accepts only an explicit project and target", () => {
-  assert.deepEqual(parseArguments(["easynote", "--local"]), { project: "easynote", mode: "local" });
-  assert.deepEqual(parseArguments(["easydrop", "--remote"]), { project: "easydrop", mode: "remote" });
-  assert.deepEqual(parseArguments(["--help"]), { help: true });
-  assert.throws(() => parseArguments(["easynote"]), /Usage:/);
-  assert.throws(() => parseArguments(["all", "--remote"]), /Usage:/);
-  const help = spawnSync("/bin/bash", [join(root, "reset.sh"), "--help"], { encoding: "utf8" });
-  assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /reset\.sh <easynote\|easydrop>/);
-});
-
-test("deployment targets are read from the selected project only", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "easy-reset-target-"));
+async function createProject() {
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "easy-reset-")));
   temporaryDirectories.push(directory);
-  await mkdir(join(directory, "easynote"));
-  await writeFile(join(directory, "easynote", "wrangler.deploy.json"), JSON.stringify({
+  await mkdir(join(directory, "scripts"));
+  await cp(join(repository, "reset.sh"), join(directory, "reset.sh"));
+  await cp(join(repository, "scripts", "reset.mjs"), join(directory, "scripts", "reset.mjs"));
+  await writeFile(join(directory, "terminal.cjs"), terminalStub);
+  await mkdir(join(directory, "easynote", ".wrangler", "state"), { recursive: true });
+  await writeFile(join(directory, "easynote", ".wrangler", "state", "data"), "local");
+  await writeFile(join(directory, "easynote", ".dev.vars"), "INITIAL_OWNER='test'\n");
+  return directory;
+}
+
+function runReset(directory, args, { input = "", terminal = true, env = {} } = {}) {
+  const childEnvironment = { ...process.env };
+  for (const name of credentials) delete childEnvironment[name];
+  Object.assign(childEnvironment, env);
+  if (terminal) childEnvironment.NODE_OPTIONS = `--require ${join(directory, "terminal.cjs")}`;
+  else delete childEnvironment.NODE_OPTIONS;
+  const result = spawnSync("bash", ["reset.sh", ...args], {
+    cwd: directory,
+    env: childEnvironment,
+    input,
+    encoding: "utf8",
+    timeout: 30000,
+  });
+  assert.equal(result.error, undefined, `reset.sh did not finish: ${result.error}`);
+  return result;
+}
+
+function cloudflareTarget(projectName, overrides = {}) {
+  const project = projects[projectName];
+  return {
+    ...project,
+    accountId,
+    workerName: `${projectName}-worker`,
+    databaseName: `${projectName}-db`,
+    bucketName: `${projectName}-data`,
+    configPath: join(tmpdir(), `${projectName}-wrangler.deploy.json`),
+    ...overrides,
+  };
+}
+
+function deployConfig(overrides = {}) {
+  return {
     name: "note-worker",
     account_id: accountId,
     d1_databases: [{ binding: "DB", database_name: "note-db", database_id: databaseId }],
     r2_buckets: [{ binding: "IMAGES", bucket_name: "note-images" }],
-  }));
-  const target = await loadTarget("easynote", directory);
-  assert.equal(target.workerName, "note-worker");
-  assert.equal(target.databaseName, "note-db");
-  assert.equal(target.bucketName, "note-images");
-  assert.equal((await stat(target.configPath)).isFile(), true);
-});
-
-test("local reset removes Wrangler state and preserves account configuration", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "easy-reset-local-"));
-  temporaryDirectories.push(directory);
-  await mkdir(join(directory, ".wrangler", "state"), { recursive: true });
-  await writeFile(join(directory, ".wrangler", "state", "data"), "local");
-  await writeFile(join(directory, ".dev.vars"), "INITIAL_OWNER='test'\n");
-  const output = [];
-  await resetLocal({
-    ...projects.easynote,
-    directory,
-  }, { log: (line) => output.push(line) });
-  await assert.rejects(stat(join(directory, ".wrangler", "state")), { code: "ENOENT" });
-  assert.equal(await readFile(join(directory, ".dev.vars"), "utf8"), "INITIAL_OWNER='test'\n");
-  assert.match(output.join("\n"), /Clear site data/);
-});
-
-test("remote reset deletes tracked objects, recreates R2 and reapplies the D1 baseline", async () => {
-  const target = {
-    ...projects.easynote,
-    accountId,
-    workerName: "note-worker",
-    databaseName: "note-db",
-    bucketName: "note-images",
-    configPath: "/tmp/wrangler.deploy.json",
+    ...overrides,
   };
-  const first = "11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222";
-  const second = "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444";
-  const commands = [];
+}
+
+test("help prints the supported reset commands", async () => {
+  const directory = await createProject();
+  const result = runReset(directory, ["--help"], { terminal: false });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /bash reset\.sh <easynote\|easydrop> --local/);
+  assert.match(result.stdout, /--remote/);
+});
+
+test("invalid arguments print usage and exit non-zero", async () => {
+  const directory = await createProject();
+  const cases = [[], ["easynote"], ["all", "--remote"], ["easynote", "--cloud"]];
+
+  for (const args of cases) {
+    const label = args.join(" ") || "(no arguments)";
+    const result = runReset(directory, args, { terminal: false });
+    assert.equal(result.status, 1, label);
+    assert.match(result.stderr, /Usage:/, label);
+  }
+});
+
+test("a terminal is required before any reset starts", async () => {
+  const directory = await createProject();
+  const result = runReset(directory, ["easynote", "--local"], {
+    terminal: false,
+    input: "reset easynote local\n",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /An interactive terminal is required/);
+  assert.equal((await stat(join(directory, "easynote", ".wrangler", "state"))).isDirectory(), true);
+});
+
+test("local reset removes Wrangler state and keeps account configuration", async () => {
+  const directory = await createProject();
+  const result = runReset(directory, ["easynote", "--local"], {
+    input: "reset easynote local\n",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  await assert.rejects(stat(join(directory, "easynote", ".wrangler", "state")), { code: "ENOENT" });
+  assert.equal(await readFile(join(directory, "easynote", ".dev.vars"), "utf8"), "INITIAL_OWNER='test'\n");
+  assert.match(result.stdout, /EasyNote local D1\/R2 state removed\./);
+  assert.match(result.stdout, /Clear site data for http:\/\/127\.0\.0\.1:8791/);
+});
+
+test("local reset stops when the confirmation phrase is wrong", async () => {
+  const directory = await createProject();
+  const result = runReset(directory, ["easynote", "--local"], {
+    input: "reset easynote remote\n",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Reset cancelled\./);
+  assert.equal((await stat(join(directory, "easynote", ".wrangler", "state"))).isDirectory(), true);
+});
+
+test("remote reset explains a missing deployment target", async () => {
+  const directory = await createProject();
+  const result = runReset(directory, ["easynote", "--remote"]);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /wrangler\.deploy\.json is missing/);
+});
+
+test("remote reset rejects unsafe deployment settings", async () => {
+  const directory = await createProject();
+  const configPath = join(directory, "easynote", "wrangler.deploy.json");
+  const cases = [
+    { config: deployConfig({ account_id: "short" }), message: /Invalid Cloudflare account ID/ },
+    {
+      config: deployConfig({ d1_databases: [{ binding: "DB", database_name: "note-db", database_id: "not-a-uuid" }] }),
+      message: /Invalid D1 database UUID/,
+    },
+    { config: deployConfig({ name: "x" }), message: /Invalid Worker name/ },
+  ];
+
+  for (const { config, message } of cases) {
+    await writeFile(configPath, JSON.stringify(config));
+    const result = runReset(directory, ["easynote", "--remote"]);
+    assert.equal(result.status, 1, JSON.stringify(config));
+    assert.match(result.stderr, message);
+  }
+});
+
+test("remote reset refuses credentials from the environment", async () => {
+  const directory = await createProject();
+  await writeFile(
+    join(directory, "easynote", "wrangler.deploy.json"),
+    JSON.stringify(deployConfig()),
+  );
+
+  const result = runReset(directory, ["easynote", "--remote"], {
+    env: { CLOUDFLARE_API_TOKEN: "secret" },
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Environment credentials are not accepted/);
+});
+
+// Destroying real Cloudflare resources cannot be observed end to end in a test.
+// These cases mock only the external systems (wrangler and the Cloudflare API)
+// and assert the visible effects: which resources are deleted, in what order,
+// and what the command reports.
+test("remote reset deletes tracked objects, recreates R2 and reapplies the D1 baseline", async () => {
+  const target = cloudflareTarget("easynote");
+  const keys = [
+    "11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444",
+  ];
+  const wranglerCalls = [];
   const requests = [];
   const output = [];
-  const run = (args, options) => {
-    commands.push({ args, options });
-    const sql = args[args.indexOf("--command") + 1];
-    if (sql?.includes("sqlite_master")) return JSON.stringify([{ success: true, results: [{ name: "images" }] }]);
+  const run = (args) => {
+    wranglerCalls.push(args);
+    const sql = args.includes("--command") ? args[args.indexOf("--command") + 1] : "";
+    if (sql.includes("sqlite_master")) {
+      return JSON.stringify([{ success: true, results: [{ name: target.objectTable }] }]);
+    }
     if (sql === target.objectQuery) {
-      return JSON.stringify([{ success: true, results: [{ object_key: first }, { object_key: second }] }]);
+      return JSON.stringify([{ success: true, results: keys.map((object_key) => ({ object_key })) }]);
     }
     return "";
   };
-  const request = async (method, path, body, options) => {
-    requests.push({ method, path, body, options });
+  const request = async (method, path, body) => {
+    requests.push({ method, path, body });
     return {};
   };
+
   await resetRemote(target, "secret", { run, request, log: (line) => output.push(line) });
-  assert.deepEqual(commands.filter(({ args }) => args[0] === "r2" && args[1] === "object")
-    .map(({ args }) => args[3]), [`${target.bucketName}/${first}`, `${target.bucketName}/${second}`]);
-  assert.ok(commands.some(({ args }) => args[0] === "d1" && args[1] === "execute" && args.includes(target.dropSql)));
-  assert.ok(commands.some(({ args }) => args.slice(0, 3).join(" ") === "d1 migrations apply"));
-  assert.deepEqual(requests.map(({ method, path }) => [method, path]), [
-    ["DELETE", `/accounts/${accountId}/workers/scripts/note-worker`],
-    ["DELETE", `/accounts/${accountId}/r2/buckets/note-images`],
-    ["POST", `/accounts/${accountId}/r2/buckets`],
-  ]);
+
+  assert.deepEqual(
+    wranglerCalls.filter((args) => args[0] === "r2" && args[1] === "object").map((args) => args[3]),
+    keys.map((key) => `${target.bucketName}/${key}`),
+  );
+  assert.ok(wranglerCalls.some((args) => args[0] === "d1" && args[1] === "execute" && args.includes(target.dropSql)));
+  assert.ok(wranglerCalls.some((args) => args.slice(0, 3).join(" ") === "d1 migrations apply"));
+  assert.deepEqual(
+    requests.map(({ method, path }) => `${method} ${path}`),
+    [
+      `DELETE /accounts/${accountId}/workers/scripts/${target.workerName}`,
+      `DELETE /accounts/${accountId}/r2/buckets/${target.bucketName}`,
+      `POST /accounts/${accountId}/r2/buckets`,
+    ],
+  );
+  assert.match(output.join("\n"), /Tracked R2 objects to delete: 2/);
   assert.match(output.join("\n"), /Deleted R2 objects: 2\/2/);
+  assert.match(output.join("\n"), /were reset\./);
 });
 
-test("remote reset rejects unexpected object keys before deleting cloud resources", async () => {
-  const target = {
-    ...projects.easydrop,
-    accountId,
-    workerName: "drop-worker",
-    databaseName: "drop-db",
-    bucketName: "drop-files",
-    configPath: "/tmp/wrangler.deploy.json",
-  };
-  let requested = false;
+test("remote reset stops before deleting when D1 reports an unexpected object key", async () => {
+  const target = cloudflareTarget("easydrop");
+  let requests = 0;
   const run = (args) => {
-    const sql = args[args.indexOf("--command") + 1];
-    if (sql?.includes("sqlite_master")) return JSON.stringify([{ success: true, results: [{ name: "items" }] }]);
-    if (sql === target.objectQuery) return JSON.stringify([{ success: true, results: [{ object_key: "../other" }] }]);
+    const sql = args.includes("--command") ? args[args.indexOf("--command") + 1] : "";
+    if (sql.includes("sqlite_master")) {
+      return JSON.stringify([{ success: true, results: [{ name: target.objectTable }] }]);
+    }
+    if (sql === target.objectQuery) {
+      return JSON.stringify([{ success: true, results: [{ object_key: "../other" }] }]);
+    }
     return "";
   };
-  await assert.rejects(resetRemote(target, "secret", {
-    run,
-    request: async () => { requested = true; },
-  }), /unexpected R2 object key/);
-  assert.equal(requested, false);
+
+  await assert.rejects(
+    resetRemote(target, "secret", { run, request: async () => { requests += 1; }, log: () => {} }),
+    /unexpected R2 object key/,
+  );
+  assert.equal(requests, 0);
 });
 
-test("D1 JSON parsing fails closed", () => {
-  assert.deepEqual(parseD1Rows('[{"success":true,"results":[{"name":"items"}]}]'), [{ name: "items" }]);
-  assert.throws(() => parseD1Rows("not json"), /invalid JSON/);
-  assert.throws(() => parseD1Rows('[{"success":false,"results":[]}]'), /invalid D1 result/);
+test("remote reset stops when wrangler returns unusable D1 output", async () => {
+  const target = cloudflareTarget("easynote");
+  const replies = [
+    { output: "not json", message: /invalid JSON/ },
+    { output: JSON.stringify([{ success: false, results: [] }]), message: /invalid D1 result/ },
+  ];
+
+  for (const { output, message } of replies) {
+    let requests = 0;
+    const run = () => output;
+    await assert.rejects(
+      resetRemote(target, "secret", { run, request: async () => { requests += 1; }, log: () => {} }),
+      message,
+    );
+    assert.equal(requests, 0, message.source);
+  }
 });
