@@ -20,7 +20,7 @@ resolved = 全部 FAIL_TO_PASS 通过
 3. 每个任务的 Python 虚拟环境目录 `<instance_id>`。
 4. 可执行的 Codex CLI 与该 CLI 可用的 `~/.codex/auth.json`。
 
-模板可以包含指向包内相对路径的软链与硬链，提取时会保留。绝对路径链接、词法上或解析后逃出解包目标目录的链接（含 `..` 逃逸、经由已有包内软链的逃逸、硬链指向归档外路径）会让提取中止；归档成员按顺序逐个校验后立即提取，先前成员建立的链接已落盘，后续成员无法绕过。只读目录（`0555`/`0500`）在全部成员写入后才应用权限，因此不会挡住目录内的文件。
+模板可以包含指向包内相对路径的软链与硬链，提取时会保留。绝对路径链接、词法上或解析后逃出解包目标目录的链接（含 `..` 逃逸、经由已有包内软链的逃逸、硬链指向归档外路径）会让提取中止；归档成员按顺序逐个校验后立即提取，先前成员建立的链接已落盘，后续成员无法绕过。只读目录（`0555`/`0500`）在全部成员写入后才应用权限，因此不会挡住目录内的文件。在 Python 3.12+ 上提取还会走 `tarfile` 的 `filter="data"`，部分逃逸归档（例如把已指向解包根的软链重定向到 `..`）由 stdlib 先拒绝并给出 `outside the destination`。
 
 ## 命令
 
@@ -77,6 +77,8 @@ python3 tests/experiments/swebench/analyze_events.py \
 ```bash
 python3 -m unittest discover -s tests/experiments/swebench -p 'test_*.py' -v
 ```
+
+本地验证应与 CI 一致使用 Python 3.12 复跑（本机可用 `/tmp/agents/uv-python/cpython-3.12-macos-aarch64-none/bin/python3.12`）；swebench 的 38 例在 3.9 与 3.12 下都要全绿。
 
 - `test_cli.py` 驱动 `setup`/`run`/`summarize`/`calibrate`，用 `tests/experiments/stubs/codex_stub.py` 与 `pytest_stub.py` 替代外部进程，覆盖结果读取器拒绝（身份、事件计数、协议、F2P/P2P 矛盾）、manifest 选择与报告计数、模板逃逸与合法链接/延迟目录属性、保护模式恢复细节、采集不执行 Agent hook/filter、无效调用、P2P 回归与报告。
 - `test_analyze_cli.py` 驱动 `analyze_events.py`，覆盖路由否定/候选档位、reviewer 完成条件、访问与元数据归因、current-protocol 契约、behavior 协议、嵌套 usage、零发现声明、畸形结构、usage 来源矩阵与 `--output`。

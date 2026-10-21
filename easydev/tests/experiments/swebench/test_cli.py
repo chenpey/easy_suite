@@ -111,10 +111,16 @@ def add_file(archive: tarfile.TarFile, name: str, content: str) -> None:
     archive.addfile(info, io.BytesIO(payload))
 
 
-def add_dir(archive: tarfile.TarFile, name: str, mode: int = 0o755) -> None:
+def add_dir(
+    archive: tarfile.TarFile,
+    name: str,
+    mode: int = 0o755,
+    mtime: int = 0,
+) -> None:
     info = tarfile.TarInfo(name)
     info.type = tarfile.DIRTYPE
     info.mode = mode
+    info.mtime = mtime
     archive.addfile(info)
 
 
@@ -1478,11 +1484,28 @@ class SwebenchCliTest(unittest.TestCase):
                 add_link(archive, "b", "a/..")
 
         def delayed_attributes(path: Path) -> None:
+            # `u/sub` is first created at repo/base/sub (u -> base), then `u`
+            # is retargeted through `x` to the real directory `v`, so `u/sub`
+            # later resolves to repo/v/sub. The delayed attribute call must
+            # still land on the creation-resolved path repo/base/sub. The
+            # initial target cannot be the destination root: tarfile's
+            # data_filter (3.12+) rejects re-extracting a symlink that already
+            # resolves to the destination itself, so `base` is a real
+            # in-destination directory instead of ".".
+            with tarfile.open(path, "w") as archive:
+                add_dir(archive, "v/sub", 0o750, mtime=1_900_000_000)
+                add_dir(archive, "v", 0o750, mtime=1_800_000_000)
+                add_link(archive, "u", "base")
+                add_dir(archive, "u/sub", 0o500, mtime=1_700_000_000)
+                add_link(archive, "u", "x")
+                add_link(archive, "x", "v")
+
+        def escaping_redirect(path: Path) -> None:
             with tarfile.open(path, "w") as archive:
                 add_link(archive, "u", ".")
-                add_dir(archive, "u/sub", 0o500)
                 add_link(archive, "u", "x/..")
                 add_link(archive, "x", ".")
+                add_file(archive, "u/evil", "pwn\n")
 
         def child_before_parent(path: Path) -> None:
             with tarfile.open(path, "w") as archive:
@@ -1504,10 +1527,39 @@ class SwebenchCliTest(unittest.TestCase):
             self.assertIn("unsafe tar", completed.stdout)
             self.assertFalse((self.run_path(experiment) / "pwn").exists())
 
+        with self.subTest(case="escaping symlink redirect rejected"):
+            assets = self.make_assets(
+                "attrs-escape-redirect", template=escaping_redirect
+            )
+            experiment = self.install_experiment(assets, "experiment")
+            stub = self.make_stub("attrs-escape-redirect-stub")
+            external = self.root / "escape-sentinel.txt"
+            external.write_text("keep\n", encoding="utf-8")
+            completed = self.run_command(
+                stub,
+                experiment,
+                plan=self.complete_plan(),
+                statuses={TASK["f2p"]: "PASSED", TASK["p2p"]: "PASSED"},
+            )
+            self.assertNotEqual(completed.returncode, 0, completed.stdout)
+            # run.py enables filter="data" exactly when tarfile.data_filter
+            # exists (3.12+); the stdlib filter rejects the retarget before
+            # run.py's own member checks, while older Pythons reject the file
+            # member that would be written through the escaped link.
+            expected_reject = (
+                "outside the destination"
+                if hasattr(tarfile, "data_filter")
+                else "unsafe tar"
+            )
+            self.assertIn(expected_reject, completed.stdout)
+            self.assertFalse((self.run_path(experiment) / "evil").exists())
+            self.assertEqual(external.read_text(encoding="utf-8"), "keep\n")
+
         with self.subTest(case="delayed attributes target the created path"):
             assets = self.make_assets("attrs-delayed", template=delayed_attributes)
             experiment = self.install_experiment(assets, "experiment")
             stub = self.make_stub("attrs-delayed-stub")
+            repo = self.run_path(experiment) / "repo"
             outside = self.run_path(experiment) / "sub"
             outside.mkdir(parents=True)
             outside.chmod(0o750)
@@ -1519,9 +1571,18 @@ class SwebenchCliTest(unittest.TestCase):
                 statuses={TASK["f2p"]: "PASSED", TASK["p2p"]: "PASSED"},
             )
             self.assertEqual(completed.returncode, 0, completed.stdout)
-            created = self.run_path(experiment) / "repo" / "sub"
+            created = repo / "base" / "sub"
+            redirect = repo / "v" / "sub"
+            anchor = repo / "v"
             try:
+                # The archived 0500 mode lands on the path resolved when the
+                # directory was created, not on the path `u/sub` resolves to
+                # after the later retarget.
                 self.assertEqual(stat.S_IMODE(created.stat().st_mode), 0o500)
+                self.assertEqual(stat.S_IMODE(redirect.stat().st_mode), 0o750)
+                self.assertEqual(int(redirect.stat().st_mtime), 1_900_000_000)
+                self.assertEqual(stat.S_IMODE(anchor.stat().st_mode), 0o750)
+                self.assertEqual(int(anchor.stat().st_mtime), 1_800_000_000)
                 self.assertEqual(stat.S_IMODE(outside.stat().st_mode), 0o750)
                 self.assertEqual(int(outside.stat().st_mtime), 1_234_567)
             finally:
