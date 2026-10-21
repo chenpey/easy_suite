@@ -4,7 +4,7 @@
     "reasoning_effort": "high"
   },
   "reviewer": {
-    "model": "gpt-6.1-sol",
+    "model": "codex/gpt-6.1-sol",
     "reasoning_effort": "high"
   },
   "upgrades": [
@@ -14,13 +14,13 @@
         "reasoning_effort": "high"
       },
       "reviewer": {
-        "model": "gpt-6.1-sol",
+        "model": "codex/gpt-6.1-sol",
         "reasoning_effort": "high"
       }
     },
     {
       "developer": {
-        "model": "gpt-6.1-sol",
+        "model": "codex/gpt-6.1-sol",
         "reasoning_effort": "high"
       },
       "reviewer": {
