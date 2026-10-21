@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.7.1`
+当前版本：`0.8.0`
 
 EasyDev 是面向编码 Agent 的纯文件 Skill。它把需求设计、实施、排障、验证、独立审查、可行性探针和全仓审计收进一个入口，按任务风险选择必要流程，并以可核验的改动和证据交付。
 
@@ -67,6 +67,15 @@ auto / quick / full / design / plan / debug / review / spike / audit
 
 脏文件和敏感文件的首次原内容按仓库相对路径保存；敏感快照使用可确认的非同步私有位置，并收紧为 POSIX `0700/0600` 或等效权限。共享账本只记录路径、存在状态、验证和预算，不写入凭证内容。
 
+### 意图澄清
+
+意图不清时不自行挑一种解读继续，把互斥解读收敛成带推荐项的有限选项一次问清。触发条件、格式与记录规则见 [选项式澄清](references/planning.md#选项式澄清)。
+
+- 必须提问：两种以上互斥解读，且选择改变用户可见行为、公共契约、数据或兼容承诺、成本量级，或选择落在没有安全默认值的高风险边界上。
+- 继续实施：上下文能确定唯一解读、常规技术选择、可逆且代价低的默认（按默认实施并标为假设）、需求内修复与阶段推进。
+- 格式：最多 3 题，每题 2–4 个互斥选项加「其他」，首选项标 `[推荐]` 并附依据，每题给「未答默认」；没有安全默认时写「需答复后继续」。
+- 待答期间继续不依赖答案的工作，依赖答案的实现暂停；答复与默认项记入账本或交接。子代理不直接问用户，把选项返回主代理合并。
+
 ### 最小实现与测试
 
 - 先查找现有模式、共享实现和全部直接调用方；能复用现有能力时不新增抽象或依赖。
@@ -119,7 +128,7 @@ auto / quick / full / design / plan / debug / review / spike / audit
 | 文件 | 用途 |
 | --- | --- |
 | [SKILL.md](SKILL.md) | 路径选择、quick 核心、测试硬约束、表达档位和完成边界 |
-| [references/planning.md](references/planning.md) | 设计深度、澄清、任务拆分和可交接计划 |
+| [references/planning.md](references/planning.md) | 设计深度、选项式澄清、任务拆分和可交接计划 |
 | [references/execution.md](references/execution.md) | 最小实现、文档、修复预算、测试调度、证据与完成边界 |
 | [references/baseline-safety.md](references/baseline-safety.md) | 脏文件、敏感快照、任务目录、账本与恢复 |
 | [references/debugging.md](references/debugging.md) | 症状确认、调用链定位、单一假设和根因修复 |
@@ -524,7 +533,7 @@ easydev/
 
 - 当前行为、用法、适用条件和限制以本 README 和对应 `references/` 为准。
 - 版本历史、已修正问题和发布说明写入 [CHANGELOG.md](CHANGELOG.md)，不在 README 重复完整历史。
-- 修改分流、预算、审查、表达或测试规则时，同步更新 `SKILL.md`、相关 `references/`、行为用例和 README。
+- 修改分流、澄清、预算、审查、表达或测试规则时，同步更新 `SKILL.md`、相关 `references/`、行为用例和 README。
 - 修改运行时文件后检查本地 Markdown 链接，并确认最小安装副本没有指向未复制文件。
 - 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。
 - 行为结论必须来自当前版本的实际执行记录；未执行的用例、隐藏验收和消融实验明确写“未运行”或“待验证”。
