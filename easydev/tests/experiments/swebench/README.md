@@ -70,6 +70,17 @@ python3 tests/experiments/swebench/run.py calibrate \
   --out /path/to/experiment
 ```
 
+只复制实验资产、不跑基线时使用 `setup`：它把数据集、任务模板和虚拟环境链接进实验目录，
+不执行 pytest；需要判定 F2P/P2P 基线时仍要跑 `calibrate`。
+
+```bash
+python3 tests/experiments/swebench/run.py setup \
+  --dataset /path/to/swebench-lite.json \
+  --templates /path/to/templates \
+  --venvs /path/to/venvs \
+  --experiment /path/to/experiment
+```
+
 执行小样本实验。若本机代理端口被宿主沙箱隔离，应在沙箱外运行：
 
 ```bash

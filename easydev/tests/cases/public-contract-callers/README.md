@@ -46,6 +46,8 @@ bash tests/cases/public-contract-callers/run.sh
 
 被测 Agent 只能修改 `app/`，不能修改测试、探针、文档或读取私有材料。正式评测应把私有材料放在 Agent 无法访问的位置；仅靠提示词和命令文本检测不构成文件系统隔离。
 
+`solution.patch` 是验收用的夹具级参考补丁：它同时更新夹具自带的 `check_orders.py` 与 `docs/orders.md`，以便一次复验实现、仓库内检查与契约文本。它不是 Agent 产出，也不满足场景 prompt 对 Agent 的修改边界（只改 `app/`）；因此用参考补丁复跑行为 runner 的 `evaluate` 时，`no test or case-file changes` 与 `only app product files changed` 两项会失败，这是预期行为，不代表补丁错误。
+
 ## 覆盖范围
 
 - 本人读取、他人被拒、第二个用户读取自己的订单和跨订单越权。

@@ -2,6 +2,18 @@
 
 版本变更记录。最近一次更新见 [README](README.md)。
 
+## 0.7.0 更新说明（2026-10-21）
+
+本次发布集中在审计验收契约、规则一致性与文档修复。
+
+- B16 审计验收改为核对 prompt 要求的机器可核对块（`easydev-findings`）：逐行 `P级 | 位置=文件:行号 | 触发= | 后果=`，检查块格式、1–20 条、P0→P3 排序；每条位置均须解析到被审计仓库内真实存在的行，且至少一条落在 `withdraw()` 函数体内（AST 计算函数边界，支持 `文件:符号` 与 Windows 反斜杠路径）。触发/后果字段只要求非空，不再用词表猜描述含义。只解析报告层级围栏（0–3 个前导空格；4 空格缩进、列表或引用容器内的围栏不在支持范围内，prompt 要求块只在顶层给出），未闭合块、第二个机器块、块内杂围栏、空字段、越界路径报格式/证据问题。
+- B01 改为核对 prompt 要求的末行标记 `审查状态：自查` / `审查状态：独立`：只认最后一条非空行、整行匹配（从行首开始，不接受前导空格或 Tab），围栏代码块内的标记不计（围栏按 0–3 个前导空格识别）；在 quick 场景下“独立”与缺失均不通过。
+- 行为 runner 的场景清单改由 `scenarios.SCENARIO_MODULES` 单一来源派生，`list` 输出与 `--scenario` 参数校验不再手写重复列表。
+- `SKILL.md` quick 核心补充同一问题最多三次有新证据尝试的停止规则（含纯调查不计次、环境故障不耗预算并保留候选；此前只写在 quick 默认不加载的 `execution.md`），并给“不加载参考模块”补上复杂任务的例外，与按需加载表和 `references/execution.md` 一致。
+- `references/baseline-safety.md` 的加载条件改为与按需加载表一致：`full` 不再无条件加载，只在脏文件、未跟踪/敏感文件、无 Git/首次提交或需恢复时加载。
+- README 手工安装补充 `agents/` 可选扩展与 `examples/` 示例配置的安装方式；SWE-bench README 补记 `setup` 子命令；行为 runner README 说明新适配器必须把原生读取动作映射到 `file_access`/`module_access`，否则 B16 与 B01 的读取判定失效。
+- `public-contract-callers` 用例说明 `solution.patch` 是夹具级参考补丁（含 `check_orders.py`、`docs/orders.md` 更新），不是 Agent 合规样例；场景 prompt 注明契约文档由评测方同步，消除“Skill 要求同步文档”与“禁止改 `docs/`”的表面冲突。
+
 ## 0.6.0 更新说明（2026-10-21）
 
 - 模型配置改为强约束：外部 `~/.config/easydev/models.json`（或 XDG/APPDATA 等效路径）成为权威来源，优先级调整为外部配置 > 对话指定文件 > 内置 `inherit` 默认值。进入 `full` 或任何分派前必须实际读取并记录来源，不可读或无效时暂停分派、不得静默回退；配置或用户指定的具体模型与深度为硬性要求，宿主无法满足时暂停分派而非改用继承模型；`review`/`audit` 与任何分派前的来源检查同受约束。分派后按返回值、运行记录或事件核对实际模型与推理深度，与请求不一致时报告并重新分派，确无记录或不可访问时才记未知并说明原因，可查到的事实不得写成未知。配置与示例中的具体模型 `model` 必须与宿主模型表逐字一致（如 `codex/gpt-6.1-sol`），保留其命名空间前缀、裸写可能无法解析；模型层级与 `inherit` 按各自规则，深度只写在 `reasoning_effort`。示例文件 `examples/models.cross-provider.json` 同步改为完整 ID。同步更新 `SKILL.md`、`references/{models,orchestration,setup}.md`、README 与示例说明；新增 B48 行为用例，尚未执行真实 Agent 回归。

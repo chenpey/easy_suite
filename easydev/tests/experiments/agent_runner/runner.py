@@ -27,7 +27,7 @@ if str(SWEBENCH_ROOT) not in sys.path:
 
 from analyze_events import analyze_run  # noqa: E402
 from adapters.codex_cli import run_codex  # noqa: E402
-from scenarios import load_scenario  # noqa: E402
+from scenarios import SCENARIO_MODULES, all_scenarios, load_scenario  # noqa: E402
 from scenarios.common import install_skill  # noqa: E402
 
 
@@ -511,14 +511,10 @@ def prepare_command(args: argparse.Namespace) -> Dict[str, Any]:
 
 def list_command(args: argparse.Namespace) -> List[Dict[str, str]]:
     del args
+    # 场景清单只从注册表派生，新增场景时无需同步修改列举与参数校验。
     return [
-        {"id": "b01", "title": load_scenario("b01").title},
-        {"id": "b02", "title": load_scenario("b02").title},
-        {"id": "b16", "title": load_scenario("b16").title},
-        {
-            "id": "public-contract-callers",
-            "title": load_scenario("public-contract-callers").title,
-        },
+        {"id": scenario_id, "title": scenario.title}
+        for scenario_id, scenario in all_scenarios().items()
     ]
 
 
@@ -535,7 +531,7 @@ def default_codex_bin() -> Path:
 def common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--scenario",
-        choices=("b01", "b02", "b16", "public-contract-callers"),
+        choices=tuple(SCENARIO_MODULES),
         required=True,
     )
     parser.add_argument("--out", type=Path, required=True)

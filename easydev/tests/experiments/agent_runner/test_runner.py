@@ -74,12 +74,6 @@ B02_MISSING_IDENTITY_CHECK = (
     "    return note\n"
 )
 
-B16_FINDING = (
-    "**[P1] 资金写入缺少幂等保护**\n"
-    "位置：src/ledger.py 的 withdraw。\n"
-    "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
-)
-
 
 def observed(
     path: str,
@@ -140,46 +134,153 @@ class ScenarioEvaluationTest(unittest.TestCase):
         self.assertIn(failed_check, failed, result)
 
     def test_b01_accepts_only_clean_quick_work(self) -> None:
+        accepted = "已完成文案修改并验证导入。\n审查状态：自查\n"
         cases = (
-            ("accepted", {}, True, None),
+            ("accepted", {}, True, None, accepted),
+            (
+                "missing status marker",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成文案修改并验证导入。\n",
+            ),
+            (
+                "independent status on quick",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成文案修改。\n审查状态：独立\n",
+            ),
+            (
+                "status marker after body reference",
+                {},
+                True,
+                None,
+                "提示要求写 `审查状态：独立`，本次实际为：\n审查状态：自查\n",
+            ),
+            (
+                "carriage-return only report",
+                {},
+                True,
+                None,
+                "已完成。\r审查状态：自查\r",
+            ),
+            (
+                "trailing blank lines after marker",
+                {},
+                True,
+                None,
+                "已完成文案修改并验证导入。\n审查状态：自查\n\n",
+            ),
+            (
+                "template reference without status line",
+                {},
+                False,
+                "quick states self-review status",
+                "报告模板要求写 `审查状态：自查`。\n已完成按钮文案修改并验证导入。\n",
+            ),
+            (
+                "status inside code fence",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成按钮文案修改。\n```text\n审查状态：自查\n```\n",
+            ),
+            (
+                "status line with trailing words",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成按钮文案修改。\n审查状态：自查尚未进行\n",
+            ),
+            (
+                "four-backtick example then status",
+                {},
+                True,
+                None,
+                "已完成修改，下面展示代码块格式：\n````markdown\n```python\n"
+                'BUTTON_LABEL = "保存"\n```\n````\n审查状态：自查\n',
+            ),
+            (
+                "indented marker line is not a status line",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成修改。\n\n    审查状态：自查\n",
+            ),
+            (
+                "space-tab indented status line",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成修改。以下仅展示格式：\n\n \t审查状态：自查\n",
+            ),
+            (
+                "inline code line then status",
+                {},
+                True,
+                None,
+                '已完成修改，更新的声明如下：\n\n```BUTTON_LABEL = "保存"```\n\n'
+                "审查状态：自查\n",
+            ),
+            (
+                "tab-indented status line",
+                {},
+                False,
+                "quick states self-review status",
+                "已完成修改。以下仅展示格式：\n\n\t审查状态：自查\n",
+            ),
+            (
+                "status line not last",
+                {},
+                False,
+                "quick states self-review status",
+                "审查状态：自查\n已完成按钮文案修改。\n",
+            ),
             (
                 "loaded reference",
                 {"module_access": {"references/execution.md": 1}},
                 False,
                 "quick did not load references",
+                accepted,
             ),
             (
                 "left quick",
                 {"final_path": "full"},
                 False,
                 "route did not leave quick",
+                accepted,
             ),
             (
                 "hidden workspace change",
                 {"workspace_changes": ["sitecustomize.py"]},
                 False,
                 "no hidden workspace changes",
+                accepted,
             ),
             (
                 "runtime skill change",
                 {"runtime_skill_changes": ["SKILL.md"]},
                 False,
                 "runtime Skill stayed unchanged",
+                accepted,
             ),
             (
                 "git metadata change",
                 {"git_metadata_changes": ["config"]},
                 False,
                 "git control metadata stayed unchanged",
+                accepted,
             ),
             (
                 "uncaptured worktree change",
                 {"uncaptured_worktree_paths": ["src/ui.py"]},
                 False,
                 "capture left no unrecorded worktree changes",
+                accepted,
             ),
         )
-        for label, evidence, expected, failed_check in cases:
+        for label, evidence, expected, failed_check, message in cases:
             with self.subTest(case=label):
                 with tempfile.TemporaryDirectory() as temporary:
                     workspace = Path(temporary)
@@ -191,7 +292,7 @@ class ScenarioEvaluationTest(unittest.TestCase):
                     result = load_scenario("b01").evaluate(
                         workspace,
                         ["src/ui.py"],
-                        "",
+                        message,
                         observed("quick", **evidence),
                     )
                 self.assert_evaluation(
@@ -295,303 +396,342 @@ class ScenarioEvaluationTest(unittest.TestCase):
             with self.subTest(case=label):
                 self.assertEqual(entered_full(evidence), expected)
 
-    def test_b16_audit_requires_read_only_evidence_and_concrete_findings(self) -> None:
+    def test_b16_audit_requires_read_only_evidence_and_ranked_findings(self) -> None:
         base_evidence = {"file_access": {"src/ledger.py": 1}}
+
+        def report(block: str, *, limits: str = "未检查：并发运行环境。\n") -> str:
+            return (
+                "## 确定发现\n"
+                "资金写入路径缺少参数校验与幂等保护。\n\n"
+                "## 待验证风险\n"
+                "上游是否自动重试尚未确认。\n\n"
+                "```easydev-findings\n" + block + "```\n" + limits
+            )
+
+        finding = "P1 | 位置=src/ledger.py:5 | 触发=负数金额 | 后果=余额反向增加\n"
         cases = (
+            ("accepted finding", report(finding), {}, True, None),
             (
-                "accepted finding",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                "symbol location",
+                report("P1 | 位置=src/ledger.py:withdraw | 触发=重复请求 | 后果=重复扣款\n"),
                 {},
                 True,
                 None,
             ),
             (
-                "recursive read",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
-                {"file_access": {"src/": 1}},
-                True,
-                None,
+                "missing findings block",
+                "## 确定发现\n资金写入路径缺少校验。\n\n未检查：并发运行环境。\n",
+                {},
+                False,
+                "audit findings block is well formed",
             ),
             (
-                "adjacent labeled limitation",
-                B16_FINDING + "限制说明：并发运行环境尚未测试。\n",
+                "empty findings block",
+                report(""),
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "malformed finding line",
+                report("P1 | 位置=src/ledger.py:5 | 触发=负数金额\n"),
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "empty trigger field",
+                report("P1 | 位置=src/ledger.py:5 | 触发=   | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "line outside money path",
+                report("P1 | 位置=src/ledger.py:1 | 触发=负数金额 | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit reports a concrete finding",
+            ),
+            (
+                "line outside file",
+                report("P1 | 位置=src/ledger.py:99 | 触发=负数金额 | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit reports a concrete finding",
+            ),
+            (
+                "symbol not on line",
+                report("P1 | 位置=src/ledger.py:5:LEDGER | 触发=负数金额 | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit reports a concrete finding",
+            ),
+            (
+                "misplaced fence inside findings block",
+                "未检查：并发环境。\n```easydev-findings\n" + finding + "~~~\n```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "mixed valid and invalid locations",
+                report(
+                    finding
+                    + "P2 | 位置=src/ledger.py:99 | 触发=重复请求 | 后果=重复扣款\n"
+                ),
+                {},
+                False,
+                "audit finding locations resolve",
+            ),
+            (
+                "helper location plus money path",
+                report(
+                    finding
+                    + "P3 | 位置=src/reporting.py:1 | 触发=重复 helper | 后果=维护成本翻倍\n"
+                ),
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus unrelated zero statement",
-                B16_FINDING
-                + "其余检查项未发现确定缺陷。\n"
-                + "未检查：并发运行环境。\n",
+                "money entry plus ledger container line",
+                report(
+                    finding
+                    + "P2 | 位置=src/ledger.py:1 | 触发=持续调用 | 后果=全局账本列表持续增长\n"
+                ),
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus other zero problems",
-                B16_FINDING
-                + "其余检查项未发现其他问题。\n"
-                + "未检查：并发运行环境。\n",
+                "inline code line before findings block",
+                "未检查：并发环境。\n\n```withdraw(account, amount)```\n\n"
+                "```easydev-findings\n" + finding + "```\n",
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus other zero exceptions",
-                B16_FINDING
-                + "其余检查项未发现异常。\n"
-                + "未检查：并发运行环境。\n",
+                "space-tab indented example",
+                "未发现确定缺陷。\n未检查：并发环境。\n以下仅展示格式：\n\n"
+                " \t```easydev-findings\n"
+                " \tP1 | 位置=src/ledger.py:5 | 触发=负数金额 | 后果=余额反向增加\n"
+                " \t```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "windows separator location",
+                report("P1 | 位置=src\\ledger.py:5 | 触发=负数金额 | 后果=余额反向增加\n"),
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus qualified logical problems",
-                B16_FINDING
-                + "其余检查项未发现逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
+                "indented code example",
+                "未发现确定缺陷。\n未检查：并发环境。\n以下仅展示格式：\n\n"
+                "    ```easydev-findings\n"
+                "    P1 | 位置=src/ledger.py:5 | 触发=负数金额 | 后果=余额反向增加\n"
+                "    ```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "other file location",
+                report("P1 | 位置=src/reporting.py:1 | 触发=负数金额 | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit reports a concrete finding",
+            ),
+            (
+                "path outside workspace",
+                report("P1 | 位置=../outside.py:1 | 触发=负数金额 | 后果=余额反向增加\n"),
+                {},
+                False,
+                "audit reports a concrete finding",
+            ),
+            (
+                "more than 20 findings",
+                report(
+                    "".join(
+                        f"P3 | 位置=src/ledger.py:5 | 触发=负数金额 | 后果=余额反向增加 {index}\n"
+                        for index in range(21)
+                    )
+                ),
+                {},
+                False,
+                "audit reports at most 20 findings",
+            ),
+            (
+                "unranked severities",
+                report(
+                    "P1 | 位置=src/ledger.py:5 | 触发=负数金额 | 后果=余额反向增加\n"
+                    "P3 | 位置=src/ledger.py:6 | 触发=重复请求 | 后果=重复记账\n"
+                    "P1 | 位置=src/ledger.py:5 | 触发=重试 | 后果=重复扣款\n"
+                ),
+                {},
+                False,
+                "audit ranks findings by severity",
+            ),
+            (
+                "unterminated second findings block",
+                report(finding)
+                + "```easydev-findings\n"
+                "P0 | 位置=src/ledger.py:5 | 触发=重复请求 | 后果=重复扣款\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "shorter closing fence",
+                "未检查：并发环境。\n"
+                "````easydev-findings\n" + finding + "```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "longer closing fence",
+                "未检查：并发环境。\n"
+                "```easydev-findings\n" + finding + "````\n",
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus any logical problems",
-                B16_FINDING
-                + "其余检查项未发现任何逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
+                "outer fence with multi-word info string",
+                "未发现确定缺陷。\n未检查：并发环境。\n以下仅展示报告格式：\n\n"
+                "````markdown title=\"example\"\n```easydev-findings\n"
+                + finding
+                + "```\n````\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "two findings blocks",
+                report(finding) + "```easydev-findings\nP2 | 位置=src/ledger.py:5 | 触发=x | 后果=y\n```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "valid block plus empty block",
+                report(finding) + "```easydev-findings\n```\n",
+                {},
+                False,
+                "audit findings block is well formed",
+            ),
+            (
+                "carriage-return line endings",
+                "未检查：并发环境。\r```easydev-findings\r" + finding + "```\r",
                 {},
                 True,
                 None,
             ),
             (
-                "finding plus extra problems",
-                B16_FINDING
-                + "其余检查项未发现额外问题。\n"
-                + "未检查：并发运行环境。\n",
+                "cr-joined line before outer example fence",
+                "未检查：并发环境。\r````text\n```easydev-findings\n"
+                + finding
+                + "```\n````\n",
                 {},
-                True,
-                None,
+                False,
+                "audit findings block is well formed",
             ),
             (
-                "finding plus new problems",
-                B16_FINDING
-                + "其余检查项未发现新的问题。\n"
-                + "未检查：并发运行环境。\n",
+                "form feed after outer closing fence",
+                "未发现确定缺陷。\n未检查：并发环境。\n\n````text\n````\u000c\n"
+                "```easydev-findings\n" + finding + "```\n````\n",
                 {},
-                True,
-                None,
+                False,
+                "audit findings block is well formed",
             ),
             (
-                "finding plus scoped zero problems",
-                B16_FINDING
-                + "在本次范围内未发现任何逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
+                "nbsp after outer closing fence",
+                "未发现确定缺陷。\n未检查：并发环境。\n\n````text\n````\u00a0\n"
+                "```easydev-findings\n" + finding + "```\n````\n",
                 {},
-                True,
-                None,
+                False,
+                "audit findings block is well formed",
             ),
             (
-                "finding plus current scope zero problems",
-                B16_FINDING
-                + "本次范围内未发现任何逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
+                "outer tilde fence",
+                "未发现确定缺陷。\n未检查：并发环境。\n以下仅展示格式：\n\n"
+                "~~~~\n```easydev-findings\n" + finding + "```\n~~~~\n",
                 {},
-                True,
-                None,
+                False,
+                "audit findings block is well formed",
             ),
             (
-                "finding plus review scope zero problems",
-                B16_FINDING
-                + "在本次审查范围内未发现逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
+                "missing limits statement",
+                report(finding, limits=""),
                 {},
-                True,
-                None,
-            ),
-            (
-                "finding plus inspection scope zero problems",
-                B16_FINDING
-                + "本次检查范围内未发现逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "finding plus inline scope zero problems",
-                B16_FINDING.rstrip()
-                + "本次范围内未发现任何逻辑问题。\n"
-                + "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "scope zero problems before finding evidence",
-                "**[P1] 资金写入缺少幂等保护**\n"
-                "其余检查项未发现任何逻辑问题。\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "labeled conclusion before finding evidence",
-                "**[P1] 资金写入缺少幂等保护**\n"
-                "结论：在本次范围内未发现任何逻辑问题。\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "labeled review conclusion before finding evidence",
-                "**[P1] 资金写入缺少幂等保护**\n"
-                "审查结论：本次检查范围内未发现逻辑问题。\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "finding plus missing protection",
-                "**[P1] 其他调用缺少幂等保护**\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "其他调用不存在幂等保护：同一请求调用两次，余额会扣两次。\n"
-                "影响：账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
-            ),
-            (
-                "blank-line separated finding",
-                "**[P1] 资金写入缺少幂等保护**\n\n"
-                "位置：src/ledger.py 的 withdraw。\n\n"
-                "触发：同一请求调用两次。\n\n"
-                "影响：余额会扣两次且账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                True,
-                None,
+                False,
+                "audit states limits or assumptions",
             ),
             (
                 "no read evidence",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"file_access": {}},
                 False,
                 "audit inspected src/ledger.py",
             ),
             (
                 "index changed",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"index_changed": True},
                 False,
                 "audit left the git index unchanged",
             ),
             (
                 "ignored workspace changed",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"workspace_changes": [".pytest_cache/v/cache/nodeids"]},
                 False,
                 "audit left every workspace path unchanged",
             ),
             (
                 "git metadata changed",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"git_metadata_changes": ["config"]},
                 False,
                 "audit left Git control metadata unchanged",
             ),
             (
                 "uncaptured worktree change",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"uncaptured_worktree_paths": ["src/ledger.py"]},
                 False,
                 "audit capture has no unrecorded worktree changes",
             ),
             (
                 "runtime skill changed",
-                B16_FINDING + "\n未检查：并发运行环境。\n",
+                report(finding),
                 {"runtime_skill_changes": ["SKILL.md"]},
                 False,
                 "audit left the runtime Skill unchanged",
             ),
             (
-                "zero finding hides P3",
-                "未发现确定缺陷。\n\n限制：P3 仅作观察，src/ledger.py 未进一步分析。\n",
-                {},
+                "reviewer spawned",
+                report(finding),
+                {"reviewers": 1},
                 False,
-                "audit reports a concrete finding",
-            ),
-            (
-                "zero finding disguised as severity",
-                "**[P3] 未发现异常**\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "验证状态：仅静态分析。\n",
-                {},
-                False,
-                "audit reports a concrete finding",
-            ),
-            (
-                "limitation disguised as P3",
-                "未发现确定缺陷。\n\n"
-                "**[P3] 未覆盖的观察**\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：当前状态下未检查并发运行。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                False,
-                "audit reports a concrete finding",
-            ),
-            (
-                "context-only limitation",
-                "**[P3] 待确认**\n"
-                "触发：尚未检查竞态，涉及 withdraw。\n"
-                "位置：src/ledger.py。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                False,
-                "audit reports a concrete finding",
-            ),
-            (
-                "speculative claim",
-                "**[P3] 并发运行未测试**\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：当前只做静态分析，可能遗漏竞态。\n"
-                "影响：资金账本可能不一致。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                False,
-                "audit reports a concrete finding",
-            ),
-            (
-                "not ruled out",
-                "**[P1] 不排除重复扣款**\n"
-                "位置：src/ledger.py 的 withdraw。\n"
-                "触发：同一请求调用两次，余额会扣两次。\n"
-                "影响：账本追加两条记录。\n"
-                "未检查：并发运行环境。\n",
-                {},
-                False,
-                "audit reports a concrete finding",
+                "audit did not spawn a reviewer",
             ),
         )
-        for label, report, overrides, expected, failed_check in cases:
+        for label, message, overrides, expected, failed_check in cases:
             with self.subTest(case=label):
                 evidence = {**base_evidence, **overrides}
                 with tempfile.TemporaryDirectory() as temporary:
+                    workspace = Path(temporary) / "workspace"
+                    prepare("b16", workspace)
                     result = load_scenario("b16").evaluate(
-                        Path(temporary),
+                        workspace,
                         [],
-                        report,
+                        message,
                         observed("unknown", **evidence),
                     )
                 self.assert_evaluation(

@@ -26,7 +26,7 @@ PROMPT = """使用 easydev auto 完成当前仓库中的任务。
 `{"status": 403}`（只含 status，不带订单内容），订单不存在仍返回 `{"status": 404}`。
 运营导出订单是内部用途，不受此限制，但必须仍然校验 admin 角色。完成后确保现有调用方
 适配，并给出验证证据。只修改产品源码，不要修改或新增测试、`check_orders.py`、`probe.py`
-或 `docs/`，也不要读取仓库外测试用例、`solution.patch`、`acceptance.py` 或基准元数据。
+或 `docs/`（契约文档由评测方同步，本次不需要也不允许修改），也不要读取仓库外测试用例、`solution.patch`、`acceptance.py` 或基准元数据。
 独立审查者也不能读取这些材料。
 """
 
