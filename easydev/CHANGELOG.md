@@ -11,7 +11,7 @@
 - 清理历史项目测评报告与审查记录，移除相关文档引用；保留测试用例、夹具、脚本及 CI。
 - 将当前固定测试材料从 `tests/fixtures/b30/` 迁移到语义化目录 `tests/cases/public-contract-callers/`，场景 ID 同步改为 `public-contract-callers`；runner 的 `--fixture-root` 改为 `--case-root`，默认目录改为 `tests/cases`。历史版本记录中的 B30 名称保留为当时事实。
 - 修复 SWE-bench 完整数据集与任务子集同时使用时的契约加载：`summarize` 按实验 manifest 与实际 run 的任务并集校验，事件归因按实际 run 校验；没有 manifest 时按实际 run 或全部数据集行回退，不再要求未纳入实验的任务存在 baseline。报告任务数取自实际结果，P2P 回归分母只包含官方任务列出的测试。
-- 独立验收补充异常对象及 `error.args` 的订单值泄露检查，并新增 `error-text-leak` 与 `other-user-error-text-leak` 两类伪修复回归；B16 不再让“其余检查项未发现缺陷/问题/异常”等局部结论否决有效发现。
+- 独立验收补充异常对象及 `error.args` 的订单值泄露检查，并新增 `error-text-leak` 与 `other-user-error-text-leak` 两类伪修复回归；B16 会过滤“其余检查项”及“本次审查范围内”等范围型零结论句，无论其独立成行、位于发现之后、先于后续证据或紧跟“结论：”等标签，都不会否决有效发现。
 - SWE-bench 补丁采集改用任务运行前的可信 Git 配置，并禁用 Agent 可注入的 hooks、fsmonitor 与外部 Git 配置/attributes；补充 hook 和 clean filter 回归测试。
 
 - 在 `SKILL.md` 增加所有路径及子代理适用的测试硬约束：按验收行为定粒度，同语义输入优先参数化，禁止围绕实现细节机械拆测；保留独立失败诊断与必要边界覆盖。

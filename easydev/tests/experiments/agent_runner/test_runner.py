@@ -383,6 +383,84 @@ class ScenarioEvaluationTest(unittest.TestCase):
                 None,
             ),
             (
+                "finding plus scoped zero problems",
+                B16_FINDING
+                + "在本次范围内未发现任何逻辑问题。\n"
+                + "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "finding plus current scope zero problems",
+                B16_FINDING
+                + "本次范围内未发现任何逻辑问题。\n"
+                + "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "finding plus review scope zero problems",
+                B16_FINDING
+                + "在本次审查范围内未发现逻辑问题。\n"
+                + "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "finding plus inspection scope zero problems",
+                B16_FINDING
+                + "本次检查范围内未发现逻辑问题。\n"
+                + "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "finding plus inline scope zero problems",
+                B16_FINDING.rstrip()
+                + "本次范围内未发现任何逻辑问题。\n"
+                + "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "scope zero problems before finding evidence",
+                "**[P1] 资金写入缺少幂等保护**\n"
+                "其余检查项未发现任何逻辑问题。\n"
+                "位置：src/ledger.py 的 withdraw。\n"
+                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
+                "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "labeled conclusion before finding evidence",
+                "**[P1] 资金写入缺少幂等保护**\n"
+                "结论：在本次范围内未发现任何逻辑问题。\n"
+                "位置：src/ledger.py 的 withdraw。\n"
+                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
+                "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
+                "labeled review conclusion before finding evidence",
+                "**[P1] 资金写入缺少幂等保护**\n"
+                "审查结论：本次检查范围内未发现逻辑问题。\n"
+                "位置：src/ledger.py 的 withdraw。\n"
+                "触发：同一请求调用两次，余额会扣两次且账本追加两条记录。\n"
+                "未检查：并发运行环境。\n",
+                {},
+                True,
+                None,
+            ),
+            (
                 "finding plus missing protection",
                 "**[P1] 其他调用缺少幂等保护**\n"
                 "位置：src/ledger.py 的 withdraw。\n"

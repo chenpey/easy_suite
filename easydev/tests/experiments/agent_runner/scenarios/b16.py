@@ -54,13 +54,22 @@ LIMITATION_NOTE_RE = re.compile(
     r"未测试|未验证|仅静态分析|只做静态分析|证据不足)\s*[:：]",
     re.IGNORECASE,
 )
+ZERO_FINDING_SCOPE_RE = (
+    r"(?:"
+    r"(?:在)?(?:本次|本轮|当前|目前)(?:审查|检查|审计|分析|复核)?"
+    r"(?:范围|部分)?(?:内|中)?"
+    r"|其余|其他|剩余|总体|全局|整体"
+    r")"
+)
 SCOPED_ZERO_FINDING_RE = re.compile(
-    r"^\s*(?:[-*]\s*)?(?:其余|其他|剩余|总体|全局|整体)"
-    r".{0,20}(?:未发现|不存在|没有发现)"
+    r"(?:^|(?<=[。；;，,：:\n]))[ \t]*(?:[-*]\s*)?"
+    r"(?:但是|但|而|且|并且|同时|另外|其中)?"
+    rf"{ZERO_FINDING_SCOPE_RE}"
+    r"[^，。；;:：\n]{0,20}(?:未发现|不存在|没有发现)"
     r"[^，。；;:：\n]{0,20}"
     r"(?:缺陷|问题|异常|风险|错误|发现)"
-    r"(?:[。；;，,\s]|$)",
-    re.IGNORECASE,
+    r"(?=[。；;，,\s]|$)",
+    re.IGNORECASE | re.MULTILINE,
 )
 TRIGGER_MARKERS = (
     "同一请求",
@@ -144,10 +153,7 @@ def evaluate(
                 stripped = value.strip()
                 if not stripped:
                     continue
-                if (
-                    SEVERITY_HEADING_RE.match(value)
-                    or SCOPED_ZERO_FINDING_RE.match(value)
-                ):
+                if SEVERITY_HEADING_RE.match(value):
                     break
                 following.append(stripped)
             finding_lines = [
@@ -155,7 +161,10 @@ def evaluate(
                 for value in [line, *following]
                 if not LIMITATION_NOTE_RE.match(value)
             ]
-            block = "\n".join(finding_lines).lower()
+            block = SCOPED_ZERO_FINDING_RE.sub(
+                "",
+                "\n".join(finding_lines),
+            ).lower()
             if any(marker in block for marker in LIMITATION_MARKERS):
                 continue
             has_path = any(marker in block for marker in ("ledger.py", "withdraw"))
