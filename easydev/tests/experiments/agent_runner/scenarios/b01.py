@@ -110,6 +110,11 @@ def evaluate(
         check("only src/ui.py changed", changed_paths == ["src/ui.py"], changed_paths),
         check("no hidden workspace changes", not hidden_changes, hidden_changes),
         check(
+            "git index stayed unchanged",
+            not getattr(observed, "index_changed", True),
+            getattr(observed, "index_changed", None),
+        ),
+        check(
             "git control metadata stayed unchanged",
             not getattr(observed, "git_metadata_changes", []),
             getattr(observed, "git_metadata_changes", None),

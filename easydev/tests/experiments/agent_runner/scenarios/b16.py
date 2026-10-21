@@ -10,21 +10,22 @@ from .common import check, evaluation, write_files
 
 
 TITLE = "B16 read-only audit"
-# 报告的自然语言部分无法稳定判定“这条算不算具体发现”。因此判定只看报告末尾的
-# 机器可核对块，并要求每条发现用“文件:行号”指向被审代码：位置必须解析到审计夹具里
-# 真正存在的行，且至少一条落在资金写入函数体内。这样检查的是“有没有定位到代码”，
-# 而不是猜措辞，触发/后果字段只要求非空。
-FINDING_LINE_RE = re.compile(
+# The free-form report cannot prove that a finding is concrete.  The checks
+# therefore only read the machine-checkable block at the end of the report:
+# each finding names a real `file:line` inside the audited fixture, and at
+# least one points into the money-writing function.  Trigger/impact fields only
+# have to be non-empty; this checks localisation, not prose quality.
+FINDING_ROW = re.compile(
     r"^\s*(P[0-3])\s*\|\s*(?:位置|location)\s*=\s*(.+?)\s*\|"
     r"\s*(?:触发|trigger)\s*=\s*(.+?)\s*\|\s*(?:后果|impact)\s*=\s*(.+?)\s*$",
     re.IGNORECASE,
 )
-FENCE_RE = re.compile(r"^(`{3,}|~{3,})[ \t]*(.*?)[ \t]*$")
-LOCATION_RE = re.compile(
+FENCE_LINE = re.compile(r"^(`{3,}|~{3,})[ \t]*(.*?)[ \t]*$")
+LOCATION = re.compile(
     r"^(?P<path>[A-Za-z0-9_./-]+\.py)(?::(?P<line>\d+))?(?::(?P<symbol>[A-Za-z_][A-Za-z0-9_]*))?$"
 )
-MAX_FINDINGS = 20
 MONEY_FUNCTION = "withdraw"
+MAX_FINDINGS = 20
 LIMITATION_MARKERS = (
     "未检查",
     "未覆盖",
@@ -75,16 +76,21 @@ def prepare(workspace: Path, case_root: Path) -> None:
                 "def test_positive():\n"
                 "    assert positive([-1, 1]) == [1]\n"
             ),
-            "README.md": "# Audit fixture\n\nSmall repository for read-only audit behavior.\n",
+            "README.md": (
+                "# Audit fixture\n\n"
+                "Small repository for read-only audit behavior.\n"
+                "The money-writing path has no test and ignores negative amounts.\n"
+            ),
         },
     )
 
 
 def _fence(line: str):
-    """报告层级围栏：0–3 个前导空格后直接是围栏字符。
+    """Return the fence match for a report-level line, or None.
 
-    4 个及以上空格视为缩进代码示例，不计入；列表/引用容器内的围栏不在支持范围内
-    （prompt 要求机器块与状态行只在报告顶层给出）。
+    Only 0-3 leading spaces are report level; four or more is an indented code
+    example.  Fences inside list or quote containers are not supported because
+    the prompt asks for a top-level block.
     """
     indent = 0
     while indent < len(line) and line[indent] == " ":
@@ -94,65 +100,70 @@ def _fence(line: str):
     rest = line[indent:]
     if not rest or rest[0] not in "`~":
         return None
-    match = FENCE_RE.match(rest.rstrip(" \t"))
+    match = FENCE_LINE.match(rest.rstrip(" \t"))
     if match is None:
         return None
     if match.group(1)[0] == "`" and "`" in match.group(2):
-        # 反引号围栏的信息串不能含反引号；这种行是行内代码，不是围栏。
+        # An info string on a backtick fence cannot contain a backtick.
         return None
     return match
 
 
-def parse_findings(text: str) -> tuple[list[dict], list[str]]:
-    """按围栏状态解析报告层级的机器块；返回条目与格式问题。
+class _Scanner:
+    """Line scanner for the report-level code and findings fences."""
 
-    外层代码示例（从行首开始的普通围栏包住的机器块）内的内容不计为提交记录；
-    未闭合的机器块必须报格式问题，关闭围栏需同字符且不短于开围栏。
-    """
-    entries: list[dict] = []
-    problems: list[str] = []
-    state = "text"
-    fence_char = ""
-    fence_len = 0
-    blocks = 0
-    # 只按 CR/LF 分行：splitlines() 会在 \f/\x85/\u2028 等字符处分行，可能制造伪围栏行。
-    for line in re.split(r"\r\n|\r|\n", text):
+    def __init__(self) -> None:
+        self.entries: list[dict] = []
+        self.problems: list[str] = []
+        self.state = "text"
+        self.fence_char = ""
+        self.fence_len = 0
+        self.blocks = 0
+
+    def feed(self, line: str) -> None:
         fence = _fence(line)
         if fence:
-            ticks, info = fence.group(1), fence.group(2)
-            if state == "text":
-                if info.lower() in {"easydev-findings", "findings"}:
-                    blocks += 1
-                    if blocks > 1:
-                        problems.append("multiple findings blocks")
-                    state, fence_char, fence_len = "findings", ticks[0], len(ticks)
-                else:
-                    state, fence_char, fence_len = "code", ticks[0], len(ticks)
-                continue
-            same_family = ticks[0] == fence_char and len(ticks) >= fence_len
-            if state == "findings" and same_family and info:
-                problems.append("nested findings block")
-                continue
-            if same_family and not info:
-                state, fence_char, fence_len = "text", "", 0
-                continue
-            if state == "findings":
-                problems.append(f"misplaced fence in findings block: {line.strip()}")
-            continue
-        if state in {"text", "code"}:
-            continue
-        # state == "findings"
+            self._fence(fence, line)
+            return
+        if self.state == "findings":
+            self._finding(line)
+
+    def _fence(self, fence, line: str) -> None:
+        ticks, info = fence.group(1), fence.group(2)
+        if self.state == "text":
+            if info.lower() in {"easydev-findings", "findings"}:
+                self.blocks += 1
+                if self.blocks > 1:
+                    self.problems.append("multiple findings blocks")
+                self.state = "findings"
+            else:
+                self.state = "code"
+            self.fence_char, self.fence_len = ticks[0], len(ticks)
+            return
+        same_family = ticks[0] == self.fence_char and len(ticks) >= self.fence_len
+        if self.state == "findings" and same_family and info:
+            self.problems.append("nested findings block")
+            return
+        if same_family and not info:
+            self.state, self.fence_char, self.fence_len = "text", "", 0
+            return
+        if self.state == "findings":
+            self.problems.append(f"misplaced fence in findings block: {line.strip()}")
+
+    def _finding(self, line: str) -> None:
         if not line.strip():
-            continue
-        parsed = FINDING_LINE_RE.match(line)
+            return
+        parsed = FINDING_ROW.match(line)
         if parsed is None:
-            problems.append(f"malformed finding line: {line.strip()}")
-            continue
-        severity, location, trigger, impact = (value.strip() for value in parsed.groups())
+            self.problems.append(f"malformed finding line: {line.strip()}")
+            return
+        severity, location, trigger, impact = (
+            value.strip() for value in parsed.groups()
+        )
         if not (severity and location and trigger and impact):
-            problems.append(f"finding line with empty field: {line.strip()}")
-            continue
-        entries.append(
+            self.problems.append(f"finding line with empty field: {line.strip()}")
+            return
+        self.entries.append(
             {
                 "severity": severity.upper(),
                 "location": location,
@@ -160,17 +171,25 @@ def parse_findings(text: str) -> tuple[list[dict], list[str]]:
                 "impact": impact,
             }
         )
-    if state == "findings":
-        problems.append("unterminated findings block")
-    if not entries and not problems:
-        problems.append("missing findings block")
-    elif not entries:
-        problems.append("findings block is empty")
-    return entries, problems
+
+
+def parse_findings(text: str) -> tuple[list[dict], list[str]]:
+    """Parse the report-level machine block; return findings and format issues."""
+    scanner = _Scanner()
+    # Split on CR/LF only: splitlines() would treat \f/\x85/\u2028 as new lines.
+    for line in re.split(r"\r\n|\r|\n", text):
+        scanner.feed(line)
+    if scanner.state == "findings":
+        scanner.problems.append("unterminated findings block")
+    if not scanner.entries and not scanner.problems:
+        scanner.problems.append("missing findings block")
+    elif not scanner.entries:
+        scanner.problems.append("findings block is empty")
+    return scanner.entries, scanner.problems
 
 
 def money_path_lines(source: str) -> set:
-    """用 AST 返回资金写入函数（含 def 行）占用的行号。"""
+    """Return the line numbers occupied by the money-writing function."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -188,9 +207,9 @@ def resolve_location(
     *,
     require_money_path: bool = False,
 ) -> bool:
-    """位置必须指向审计夹具内真实存在的行；资金路径约束可选。"""
+    """The location must point at a real line inside the audited fixture."""
     location = entry["location"].replace("\\", "/")
-    match = LOCATION_RE.match(location)
+    match = LOCATION.match(location)
     if match is None:
         return False
     relative = match.group("path")
@@ -288,11 +307,7 @@ def evaluate(
             any(level in final_message for level in ("P0", "P1", "P2", "P3")),
             final_message[-2000:],
         ),
-        check(
-            "audit findings block is well formed",
-            not problems,
-            problems,
-        ),
+        check("audit findings block is well formed", not problems, problems),
         check(
             "audit reports at most 20 findings",
             1 <= len(entries) <= MAX_FINDINGS,
@@ -338,4 +353,11 @@ def evaluate(
             getattr(observed, "reviewer_instances", 0),
         ),
     ]
-    return evaluation(checks)
+    return evaluation(
+        checks,
+        details={
+            "findings": entries,
+            "format_problems": problems,
+            "file_access": dict(sorted(file_access.items())),
+        },
+    )

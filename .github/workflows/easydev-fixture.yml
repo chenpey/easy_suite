@@ -10,12 +10,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  public-contract-callers:
+  offline:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: public-contract-callers
+            command: bash easydev/tests/cases/public-contract-callers/run.sh
+          - name: agent-runner-cli
+            command: python3 -m unittest discover -s easydev/tests/experiments/agent_runner -p 'test_*.py' -v
+          - name: swebench-cli
+            command: python3 -m unittest discover -s easydev/tests/experiments/swebench -p 'test_*.py' -v
+    name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
-      - run: bash easydev/tests/cases/public-contract-callers/run.sh
-      - name: Offline unit tests
-        run: |
-          python3 -m unittest discover -s easydev/tests/experiments/agent_runner -p 'test_*.py' -v
-          python3 -m unittest discover -s easydev/tests/experiments/swebench -p 'test_*.py' -v
+      - name: ${{ matrix.name }}
+        run: ${{ matrix.command }}

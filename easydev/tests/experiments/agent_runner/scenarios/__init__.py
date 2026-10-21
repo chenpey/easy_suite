@@ -1,4 +1,8 @@
-"""Scenario registry for the behavior runner."""
+"""Scenario registry for the behavior runner.
+
+The registry is the single source for ``runner.py list`` and for the
+``--scenario`` choices, so a scenario cannot be listed without being loadable.
+"""
 
 from __future__ import annotations
 
@@ -47,7 +51,13 @@ def load_scenario(scenario_id: str) -> Scenario:
 
 
 def all_scenarios() -> Dict[str, Scenario]:
-    return {
+    scenarios = {
         scenario_id: load_scenario(scenario_id)
         for scenario_id in SCENARIO_MODULES
     }
+    for scenario_id, scenario in scenarios.items():
+        if scenario.scenario_id != scenario_id:
+            raise SystemExit(f"scenario id mismatch: {scenario_id}")
+        if not scenario.title or not scenario.prompt:
+            raise SystemExit(f"scenario {scenario_id} is missing title or prompt")
+    return scenarios

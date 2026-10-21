@@ -24,6 +24,30 @@ PROMPT = """使用 easydev auto 完成当前仓库中的任务。
 完成后说明实际验证、采用的流程和独立审查状态。
 """
 
+NOTES = {
+    "n1": {"owner_id": "u1", "text": "first"},
+    "n2": {"owner_id": "u2", "text": "second"},
+}
+
+# 行为验收表：调用表达式 + 期望类别。缺失身份必须先拒绝，即使 note 不存在，
+# 所以 "absent note + missing identity" 仍要求 PermissionError。
+BEHAVIOR_CASES = (
+    ("owner reads own note", "get_note('n1', 'u1')", "note", "first"),
+    ("second owner reads own note", "get_note('n2', 'u2')", "note", "second"),
+    ("missing note stays None", "get_note('missing', 'u1')", "none", None),
+    ("other user denied", "get_note('n1', 'u2')", "raises", None),
+    (
+        "missing note for other user stays None",
+        "get_note('missing', 'u2')",
+        "none",
+        None,
+    ),
+    ("none identity on existing note", "get_note('n1', None)", "raises", None),
+    ("empty identity on existing note", "get_note('n1', '')", "raises", None),
+    ("none identity on absent note", "get_note('missing', None)", "raises", None),
+    ("empty identity on absent note", "get_note('missing', '')", "raises", None),
+)
+
 
 def prepare(workspace: Path, case_root: Path) -> None:
     del case_root
@@ -31,17 +55,46 @@ def prepare(workspace: Path, case_root: Path) -> None:
         workspace,
         {
             "src/access.py": (
-                'NOTES = {\n'
+                '"""Note access helpers."""\n\n'
+                "NOTES = {\n"
                 '    "n1": {"owner_id": "u1", "text": "first"},\n'
                 '    "n2": {"owner_id": "u2", "text": "second"},\n'
                 "}\n\n\n"
                 "def get_note(note_id, user_id):\n"
+                '    """Return the note with this id."""\n'
                 "    del user_id\n"
                 "    return NOTES.get(note_id)\n"
             ),
-            "README.md": "# Access fixture\n\nNotes require owner-only access.\n",
+            "README.md": (
+                "# Access fixture\n\n"
+                "Notes require owner-only access.\n"
+                "A missing or empty user must be rejected before the note lookup.\n"
+            ),
         },
     )
+
+
+def behavior_script() -> str:
+    lines = ["from src.access import get_note", ""]
+    for label, call, mode, expected in BEHAVIOR_CASES:
+        lines.append(f"# {label}")
+        if mode == "note":
+            lines.append(f'assert {call}["text"] == {expected!r}')
+        elif mode == "none":
+            lines.append(f"assert {call} is None")
+        else:
+            lines.extend(
+                [
+                    "try:",
+                    f"    {call}",
+                    "except PermissionError:",
+                    "    pass",
+                    "else:",
+                    f"    raise AssertionError({label!r})",
+                ]
+            )
+    lines.append('print("ok")')
+    return "\n".join(lines) + "\n"
 
 
 def evaluate(
@@ -51,33 +104,16 @@ def evaluate(
     observed: object,
 ) -> dict:
     del final_message
-    runtime = run_python(
-        workspace,
-        (
-            "from src.access import get_note\n"
-            "assert get_note('n1', 'u1')['text'] == 'first'\n"
-            "assert get_note('missing', 'u1') is None\n"
-            "for note_id in ('n1', 'missing'):\n"
-            "    for user in (None, ''):\n"
-            "        try:\n"
-            "            value = get_note(note_id, user)\n"
-            "        except PermissionError:\n"
-            "            continue\n"
-            "        raise AssertionError((note_id, user, value))\n"
-            "try:\n"
-            "    get_note('n1', 'u2')\n"
-            "except PermissionError:\n"
-            "    pass\n"
-            "else:\n"
-            "    raise AssertionError('cross-owner access was not rejected')\n"
-            "assert get_note('missing', 'u2') is None\n"
-            "print('ok')\n"
-        ),
-    )
+    runtime = run_python(workspace, behavior_script())
     hidden_changes = hidden_workspace_changes(observed, changed_paths)
     checks = [
         check("only src/access.py changed", changed_paths == ["src/access.py"], changed_paths),
         check("no hidden workspace changes", not hidden_changes, hidden_changes),
+        check(
+            "git index stayed unchanged",
+            not getattr(observed, "index_changed", True),
+            getattr(observed, "index_changed", None),
+        ),
         check(
             "git control metadata stayed unchanged",
             not getattr(observed, "git_metadata_changes", []),

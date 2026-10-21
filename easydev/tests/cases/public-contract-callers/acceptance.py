@@ -1,101 +1,71 @@
-"""独立验收脚本：不依赖被测仓库的 check_orders.py，可单独用于 Agent 任务评测。
+"""Independent acceptance for the public-contract-callers fixture.
 
-用法：
-    python3 acceptance.py <被测仓库目录>
+The checks are a data table: every row carries a label, the call to exercise,
+the expected value or exception, and whether the result may not contain any
+order data.  The runner below applies one uniform policy per mode, so adding a
+case cannot silently change how failures are reported.
+
+Usage:
+    python3 acceptance.py <checked-out fixture>
 """
+
+from __future__ import annotations
+
 import re
 import sys
 import uuid
+
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, sys.argv[1])
 
 from app import db  # noqa: E402
 
-order = {"id": "o1", "owner_id": "u1", "total": 120}
-order2 = {"id": "o2", "owner_id": "u2", "total": 80}
+ORDER_ONE = {"id": "o1", "owner_id": "u1", "total": 120}
+ORDER_TWO = {"id": "o2", "owner_id": "u2", "total": 80}
 
-# 动态订单用于确认实现读取实际 owner_id，而不是把固定订单映射写死。
-# 在导入被测模块前写入，避免把“导入时从 ORDERS 派生映射”误判为硬编码。
-suffix = uuid.uuid4().hex[:12]
-dynamic_order = {
-    "id": f"o-{suffix}",
-    "owner_id": f"owner-{suffix}",
-    "total": 100000 + int(suffix[:6], 16) % 900000,
+# A runtime order proves the implementation reads the live owner instead of a
+# fixed map.  It is appended before importing the application modules so an
+# import-time index over ORDERS would still see it.
+SUFFIX = uuid.uuid4().hex[:12]
+DYNAMIC_ORDER = {
+    "id": f"o-{SUFFIX}",
+    "owner_id": f"owner-{SUFFIX}",
+    "total": 100000 + int(SUFFIX[:6], 16) % 900000,
 }
-other_user = f"other-{suffix}"
-db.ORDERS.append(dynamic_order)
+OTHER_USER = f"other-{SUFFIX}"
+db.ORDERS.append(DYNAMIC_ORDER)
 
 from app.admin import export_order  # noqa: E402
 from app.api import handle_show_order  # noqa: E402
 from app.orders import get_order  # noqa: E402
 
-known_order_values = {
-    order["id"],
-    order["owner_id"],
-    order["total"],
-    order2["id"],
-    order2["owner_id"],
-    order2["total"],
-    *dynamic_order.values(),
+EMPTY_RESULT_KEYS = {"status", "error", "message", "detail", "code"}
+ORDER_VALUES = {
+    ORDER_ONE["id"],
+    ORDER_ONE["owner_id"],
+    ORDER_ONE["total"],
+    ORDER_TWO["id"],
+    ORDER_TWO["owner_id"],
+    ORDER_TWO["total"],
+    *DYNAMIC_ORDER.values(),
 }
-allowed_empty_keys = {"status", "error", "message", "detail", "code"}
-order_value_patterns = [
+ORDER_PATTERNS = [
     re.compile(rf"(?<![0-9A-Za-z]){re.escape(str(value))}(?![0-9A-Za-z])")
-    for value in known_order_values
+    for value in ORDER_VALUES
 ]
 
 
 def track_order_value(value):
-    """登记后来出现的订单相关值，让返回值与错误文本扫描同步覆盖它。"""
-    known_order_values.add(value)
-    order_value_patterns.append(
+    """Register a later owner value for both exact and in-text scanning."""
+    ORDER_VALUES.add(value)
+    ORDER_PATTERNS.append(
         re.compile(rf"(?<![0-9A-Za-z]){re.escape(str(value))}(?![0-9A-Za-z])")
     )
 
 
-checks = 0
-failures = []
-
-
-def count_check():
-    global checks
-    checks += 1
-
-
-def expect(label, fn, expected):
-    count_check()
-    try:
-        actual = fn()
-    except Exception as error:  # noqa: BLE001 - 验收脚本
-        actual = f"{type(error).__name__}: {error}"
-    if actual != expected:
-        failures.append(f"{label}: expected {expected!r}, got {actual!r}")
-
-
-def expect_raises(label, fn, exc_type, *, no_order=False):
-    count_check()
-    try:
-        actual = fn()
-    except exc_type as error:
-        if no_order and (
-            contains_order(str(error)) or contains_order(error.args)
-        ):
-            failures.append(f"{label}: error leaked order data {error!r}")
-        return
-    except Exception as error:  # noqa: BLE001 - 验收脚本
-        failures.append(f"{label}: expected {exc_type.__name__}, got {type(error).__name__}: {error}")
-        return
-    failures.append(f"{label}: expected {exc_type.__name__}, got return value {actual!r}")
-
-
-def is_order_value(value):
-    # 先判类型再查集合，避免响应中的不可哈希字段让验收器崩溃。
-    return type(value) in (str, int, float) and value in known_order_values
-
-
 def contains_order(value):
-    if value == order or value == order2 or value == dynamic_order:
+    if value == ORDER_ONE or value == ORDER_TWO or value == DYNAMIC_ORDER:
         return True
     if isinstance(value, dict):
         if (
@@ -108,22 +78,25 @@ def contains_order(value):
     if isinstance(value, (list, tuple)):
         return any(contains_order(item) for item in value)
     if isinstance(value, str):
-        # 错误文本也必须逐词扫描，避免把订单字段嵌进 message/error 绕过检查。
-        return any(pattern.search(value) for pattern in order_value_patterns)
-    # 缺失身份时直接返回订单字段（如金额 120）也属于泄露，不能只查容器。
+        return any(pattern.search(value) for pattern in ORDER_PATTERNS)
     return is_order_value(value)
 
 
+def is_order_value(value):
+    # Check the type before the set lookup: response values may be unhashable.
+    return type(value) in (str, int, float) and value in ORDER_VALUES
+
+
 def is_empty_result(value):
-    """只接受报错、None、空容器或仅含 4xx 状态/错误文本的字典。"""
-    if value is None or value == {} or value == [] or value == ():
+    """Accept only an error/empty response, never a payload carrying an order."""
+    if value is None or value in ({}, [], ()):
         return True
     if not isinstance(value, dict):
         return False
     data = dict(value)
     if "order" in data and data.pop("order") not in (None, {}, [], ()):
         return False
-    if not set(data).issubset(allowed_empty_keys):
+    if not set(data).issubset(EMPTY_RESULT_KEYS):
         return False
     for key in ("error", "message", "detail", "code"):
         if key in data and not isinstance(data[key], str):
@@ -132,133 +105,265 @@ def is_empty_result(value):
     return status is None or (isinstance(status, int) and 400 <= status < 500)
 
 
-def expect_no_order(label, fn):
-    """缺少身份时允许报错或空结果，但不得返回订单数据。"""
-    count_check()
-    try:
-        actual = fn()
-    except Exception as error:  # noqa: BLE001 - 验收脚本
-        if contains_order(str(error)) or contains_order(error.args):
-            failures.append(f"{label}: error leaked order data {error!r}")
-        return
-    # 先限定结果形状，避免变形后的订单字段藏在任意嵌套容器里。
-    if not is_empty_result(actual):
-        failures.append(f"{label}: returned non-empty result {actual!r}")
-        return
-    if contains_order(actual):
-        failures.append(f"{label}: returned order data {actual!r}")
+def iter_checks():
+    """Yield one row at a time; runtime ownership changes happen in order."""
 
+    def row(label, call, **policy):
+        return {"label": label, "call": call, **policy}
 
-expect("owner reads own order", lambda: get_order("o1", "u1"), order)
-expect("second owner reads own order", lambda: get_order("o2", "u2"), order2)
-expect_raises(
-    "other user denied",
-    lambda: get_order("o1", "u2"),
-    PermissionError,
-    no_order=True,
-)
-expect_raises(
-    "first user denied on second order",
-    lambda: get_order("o2", "u1"),
-    PermissionError,
-    no_order=True,
-)
-expect("missing order returns None", lambda: get_order("nope", "u1"), None)
-expect_no_order("missing identity does not read order", lambda: get_order("o1"))
-expect_no_order("none identity does not read order", lambda: get_order("o1", None))
-expect_no_order("empty identity does not read order", lambda: get_order("o1", ""))
-expect_raises(
-    "admin user_id is not owner in get_order",
-    lambda: get_order("o1", "admin"),
-    PermissionError,
-    no_order=True,
-)
-expect("owner 200", lambda: handle_show_order({"user_id": "u1"}, "o1"), {"status": 200, "order": order})
-expect("second owner 200", lambda: handle_show_order({"user_id": "u2"}, "o2"), {"status": 200, "order": order2})
-expect("other user 403", lambda: handle_show_order({"user_id": "u2"}, "o1"), {"status": 403})
-expect("first user 403 on second order", lambda: handle_show_order({"user_id": "u1"}, "o2"), {"status": 403})
-expect("missing order 404", lambda: handle_show_order({"user_id": "u1"}, "nope"), {"status": 404})
-expect_no_order("missing request identity does not read order", lambda: handle_show_order({}, "o1"))
-expect("admin user_id 403 in handle_show_order", lambda: handle_show_order({"user_id": "admin"}, "o1"), {"status": 403})
-expect_no_order("none request identity does not read order", lambda: handle_show_order({"user_id": None}, "o1"))
-expect_no_order("empty request identity does not read order", lambda: handle_show_order({"user_id": ""}, "o1"))
-expect("admin export works", lambda: export_order("o1", {"role": "admin"}), order)
-expect("admin exports another user's order", lambda: export_order("o2", {"role": "admin"}), order2)
-expect_raises(
-    "missing role export denied",
-    lambda: export_order("o1", {}),
-    PermissionError,
-    no_order=True,
-)
-expect_raises(
-    "none role export denied",
-    lambda: export_order("o1", {"role": None}),
-    PermissionError,
-    no_order=True,
-)
-expect_raises(
-    "non-admin export denied",
-    lambda: export_order("o1", {"role": "viewer"}),
-    PermissionError,
-    no_order=True,
-)
-
-expect("dynamic owner reads own order", lambda: get_order(dynamic_order["id"], dynamic_order["owner_id"]), dynamic_order)
-expect_raises(
-    "dynamic other user denied",
-    lambda: get_order(dynamic_order["id"], other_user),
-    PermissionError,
-    no_order=True,
-)
-expect_raises(
-    "fixed user denied on dynamic order",
-    lambda: get_order(dynamic_order["id"], "u1"),
-    PermissionError,
-    no_order=True,
-)
-expect("dynamic owner 200", lambda: handle_show_order({"user_id": dynamic_order["owner_id"]}, dynamic_order["id"]), {"status": 200, "order": dynamic_order})
-expect("dynamic other user 403", lambda: handle_show_order({"user_id": other_user}, dynamic_order["id"]), {"status": 403})
-expect("dynamic admin export works", lambda: export_order(dynamic_order["id"], {"role": "admin"}), dynamic_order)
-
-previous_owner = dynamic_order["owner_id"]
-dynamic_order["owner_id"] = other_user
-track_order_value(other_user)
-expect_raises(
-    "previous owner denied after ownership change",
-    lambda: get_order(dynamic_order["id"], previous_owner),
-    PermissionError,
-    no_order=True,
-)
-expect("new owner reads after ownership change", lambda: get_order(dynamic_order["id"], other_user), dynamic_order)
-expect("new owner 200 after ownership change", lambda: handle_show_order({"user_id": other_user}, dynamic_order["id"]), {"status": 200, "order": dynamic_order})
-
-# 审计原始场景：直接改动固定订单的实际所有者，混合硬编码（固定映射 + 动态回退）也应被拒绝。
-fixed_new_owner = f"fixed-{suffix}"
-track_order_value(fixed_new_owner)
-for fixed_order, old_owner in ((order, "u1"), (order2, "u2")):
-    db_order = next(item for item in db.ORDERS if item["id"] == fixed_order["id"])
-    db_order["owner_id"] = fixed_new_owner
-    fixed_order["owner_id"] = fixed_new_owner
-    expect_raises(
-        f"{fixed_order['id']} previous owner denied after ownership change",
-        lambda order_id=fixed_order["id"], user_id=old_owner: get_order(order_id, user_id),
-        PermissionError,
+    yield row("owner reads own order", lambda: get_order("o1", "u1"), expected=ORDER_ONE)
+    yield row(
+        "second owner reads own order",
+        lambda: get_order("o2", "u2"),
+        expected=ORDER_TWO,
+    )
+    yield row(
+        "other user denied",
+        lambda: get_order("o1", "u2"),
+        raises=PermissionError,
         no_order=True,
     )
-    expect(
-        f"{fixed_order['id']} new owner reads after ownership change",
-        lambda order_id=fixed_order["id"]: get_order(order_id, fixed_new_owner),
-        fixed_order,
+    yield row(
+        "first user denied on second order",
+        lambda: get_order("o2", "u1"),
+        raises=PermissionError,
+        no_order=True,
     )
-    expect(
-        f"{fixed_order['id']} new owner 200 after ownership change",
-        lambda order_id=fixed_order["id"]: handle_show_order({"user_id": fixed_new_owner}, order_id),
-        {"status": 200, "order": fixed_order},
+    yield row("missing order returns None", lambda: get_order("nope", "u1"), expected=None)
+    yield row("missing identity does not read order", lambda: get_order("o1"), no_order=True)
+    yield row(
+        "none identity does not read order",
+        lambda: get_order("o1", None),
+        no_order=True,
+    )
+    yield row(
+        "empty identity does not read order",
+        lambda: get_order("o1", ""),
+        no_order=True,
+    )
+    yield row(
+        "admin user_id is not owner in get_order",
+        lambda: get_order("o1", "admin"),
+        raises=PermissionError,
+        no_order=True,
     )
 
-if failures:
-    print("FAIL")
-    for failure in failures:
-        print(f"- {failure}")
-    raise SystemExit(1)
-print(f"PASS: {checks}/{checks} independent acceptance checks")
+    yield row(
+        "owner 200",
+        lambda: handle_show_order({"user_id": "u1"}, "o1"),
+        expected={"status": 200, "order": ORDER_ONE},
+    )
+    yield row(
+        "second owner 200",
+        lambda: handle_show_order({"user_id": "u2"}, "o2"),
+        expected={"status": 200, "order": ORDER_TWO},
+    )
+    yield row(
+        "other user 403",
+        lambda: handle_show_order({"user_id": "u2"}, "o1"),
+        expected={"status": 403},
+    )
+    yield row(
+        "first user 403 on second order",
+        lambda: handle_show_order({"user_id": "u1"}, "o2"),
+        expected={"status": 403},
+    )
+    yield row(
+        "missing order 404",
+        lambda: handle_show_order({"user_id": "u1"}, "nope"),
+        expected={"status": 404},
+    )
+    yield row(
+        "missing request identity does not read order",
+        lambda: handle_show_order({}, "o1"),
+        no_order=True,
+    )
+    yield row(
+        "admin user_id 403 in handle_show_order",
+        lambda: handle_show_order({"user_id": "admin"}, "o1"),
+        expected={"status": 403},
+    )
+    yield row(
+        "none request identity does not read order",
+        lambda: handle_show_order({"user_id": None}, "o1"),
+        no_order=True,
+    )
+    yield row(
+        "empty request identity does not read order",
+        lambda: handle_show_order({"user_id": ""}, "o1"),
+        no_order=True,
+    )
+
+    yield row(
+        "admin export works",
+        lambda: export_order("o1", {"role": "admin"}),
+        expected=ORDER_ONE,
+    )
+    yield row(
+        "admin exports another user's order",
+        lambda: export_order("o2", {"role": "admin"}),
+        expected=ORDER_TWO,
+    )
+    yield row(
+        "missing role export denied",
+        lambda: export_order("o1", {}),
+        raises=PermissionError,
+        no_order=True,
+    )
+    yield row(
+        "none role export denied",
+        lambda: export_order("o1", {"role": None}),
+        raises=PermissionError,
+        no_order=True,
+    )
+    yield row(
+        "non-admin export denied",
+        lambda: export_order("o1", {"role": "viewer"}),
+        raises=PermissionError,
+        no_order=True,
+    )
+
+    yield row(
+        "dynamic owner reads own order",
+        lambda: get_order(DYNAMIC_ORDER["id"], DYNAMIC_ORDER["owner_id"]),
+        expected=DYNAMIC_ORDER,
+    )
+    yield row(
+        "dynamic other user denied",
+        lambda: get_order(DYNAMIC_ORDER["id"], OTHER_USER),
+        raises=PermissionError,
+        no_order=True,
+    )
+    yield row(
+        "fixed user denied on dynamic order",
+        lambda: get_order(DYNAMIC_ORDER["id"], "u1"),
+        raises=PermissionError,
+        no_order=True,
+    )
+    yield row(
+        "dynamic owner 200",
+        lambda: handle_show_order(
+            {"user_id": DYNAMIC_ORDER["owner_id"]}, DYNAMIC_ORDER["id"]
+        ),
+        expected={"status": 200, "order": DYNAMIC_ORDER},
+    )
+    yield row(
+        "dynamic other user 403",
+        lambda: handle_show_order({"user_id": OTHER_USER}, DYNAMIC_ORDER["id"]),
+        expected={"status": 403},
+    )
+    yield row(
+        "dynamic admin export works",
+        lambda: export_order(DYNAMIC_ORDER["id"], {"role": "admin"}),
+        expected=DYNAMIC_ORDER,
+    )
+
+    previous_owner = DYNAMIC_ORDER["owner_id"]
+    DYNAMIC_ORDER["owner_id"] = OTHER_USER
+    track_order_value(OTHER_USER)
+    yield row(
+        "previous owner denied after ownership change",
+        lambda: get_order(DYNAMIC_ORDER["id"], previous_owner),
+        raises=PermissionError,
+        no_order=True,
+    )
+    yield row(
+        "new owner reads after ownership change",
+        lambda: get_order(DYNAMIC_ORDER["id"], OTHER_USER),
+        expected=DYNAMIC_ORDER,
+    )
+    yield row(
+        "new owner 200 after ownership change",
+        lambda: handle_show_order({"user_id": OTHER_USER}, DYNAMIC_ORDER["id"]),
+        expected={"status": 200, "order": DYNAMIC_ORDER},
+    )
+
+    # The fixed rows change ownership too: a hard-coded fixed map would pass the
+    # dynamic rows alone if only the dynamic entry had moved.
+    fixed_new_owner = f"fixed-{SUFFIX}"
+    track_order_value(fixed_new_owner)
+    for fixed_order, old_owner in ((ORDER_ONE, "u1"), (ORDER_TWO, "u2")):
+        db_order = next(
+            item for item in db.ORDERS if item["id"] == fixed_order["id"]
+        )
+        db_order["owner_id"] = fixed_new_owner
+        fixed_order["owner_id"] = fixed_new_owner
+        yield row(
+            f"{fixed_order['id']} previous owner denied after ownership change",
+            lambda order_id=fixed_order["id"], user_id=old_owner: get_order(
+                order_id, user_id
+            ),
+            raises=PermissionError,
+            no_order=True,
+        )
+        yield row(
+            f"{fixed_order['id']} new owner reads after ownership change",
+            lambda order_id=fixed_order["id"]: get_order(
+                order_id, fixed_new_owner
+            ),
+            expected=fixed_order,
+        )
+        yield row(
+            f"{fixed_order['id']} new owner 200 after ownership change",
+            lambda order_id=fixed_order["id"]: handle_show_order(
+                {"user_id": fixed_new_owner}, order_id
+            ),
+            expected={"status": 200, "order": fixed_order},
+        )
+
+
+def run_check(row):
+    label = row["label"]
+    try:
+        actual = row["call"]()
+    except Exception as error:  # noqa: BLE001 - acceptance reports failures
+        expected = row.get("raises")
+        if expected is None:
+            if row.get("no_order"):
+                if contains_order(str(error)) or contains_order(error.args):
+                    return f"{label}: error leaked order data {error!r}"
+                return None
+            return f"{label}: unexpected {type(error).__name__}: {error}"
+        if not isinstance(error, expected):
+            return (
+                f"{label}: expected {expected.__name__}, got "
+                f"{type(error).__name__}: {error}"
+            )
+        if row.get("no_order") and (
+            contains_order(str(error)) or contains_order(error.args)
+        ):
+            return f"{label}: error leaked order data {error!r}"
+        return None
+
+    if row.get("raises") is not None:
+        return f"{label}: expected {row['raises'].__name__}, got {actual!r}"
+    if row.get("no_order"):
+        if not is_empty_result(actual):
+            return f"{label}: returned non-empty result {actual!r}"
+        if contains_order(actual):
+            return f"{label}: returned order data {actual!r}"
+        return None
+    if actual != row.get("expected"):
+        return f"{label}: expected {row['expected']!r}, got {actual!r}"
+    return None
+
+
+def main():
+    total = 0
+    failures = []
+    for row in iter_checks():
+        total += 1
+        failure = run_check(row)
+        if failure is not None:
+            failures.append(failure)
+    if failures:
+        print("FAIL")
+        for failure in failures:
+            print(f"- {failure}")
+        return 1
+    print(f"PASS: {total}/{total} independent acceptance checks")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

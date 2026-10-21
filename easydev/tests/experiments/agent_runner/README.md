@@ -1,50 +1,32 @@
-# 最小真实行为 Runner
+# 单宿主行为 Runner
 
-该目录提供单宿主、多个固定场景的行为回归入口。它复用 SWE-bench 运行器的事件解析、
-隔离工作区和补丁归因方式，但不下载数据集、不启动网络服务，也不把决策回放当成
-Agent 行为通过。
+`runner.py` 为固定行为场景准备隔离仓库、调用 Codex CLI、采集事件与补丁，并用场景验收判定结果。它不下载数据、不启动网络服务，也不把决策回放当成 Agent 行为通过。
 
-只有当 reviewer 的 `wait`/`close` 状态为 `completed` 且带回报告时，才记为完成；
-仅有 `spawn_agent`、仍在运行或空报告都不算独立审查完成。事件存在 malformed 行或
-没有有效事件时，整个调用标为无效，不进入场景通过。
-
-## 首批场景
-
-| 用例 | 检查 | 主要证据 |
-| --- | --- | --- |
-| B01 | 低风险单文件修改不误入 full，不启动 reviewer，quick 不加载 reference | 产品 diff、事件、最终说明 |
-| B02 | 高风险鉴权改动进入 full，并存在已完成 reviewer | 行为验收、事件中的 reviewer 状态与报告 |
-| B16 | audit 只读、检查索引、实际读取资金路径，并按严重度报告 | 空 diff、索引状态、文件访问、机器可核对发现块（`文件:行号` 位置） |
-| public-contract-callers | 公共契约改造通过独立验收，未改测试或用例材料，且可见命令中未读取已知 benchmark 元数据 | `acceptance.py`、完整 diff、reviewer 事件、访问归因 |
-
-## 使用
-
-列出场景：
+## 命令
 
 ```bash
 python3 tests/experiments/agent_runner/runner.py list
-```
-
-只准备隔离用例，不调用模型：
-
-```bash
 python3 tests/experiments/agent_runner/runner.py prepare \
-  --scenario public-contract-callers \
-  --out /tmp/easydev-behavior
-```
-
-运行真实 Codex CLI。模型参数可省略，由宿主默认值决定；模型和推理深度未由工具返回时，
-报告应写未知：
-
-```bash
+  --scenario public-contract-callers --out /tmp/easydev-behavior
 python3 tests/experiments/agent_runner/runner.py run \
-  --scenario b02 \
-  --out /tmp/easydev-behavior \
-  --model <host-model> \
-  --reasoning-effort high
+  --scenario b02 --out /tmp/easydev-behavior \
+  --model <host-model> --reasoning-effort high
 ```
 
-每个 run 保存：
+`prepare` 不调用模型；`run` 才执行真实宿主。`--codex-bin`、`--codex-auth` 和 `--agent-timeout` 可注入外部命令行、认证文件与超时，离线测试正是通过这些入口使用替身。
+
+## 场景
+
+| ID | 检查 | 主要证据 |
+| --- | --- | --- |
+| `b01` | 低风险单文件文案修改保持 quick：只改 `src/ui.py`、不加载 reference、不启动 reviewer、索引与运行时 Skill 不变、末行声明 `审查状态：自查` | `changed_paths`、`index_changed`、`runtime_skill_changes`、事件归因、最终消息 |
+| `b02` | 高风险对象所有权校验进入 full，且存在已完成并带回报告的 reviewer | 行为验收、声明路径、reviewer 完成数 |
+| `b16` | audit 只读：不改文件/索引/Git 元数据/运行时 Skill，实际读取 `src/ledger.py`，报告机器可核对发现块 | 空 diff、`file_access`、`easydev-findings` 块解析 |
+| `public-contract-callers` | 公共契约改造通过独立验收，未改测试或用例材料，未观察到 benchmark 元数据访问，且有完成的 reviewer | `acceptance.py`、完整 diff、reviewer 事件、访问归因 |
+
+场景模块只依赖可观测结果：改动路径集合、最终消息中的显式机器块、事件归因字段。`evaluate` 返回 `{"passed", "checks": [{"name", "passed", "detail"}], "details"}`，每个 check 对应一个可独立定位的失败原因。
+
+## 产物
 
 ```text
 <out>/runs/<scenario>/easydev/r<n>/
@@ -56,78 +38,22 @@ python3 tests/experiments/agent_runner/runner.py run \
 └── result.json         # 调用状态、归因与场景验收
 ```
 
-`result.json` 的 `valid_invocation` 要求返回码为 0、`turn.completed=true`、
-未超时、至少一个有效事件且 malformed 行为 0；结果带独立标识
-`behavior_result_protocol=behavior-v1`，不复用 SWE-bench 的 `result_protocol=2`。
-JSON 不是对象、缺少事件类型、`item`/`agents_states` 形状错误或
-`receiver_thread_ids` 不是字符串数组的事件都按 malformed 处理，缺少当前协议或
-字段的旧结果不会被当作有效结果。行为 runner 的计数直接取自当次
-`events.jsonl` 解析，不提供跨进程恢复；SWE-bench runner 从磁盘复用结果时，
-另行要求存储计数与事件流一致，并拒绝无效 usage、测试状态、墙钟时间或与
-F2P/P2P 测试结果不一致的 `resolved`。
-`usage`、`wall_seconds` 和工具调用来自宿主事件，不来自模型自述。`index_changed` 记录采集前暂存内容或
-`assume-unchanged`/`skip-worktree` 等索引标志是否变化，B16 要求它为假；采集时会
-清除这些标志以捕获隐藏改动，并保留相应证据。运行前后会对安装后的运行时 Skill
-计算内容快照，`result.json` 保存 `runtime_skill_changes` 路径列表而非快照正文；
-`agent.patch` 排除 `.agents/skills/` 不代表允许篡改该目录。
-Git diff 捕获会暂时使用 Agent 运行前的可信 `.git/config`，禁用 hooks 和 fsmonitor，并将系统/全局
-Git 配置与 attributes 指向空配置，避免 Agent 配置的 filter 在采集时执行；随后还会检查 `.git` 控制元数据是否改变，
-并拒绝 diff 捕获后仍留有未记录的工作区改动。
-B16 还会对排除 `.git` 后的全工作区做前后指纹，因此 `.pytest_cache`、
-`__pycache__` 等 Git ignored 路径的变化同样会使只读检查失败。
-B01/B02/public-contract-callers 的验收子进程使用 `python -S -B`，工作区的 `sitecustomize.py`
-不能在验收导入阶段执行；捕获 diff 之外的全工作区变化也会使检查失败。
+`valid_invocation` 要求返回码为 0、`turn.completed=true`、未超时、至少一个有效事件且 malformed 行为 0；结果使用独立协议 `behavior_result_protocol=behavior-v1`。只有 reviewer 的 `wait`/`close` 状态为 `completed` 且带回报告才计为独立审查完成。`index_changed` 记录采集前暂存内容或 `assume-unchanged`/`skip-worktree` 等索引标志；运行前后对安装后的运行时 Skill 做内容快照，`runtime_skill_changes` 记录变化路径。
 
 ## 离线自测
 
 ```bash
-python3 -m unittest discover \
-  -s tests/experiments/agent_runner \
-  -p 'test_*.py' -v
+python3 -m unittest discover -s tests/experiments/agent_runner -p 'test_*.py' -v
 ```
 
-自测会准备 B01/B02/B16 的测试仓库，并用 public-contract-callers 已保存的 `solution.patch` 验证独立验收入口；
-它不启动 Codex，也不证明当前模型会遵守流程。
+`test_cli.py` 通过 `runner.py` 的 CLI 驱动 `tests/experiments/stubs/codex_stub.py`，覆盖 `list`/`prepare`/`run`、B16 合格发现块与只读违约、安全边界（运行时 Skill 篡改、索引被暂存、超时进程树清理）与事件有效性。它不启动 Codex，也不证明当前模型会遵守流程。
 
 ## 限制
 
-- 当前只实现 Codex CLI 适配器，其他宿主需按同一接口单独实现。
-- 调用请求 Codex CLI 使用 `workspace-write` 并设置
-  `sandbox_workspace_write.network_access=false`；该配置尚未在真实模型中验证，
-  也没有文件系统读白名单。正式评测仍应在强制断网和隔离外部文件的容器中运行。
-- `request` 只记录命令行请求的模型与深度；宿主未回传实际值时必须写未知，不能用
-  请求值代替实际模型。
-- reviewer 完成、报告内容与文件访问都是行为证据，不是任务质量或语义正确的证明；
-  public-contract-callers 的独立验收仍是唯一隐藏验收入口。
-- `file_access` 与 `benchmark_metadata_access` 基于已完成命令的 shell 分段和已知
-  路径标记，不是文件系统审计；`git diff --stat`/`--name-only` 等摘要不计为内容
-  读取，`--patch`/`-p` 等内容输出优先；`time`/`nice` 包装命令、Python 脚本参数、
-  Python `-c` 显式路径和 `.` 递归搜索可识别。已知 benchmark 材料包括
-  `solution.patch`、`acceptance.py`、`dataset.json`、`manifest.json`、
-  `results.jsonl`、`summary.json`、`result.json`、`report.md`、`agent.patch`、
-  `task-baselines`、`gold/`、`runs/`、JUnit/pytest 产物与 `.pytest_cache/`。
-  失败命令中的访问尝试仍会记录；`cd`/`pushd`/`popd` 的已知目录上下文会延续到后续分段。
-  间接读取、变量拼接或未命中的路径仍是残余风险；public-contract-callers 的通过
-  结论只能写成“可见命令中未观察到已知 benchmark 元数据路径”。
-- 超时清理会轮询记录后代 PID，并保留根进程身份；发根进程组或 PID 信号前复核身份，
-  覆盖仍在进程树中或已记录的 `setsid()` 后代，降低 PID 复用导致误杀的风险；
-  进程在两次采样之间完成双 fork 并被 init 收养时，普通用户态代码无法凭 PID 树
-  可靠追踪，正式隔离仍需 cgroup、容器或宿主 supervisor。
-- 事件存在不代表审查质量；需要结合 reviewer 报告、隐藏验收和成本记录判断。
-- 场景检查是行为回归门槛，不是官方的 SWE-bench 或 Agent 通用排行榜成绩。
-- B16 的确定发现只核对 prompt 要求的 `easydev-findings` 块（格式、1–20 条、
-  P0→P3 排序、`文件:行号` 位置、触发/后果字段非空）：每条位置都必须解析到审计夹具内
-  真实存在的行，且至少一条落在 `withdraw()` 函数体内（用 AST 计算函数边界，支持
-  `文件:符号` 形式与 Windows 反斜杠路径）。只解析报告层级围栏（0–3 个前导空格）；
-  4 空格及以上缩进、列表或引用容器内的围栏不在支持范围内（prompt 要求块只在报告
-  顶层给出）；包围示例的 0–3 空格围栏会作为代码块排除其中内容。未闭合块、第二个机器块、
-  块内杂围栏、空字段、越界路径报格式/证据问题。
-  位置证据是可验证的，但该检查不判定触发/后果描述的正确性、分析质量与发现完整性，
-  也不防御“位置对、结论错”的报告。自由文本只用于核对限制说明与路径提及。
-- B01 的自查状态按 prompt 要求的末行标记 `审查状态：自查` / `审查状态：独立` 判定：只认
-  最后一条非空行、整行匹配（从行首开始，不接受前导空格或 Tab），围栏代码块内的标记不计
-  （围栏按 0–3 个前导空格识别）。
-  该标记不证明代理真实执行了自查。
-- 新增宿主适配器时必须将该宿主的原生读取动作（如内置 `read` 工具）映射到
-  `file_access`/`module_access`；只解析 shell 命令会让 B16 的读取证据与 B01 的
-  “未加载 reference”判定失效。
+- 只实现 Codex CLI 适配器。
+- 调用请求 `workspace-write` 和 `sandbox_workspace_write.network_access=false`；该配置尚未在真实模型中验证，也没有文件系统读白名单。
+- `request` 只记录命令行请求的模型与深度；宿主未回传实际值时必须写未知。
+- reviewer 完成与报告是行为证据，不是任务质量或语义正确的证明。
+- `file_access` 与 `benchmark_metadata_access` 基于命令文本，不是文件系统审计；间接读取与变量拼接仍是残余风险。
+- 超时清理覆盖进程组和已记录后代，正式隔离仍需容器、cgroup 或宿主 supervisor。
+- B16 的发现块判定只核对格式、1–20 条、P0→P3 排序、`文件:行号` 位置与字段非空，不判断结论正确性或发现完整性；B01 的状态标记不证明自查真的发生。

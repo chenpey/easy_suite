@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -80,11 +81,11 @@ def evaluation(
     }
 
 
-def check(name: str, passed: bool, evidence: object) -> Dict[str, object]:
+def check(name: str, passed: bool, detail: object) -> Dict[str, object]:
     return {
         "name": name,
         "passed": bool(passed),
-        "evidence": evidence,
+        "detail": detail,
     }
 
 
@@ -94,8 +95,6 @@ def run_python(
     *,
     timeout: int = 60,
 ) -> Dict[str, object]:
-    import subprocess
-
     env = os.environ.copy()
     env.update(
         {

@@ -1,66 +1,60 @@
-# 公共契约与调用方用例
+# public-contract-callers
 
-本用例验证公共读取函数的契约变更、对象级所有权校验和仓库内调用方适配。它包含初始仓库、参考补丁、独立验收脚本、历史审查报告和一键复验脚本。
+公共契约变更与调用方适配用例：订单读取函数增加当前用户参数和所有权校验，仓库内已有两个调用方。它验证“识别公共契约、适配调用方、独立验收”这条链路，不是模型行为成绩。
 
-## 目录
+## 材料
 
 ```text
 public-contract-callers/
-├── initial/               被测初始仓库
-│   ├── app/
-│   ├── docs/orders.md
-│   ├── check_orders.py    目标契约检查，初始状态应失败
-│   └── probe.py           接口探针，修复前 200、修复后 403
-├── solution.patch         初始状态到参考实现的完整 diff
-├── acceptance.py          独立验收脚本，不依赖被测仓库的自带检查
-├── reviewer-report.md     历史独立审查原始报告
-└── run.sh                 红测、参考补丁、绿测和负向伪修复复验
+├── initial/           # Agent 可见的初始仓库
+│   ├── app/{__init__,db,orders,api,admin}.py
+│   ├── check_orders.py   # 仓库自带的目标契约检查（初始失败）
+│   ├── docs/orders.md    # 现有契约与调用方说明
+│   └── probe.py          # 打印实际 status 数字
+├── solution.patch     # 评测方参考补丁（同时更新检查脚本与契约文档）
+├── .gitattributes     # 让补丁文件保留 diff 上下文的行尾空格
+├── acceptance.py      # 独立验收 CLI，不依赖 check_orders.py
+├── verify.py          # 固定补丁复验编排
+├── run.sh             # 薄封装：exec python3 verify.py
+└── README.md
 ```
 
-## 运行
+材料隔离：`initial/` 与用户请求给执行者；`solution.patch`、`acceptance.py`、`verify.py` 和本 README 属于评测私有材料，Agent 与独立审查者都不能读取。历史审查记录已随重构清空，当前无审查历史。
 
-在 EasyDev 目录执行：
+## 运行
 
 ```bash
 bash tests/cases/public-contract-callers/run.sh
 ```
 
-脚本使用 `mktemp` 创建临时工作区，只依赖 `bash`、`git` 和 Python 3。预期流程：
+`verify.py` 在 `tempfile.mkdtemp()` 中按固定顺序执行：
 
-1. 初始接口允许他人读取，`probe.py` 输出 `200`。
-2. 初始契约检查因目标两参签名尚未实现而失败，失败行必须恰好为 3 条 `TypeError`。
-3. `git apply solution.patch` 成功。
-4. 修复后接口返回 `403`。
-5. 仓库契约检查输出 `PASS: 7/7`。
-6. 独立验收输出 `PASS: 38/38 independent acceptance checks`。
-7. 十一类伪修复分别被独立验收拒绝。
-8. 临时工作区不生成 `__pycache__` 或 `.pyc`。
+1. 初始 `probe.py` 期望 `200`（越权可读）。
+2. `check_orders.py` 失败，且失败原因恰为 3 条 `TypeError`。
+3. `git apply solution.patch`。
+4. `probe.py` 期望 `403`。
+5. `check_orders.py` 通过（7/7）。
+6. `acceptance.py` 通过。
+7. 11 类伪修复分别被 `acceptance.py` 拒绝：忽略身份、返回订单标量、变形金额泄露、响应文本泄露、异常文本泄露、越权异常带订单数据、把 user_id 当 admin、硬编码 `u1`、硬编码固定归属映射、空身份绕过、导出缺少角色校验。
 
-## 材料隔离
+`acceptance.py` 的检查项是数据表（label/调用/期望/是否扫描订单值），新增一个变体只增加一行；`verify.py` 的 `PSEUDO_FIXES` 同样表驱动。
+8. 临时目录没有 `__pycache__` 或 `.pyc`。
 
-| 用途 | Agent 可见材料 | 私有材料 |
-| --- | --- | --- |
-| Agent 行为评测 | `initial/` 和用户请求 | `solution.patch`、`acceptance.py`、`reviewer-report.md` |
-| 固定补丁复验 | `initial/`、`solution.patch`、`acceptance.py`、`run.sh` | 无 |
-| CI | `run.sh` 及其依赖文件 | 无 |
+任一步不符则非 0 退出并打印具体步骤。复验不依赖 `mktemp` 命令，可在精简环境运行。
 
-被测 Agent 只能修改 `app/`，不能修改测试、探针、文档或读取私有材料。正式评测应把私有材料放在 Agent 无法访问的位置；仅靠提示词和命令文本检测不构成文件系统隔离。
+## 独立验收覆盖
 
-`solution.patch` 是验收用的夹具级参考补丁：它同时更新夹具自带的 `check_orders.py` 与 `docs/orders.md`，以便一次复验实现、仓库内检查与契约文本。它不是 Agent 产出，也不满足场景 prompt 对 Agent 的修改边界（只改 `app/`）；因此用参考补丁复跑行为 runner 的 `evaluate` 时，`no test or case-file changes` 与 `only app product files changed` 两项会失败，这是预期行为，不代表补丁错误。
+`acceptance.py` 只通过 `app` 的公共接口断言：
 
-## 覆盖范围
+- 本人读取自己的订单成功；他人读取抛 `PermissionError` 且异常文本不含订单值。
+- 缺失订单返回 `None`；`handle_show_order` 对缺失订单返回 404。
+- 缺失/`None`/空身份不返回订单；返回空结构或 4xx 状态可以接受。
+- 越权时 `handle_show_order` 只返回 `{"status": 403}`，不含订单内容。
+- admin 导出仍校验角色；缺失/`None`/非 admin 角色被拒绝。
+- 运行时新增订单与归属变更同样受约束，固定映射或硬编码实现会被拒绝。
 
-- 本人读取、他人被拒、第二个用户读取自己的订单和跨订单越权。
-- 缺失订单返回 `None`，缺失、空或伪造身份不返回订单内容。
-- `get_order` 抛出 `PermissionError`，订单详情接口返回 200、403 和 404。
-- admin 导出不受所有权限制，但必须继续校验 admin 角色。
-- 运行时生成订单、固定订单归属变更和动态归属变更，防止硬编码映射或导入时快照。
-- 标量、部分字段、嵌套容器、返回错误文本和越权异常对象中的订单值泄露。
+## 覆盖范围与未覆盖条件
 
-未覆盖 `request["user_id"]` 的上游可信性、真实鉴权中间件和并发请求。夹具没有 HTTP 或数据库层，因此身份绑定只能作为待验证风险记录。
+覆盖：参考补丁的红绿、独立验收的通过/拒绝、伪修复召回、字节码产物副作用。
 
-## 复验边界
-
-`run.sh` 证明固定补丁能通过断言、十一类伪修复会被拒绝，不证明真实 Agent 会遵守流程。Agent 是否选择 `full`、是否完成独立审查以及是否读取私有材料，需要由行为 runner 的事件、diff 和隐藏验收共同判断。
-
-`reviewer-report.md` 是历史审查证据，不因当前目录或场景 ID 调整而重新解释原结论。
+未覆盖：真实 Agent 是否遵守材料隔离与修改边界；真实模型行为由 `tests/experiments/agent_runner/` 的 `public-contract-callers` 场景在具隔离能力的环境中执行，当前 CI 只运行固定补丁复验和替身驱动的验收机制检查，不启动模型。

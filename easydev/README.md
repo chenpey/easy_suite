@@ -335,25 +335,26 @@ node ../scripts/version.mjs check
 
 ### 公共契约与调用方固定补丁复验
 
-当前 CI 运行 `public-contract-callers` 固定补丁复验与 agent_runner、swebench 离线单测；版本校验与版本脚本单测在 `version-check` 工作流；真实 Agent 行为回归尚未接入。
+当前 CI 运行 `public-contract-callers` 固定补丁复验与 agent_runner、swebench 离线 CLI 测试；版本校验与版本脚本单测在 `version-check` 工作流；真实 Agent 行为回归尚未接入。
 
 ```bash
 bash tests/cases/public-contract-callers/run.sh
 ```
 
-该脚本在临时目录中执行，覆盖：
+`run.sh` 只是薄封装，复验编排在 `verify.py`，全部在 `tempfile.mkdtemp()` 中执行并覆盖：
 
 - 修复前越权读取返回 200。
-- 目标契约尚未实现时的红测。
+- 目标契约尚未实现时的红测与失败原因。
 - 应用参考补丁后接口返回 403，契约检查通过。
 - 独立验收不依赖被测仓库自己的检查脚本。
-- 十一类伪修复被拒绝。
+- 11 类伪修复被拒绝。
+- 不留下 `__pycache__` 或 `.pyc`。
 
 详情见 [公共契约与调用方用例](tests/cases/public-contract-callers/README.md)。
 
 ### 离线自测
 
-行为 runner：
+行为 runner CLI（外部 Codex CLI 由替身替代）：
 
 ```bash
 python3 -m unittest discover \
@@ -361,7 +362,7 @@ python3 -m unittest discover \
   -p 'test_*.py' -v
 ```
 
-SWE-bench 事件归因与结果协议：
+SWE-bench 运行器与事件归因 CLI（外部 Codex CLI 与 pytest 由替身替代）：
 
 ```bash
 python3 -m unittest discover \
@@ -369,11 +370,11 @@ python3 -m unittest discover \
   -p 'test_*.py' -v
 ```
 
-这些测试验证隔离准备、事件解析、结果协议、访问归因和验收拒绝逻辑，不启动模型。
+这些检查只驱动公开 CLI，断言退出码、stdout/stderr 与产物；覆盖 `list`/`prepare`/`run`、`setup`/`run`/`summarize`、事件归因、模板解包逃逸、保护模式、只读审计与验收拒绝逻辑。替身只替代外部边界，不启动模型、不执行真实 pytest，因此不能证明真实模型行为或真实依赖环境。
 
 ### 行为回归
 
-[tests/behavior.md](tests/behavior.md) 定义 B01-B29b、B31-B49 行为场景以及语义化的 `public-contract-callers` 场景，覆盖：
+[tests/behavior.md](tests/behavior.md) 定义 B01、B02、B06、B07、B09、B10、B12、B13、B14、B16、B18、B25、B25q、B27、B31、B40、B43-B50 以及语义化 `public-contract-callers` 场景，每条给出可观测验收与证据要求，覆盖：
 
 - 低风险与高风险分流、quick 升级 full。
 - 只定位、设计、计划、审查、审计和可行性探针的交付边界。
@@ -384,7 +385,7 @@ python3 -m unittest discover \
 - 模型配置强约束与分派后的实际模型核对。
 - 基线保护、敏感快照、TDD 红绿、工作树和人工接手。
 
-行为用例定义不代表已经执行或通过。执行时应使用独立上下文、临时工作区和真实宿主工具，只向执行者提供 Skill 路径、用户请求、原始材料和工具约束，不提前提供通过条件。结果需要记录实际文件、diff、工具调用、命令输出、模型/深度和未验证项。
+只有 B01、B02、B16 与 `public-contract-callers` 具备离线可执行载体（由替身驱动，只验证验收机制本身，不验证模型行为）；其余是文字规约。行为用例定义不代表已经执行或通过。执行时应使用独立上下文、临时工作区和真实宿主工具，只向执行者提供 Skill 路径、用户请求、原始材料和工具约束，不提前提供通过条件。结果需要记录实际文件、diff、工具调用、命令输出、模型/深度和未验证项。
 
 ### 单宿主行为 Runner
 
@@ -399,7 +400,7 @@ python3 tests/experiments/agent_runner/runner.py run \
   --model <host-model> --reasoning-effort high
 ```
 
-`prepare` 不调用模型。`run` 才执行真实宿主，并保存事件、stderr、最终消息、过滤 Skill 目录后的 Agent 补丁、运行时 Skill 变更路径和 `result.json`。结果使用独立协议 `behavior_result_protocol=behavior-v1`，只有调用完成、事件有效且 reviewer 状态为 `completed` 并带回报告时才记为独立审查完成。
+`prepare` 不调用模型。`run` 才执行真实宿主，并保存事件、stderr、最终消息、过滤 Skill 目录后的 Agent 补丁、运行时 Skill 变更路径和 `result.json`。结果使用独立协议 `behavior_result_protocol=behavior-v1`，只有调用完成、事件有效且 reviewer 状态为 `completed` 并带回报告时才记为独立审查完成。`--codex-bin`、`--codex-auth` 与 `--agent-timeout` 可注入；离线测试通过这些入口使用替身，不改被测 runner 的行为。
 
 当前限制：
 
@@ -507,6 +508,7 @@ easydev/
 │   ├── setup.md
 │   └── worktree.md
 └── tests/
+    ├── README.md
     ├── behavior.md
     ├── cases/
     │   ├── README.md
@@ -515,16 +517,20 @@ easydev/
     │       ├── initial/
     │       ├── solution.patch
     │       ├── acceptance.py
-    │       ├── reviewer-report.md
+    │       ├── verify.py
     │       └── run.sh
     └── experiments/
+        ├── README.md
         ├── process_control.py
+        ├── stubs/
+        │   ├── codex_stub.py
+        │   └── pytest_stub.py
         ├── agent_runner/
         │   ├── README.md
         │   ├── runner.py
         │   ├── adapters/
         │   ├── scenarios/
-        │   └── test_runner.py
+        │   └── test_cli.py
         ├── review-ablation/
         │   └── README.md
         └── swebench/
@@ -532,8 +538,8 @@ easydev/
             ├── run.py
             ├── analyze_events.py
             ├── protocol.py
-            ├── test_analyze_events.py
-            └── test_run_protocol.py
+            ├── test_cli.py
+            └── test_analyze_cli.py
 ```
 
 `agents/openai.yaml` 是 Codex 的可选展示元数据；`examples/` 是可选模型示例；运行时最低文件集只有 `SKILL.md` 和 `references/`，模型配置由内置默认值或用户外部配置提供，不需要包内 JSON。
