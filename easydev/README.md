@@ -1,6 +1,6 @@
 # EasyDev
 
-当前版本：`0.7.0`
+当前版本：`0.7.1`
 
 EasyDev 是面向编码 Agent 的纯文件 Skill。它把需求设计、实施、排障、验证、独立审查、可行性探针和全仓审计收进一个入口，按任务风险选择必要流程，并以可核验的改动和证据交付。
 
@@ -209,6 +209,16 @@ rsync -a \
 ```
 
 该命令不带 `--delete`。更新时先确认目标目录没有自建文件，再删除旧目录并重新复制，避免遗留已移除的文件。
+
+### 查看已安装版本
+
+只持有安装副本、没有源码时，版本直接读 `SKILL.md` 前置元数据的 `metadata.version`：
+
+```bash
+sed -n '/^---$/,/^---$/p' /path/to/skills/easydev/SKILL.md | grep -m1 'version:'
+```
+
+该字段由 `node ../scripts/version.mjs sync` 随 `versions.json` 写入，`check` 校验其与 `versions.json` 一致，不要手工改。
 
 ### 常见目录
 
@@ -516,7 +526,7 @@ easydev/
 - 版本历史、已修正问题和发布说明写入 [CHANGELOG.md](CHANGELOG.md)，不在 README 重复完整历史。
 - 修改分流、预算、审查、表达或测试规则时，同步更新 `SKILL.md`、相关 `references/`、行为用例和 README。
 - 修改运行时文件后检查本地 Markdown 链接，并确认最小安装副本没有指向未复制文件。
-- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明。
+- 发布前运行 `node ../scripts/version.mjs check`。README 必须保留 `当前版本：` 行，`CHANGELOG.md` 必须包含 `versions.json` 对应版本的发布说明，`SKILL.md` 前置元数据的 `metadata.version` 必须与 `versions.json` 一致（由 `sync` 写入）。
 - 行为结论必须来自当前版本的实际执行记录；未执行的用例、隐藏验收和消融实验明确写“未运行”或“待验证”。
 
 EasyDev 的工程纪律参考了 Superpowers、Ponytail 和 Caveman 的相关思路，并按本项目的风险分流、授权边界和审查规则重新组织。运行时只依赖本目录 Skill 文件与宿主能力，不依赖这些外部技能包。

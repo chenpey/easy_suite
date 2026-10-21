@@ -3,6 +3,8 @@ name: easydev
 description: >-
   统一处理编码需求、功能实现、Bug 排查与修复、重构、技术设计、实施计划、可行性探针、代码审查及全仓审计。按任务风险选择直接执行或开发—独立审查—修复闭环，内置审查规程。适用于 coding 任务或显式调用 $easydev；纯代码解释、模型咨询和非编码任务不启动开发流程。
   Full-lifecycle coding agent skill: quick, full, design, plan, debug, review, spike, audit. Use for coding work; not explanation-only, model advice or non-coding requests.
+metadata:
+  version: "0.7.1"
 ---
 
 # easydev

@@ -53,6 +53,7 @@ const projects = {
     directory: 'easydev',
     readmePath: 'easydev/README.md',
     notesPath: 'easydev/CHANGELOG.md',
+    skillPath: 'easydev/SKILL.md',
   },
 };
 
@@ -130,6 +131,26 @@ function versionReadmeLine(version, project = {}) {
 
 function versionReadmeEnLine(version) {
   return `Current Version: \`${version}\``;
+}
+
+// Installed copies ship SKILL.md only, so the version must be readable from it.
+function skillVersionLinePattern() {
+  return /^([ \t]+)version:[ \t]*"?([^"\n]+?)"?[ \t]*$/m;
+}
+
+function skillFrontmatter(content, label) {
+  const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(content);
+  if (!frontmatter) fail(`${label} has no frontmatter block.`);
+  return frontmatter;
+}
+
+function skillFrontmatterVersion(content, label) {
+  const frontmatter = skillFrontmatter(content, label);
+  const match = skillVersionLinePattern().exec(frontmatter[1]);
+  if (!match || !/^metadata:[ \t]*$/m.test(frontmatter[1])) {
+    fail(`${label} frontmatter is missing metadata.version.`);
+  }
+  return match[2];
 }
 
 function rootReadmeBlock(versions) {
@@ -240,6 +261,20 @@ async function syncVersionFile(project, version) {
   await writeIfChanged(resolve(root, project.versionPath), `${version}\n`);
 }
 
+async function syncSkillVersion(project, version) {
+  if (!project.skillPath) return;
+  const path = resolve(root, project.skillPath);
+  const content = await readFile(path, 'utf8');
+  skillFrontmatterVersion(content, project.skillPath);
+  const [block] = skillFrontmatter(content, project.skillPath);
+  const body = content.slice(block.length);
+  const updated = block.replace(
+    skillVersionLinePattern(),
+    (_match, indent) => `${indent}version: "${version}"`,
+  );
+  await writeIfChanged(path, `${updated}${body}`);
+}
+
 async function syncProjectReadme(project, version) {
   const path = resolve(root, project.readmePath);
   let content = await readFile(path, 'utf8');
@@ -301,6 +336,7 @@ async function syncAll(versions) {
     await syncPackage(project, versions[name]);
     await syncPythonPackage(project, versions[name]);
     await syncVersionFile(project, versions[name]);
+    await syncSkillVersion(project, versions[name]);
     await syncProjectReadme(project, versions[name]);
     await syncRuntimeVersion(project, versions[name]);
   }
@@ -347,6 +383,17 @@ async function checkVersions(versions) {
     if (project.versionPath) {
       const versionFile = (await readFile(resolve(root, project.versionPath), 'utf8')).trim();
       if (versionFile !== versions[name]) errors.push(`${project.versionPath} is ${versionFile}`);
+    }
+    if (project.skillPath) {
+      const skill = await readFile(resolve(root, project.skillPath), 'utf8');
+      try {
+        const skillVersion = skillFrontmatterVersion(skill, project.skillPath);
+        if (skillVersion !== versions[name]) {
+          errors.push(`${project.skillPath} frontmatter metadata.version is ${skillVersion}`);
+        }
+      } catch (error) {
+        errors.push(error.message);
+      }
     }
     const readme = await readFile(resolve(root, project.readmePath), 'utf8');
     if (!readme.includes(versionReadmeLine(versions[name], project))) {

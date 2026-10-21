@@ -2,6 +2,16 @@
 
 版本变更记录。最近一次更新见 [README](README.md)。
 
+## 0.7.1 更新说明（2026-10-21）
+
+本次发布让只持有安装副本、没有源码的用户也能确认技能版本。
+
+- `SKILL.md` 前置元数据新增 `metadata.version`，与 `versions.json` 保持一致；安装副本读该字段即可确认版本，不需要源码、git 历史或远端仓库。选规范的 `metadata` 字段而非顶层 `version`，pi 等宿主忽略未用键，不影响加载。
+- `scripts/version.mjs` 为 `easydev` 增加 `skillPath`：`sync` 写入并规范化 `metadata.version`，`check` 校验其与 `versions.json` 一致，缺失或过期时报错；未声明 `skillPath` 的其他项目不受影响。
+- README 安装章节新增「查看已安装版本」，给出从 `SKILL.md` 读取版本的命令；维护条目补上该字段必须与 `versions.json` 同步。
+
+验证：`node ../scripts/version.mjs check` 通过；把版本改为 `9.9.9`、或删除 `metadata` 块时，`check` 分别报不一致与缺失，`sync` 可写回；`SKILL.md` 前置元数据经 YAML 解析得到 `metadata.version`。未执行真实宿主中“仅安装副本读取版本”的回归。
+
 ## 0.7.0 更新说明（2026-10-21）
 
 本次发布集中在审计验收契约、规则一致性与文档修复。
