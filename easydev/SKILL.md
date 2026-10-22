@@ -4,7 +4,7 @@ description: >-
   统一处理编码需求、功能实现、Bug 排查与修复、重构、技术设计、实施计划、可行性探针、代码审查及全仓审计。按任务风险选择直接执行或开发—独立审查—修复闭环，内置审查规程。适用于 coding 任务或显式调用 $easydev；纯代码解释、模型咨询和非编码任务不启动开发流程。
   Full-lifecycle coding agent skill: quick, full, design, plan, debug, review, spike, audit. Use for coding work; not explanation-only, model advice or non-coding requests.
 metadata:
-  version: "0.10.0"
+  version: "0.11.0"
 ---
 
 # easydev
@@ -21,7 +21,7 @@ metadata:
 | --- | --- | --- |
 | quick | 目标明确、范围局部、行为与验证简单，且不涉及高风险边界 | 当前代理实施、适量验证及自查；不加载 full 编排，明确未做独立审查 |
 | full | 触及高风险边界（鉴权、支付、敏感数据、并发一致性、破坏性数据操作、迁移兼容）、改动影响多个调用方、公共契约或持久数据，最小调查后仍有实质不确定性，或用户明确要求闭环 | 开发、独立审查、修复、复审，共用统一预算 |
-| design | 用户只要设计，或实现前有实质性方案分歧 | 明确目标、权衡、契约与验收；只要求设计时交付即结束 |
+| design | 用户只要设计，或实现前有实质性方案分歧 | 明确目标、权衡、契约与验收；多个实质方案按 [候选方案评审](references/candidates.md) 产出 N 个候选并交叉评估后择优；只要求设计时交付即结束 |
 | plan | 用户只要实施计划，或复杂任务需要可交接拆分 | 给出依赖、边界和验证；只要求计划时不开始实现 |
 | debug | 异常行为、测试失败、性能退化、根因不明 | 先取证排障，再按风险进入 quick/full；“仅定位”不改代码 |
 | review | 单次代码、设计、PR 或上线前审查 | 按内置审查规程只读交付；获授权后才进入修复分流 |
@@ -73,6 +73,7 @@ metadata:
 | 何时 | 模块 | 负责什么 |
 | --- | --- | --- |
 | 设计、拆分、分阶段或复杂实施 | [planning.md](references/planning.md) | 选项式澄清、权衡、拆分、阶段边界验证与计划契约 |
+| 设计方案存在多个实质不同的可行选项 | [candidates.md](references/candidates.md) | 候选产出隔离与冻结、交叉评估分配、择优矩阵与记录 |
 | full、quick 超出内联核心（未触及高风险边界或公共契约） | [execution.md](references/execution.md) | 最小实现、审查反馈、测试证据与完成边界 |
 | 工作区不干净、敏感/未跟踪文件、无 Git 或需要恢复 | [baseline-safety.md](references/baseline-safety.md) | 基线保护、敏感快照权限、任务目录与恢复 |
 | 排障、核对违约层级或同一修复失败 | [debugging.md](references/debugging.md) | 根因定位、违约层级与对称分支、最小实验 |
@@ -84,7 +85,7 @@ metadata:
 
 ## 与其他技能共存
 
-在宿主指令与用户要求范围内，easydev 统一负责分流、分派、审核预算与完成判定，不启动 Superpowers、旧 dev-review-loop 或其他平行开发闭环；review/audit 与 full 审查只用内置 [review.md](references/review.md)，不叠加第二套审查流程、外部独立审计或质量评分。用户明确选其他流程时遵从，不双开控制器。
+在宿主指令与用户要求范围内，easydev 统一负责分流、分派、审核预算与完成判定，不启动 Superpowers、旧 dev-review-loop 或其他平行开发闭环；review/audit、full 审查与候选方案评审只用内置 [review.md](references/review.md)、[candidates.md](references/candidates.md)，不叠加第二套审查流程、外部独立审计或质量评分。用户明确选其他流程时遵从，不双开控制器。
 
 其他或同类技能只提供职责内方法（如测试、表达压缩），优先级低于用户要求与项目偏好，其次为已加载技能正文与内置方法；不得覆盖路径分流、开工/审批关卡、子代理派生、审查触发、预算、授权、验证或完成条件。未加载技能不假装生效，也不因本包未含而断言用户未安装。
 
