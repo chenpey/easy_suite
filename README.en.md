@@ -90,17 +90,15 @@ The script synchronizes each project's declared files and then regenerates the r
 
 ## Clean Reset
 
-The root `reset.sh` only dispatches: it forwards to the `reset.sh` owned by the target directory, and each project keeps its reset logic and Cloudflare resource definitions inside its own directory.
+Each project owns its reset script; run the command inside the project directory:
 
 ```bash
-bash reset.sh easynote --local
-bash reset.sh easydrop --local
-bash reset.sh easynote --remote
-bash reset.sh easydrop --remote
+cd easynote && bash reset.sh --local
+cd easynote && bash reset.sh --remote
+cd easydrop && bash reset.sh --local
+cd easydrop && bash reset.sh --remote
 ```
 
-You can also run `bash reset.sh --local` / `--remote` inside the project directory.
-
-Local mode deletes `.wrangler/state` for the selected project, preserves local administrator configurations in `.dev.vars`, and prompts to clear browser site data. Remote mode reads the project's `wrangler.deploy.json`, prompts for full confirmation text and an invisible Cloudflare API Token, then deletes the Worker, empties and recreates the R2 bucket, and rebuilds the D1 schema. Once completed, navigate into the project and run `bash deploy.sh` to redeploy.
+Local mode deletes `.wrangler/state` for that project, preserves local administrator configurations in `.dev.vars`, and prompts to clear browser site data. Remote mode reads the project's `wrangler.deploy.json`, prompts for full confirmation text and an invisible Cloudflare API Token, then deletes the Worker, empties and recreates the R2 bucket, and rebuilds the D1 schema. Once completed, run `bash deploy.sh` in the project directory to redeploy.
 
 Remote cleanup requires all objects in R2 to be tracked by the application. If orphaned objects exist, the script stops when deleting the bucket; perform **Empty Bucket** on that bucket in Cloudflare Dashboard first, then rerun the cleanup command.

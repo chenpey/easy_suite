@@ -281,7 +281,7 @@ npm run dev
 
 `dev` 使用 `.wrangler/` 中的本地 D1/R2 数据。默认地址为 `http://127.0.0.1:8787`；可通过 `npm run dev -- --port 8788` 指定其他端口。
 
-在本目录运行 `bash reset.sh --local` 可在确认后清空本地 D1/R2 状态，并保留 `.dev.vars` 中的管理员配置；仓库根目录的等价写法是 `bash reset.sh easydrop --local`。清理后同时在浏览器中清除 `http://127.0.0.1:8787` 的站点数据。
+在本目录运行 `bash reset.sh --local` 可在确认后清空本地 D1/R2 状态，并保留 `.dev.vars` 中的管理员配置。清理后同时在浏览器中清除 `http://127.0.0.1:8787` 的站点数据。
 
 依赖安装使用 `package-lock.json`，并在 `package.json` 的 `allowScripts` 中按精确版本允许 esbuild、workerd 和可选的 fsevents 安装脚本。出现新的安装脚本提示时，先核对锁文件中的来源和版本，再更新精确授权。
 

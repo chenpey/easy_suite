@@ -86,7 +86,7 @@ test("help prints the supported reset commands", async () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /bash reset\.sh --local/);
   assert.match(result.stdout, /bash reset\.sh --remote/);
-  assert.match(result.stdout, /bash \.\.\/reset\.sh easydrop --local\|--remote/);
+  assert.match(result.stdout, /Delete EasyDrop local Wrangler D1\/R2 state/);
 });
 
 test("invalid arguments print usage and exit non-zero", async () => {

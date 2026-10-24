@@ -225,7 +225,7 @@ npm run dev
 
 `dev` uses local D1/R2 emulation under `.wrangler/`. Default address is `http://127.0.0.1:8787`; specify other ports via `npm run dev -- --port 8788`.
 
-To reset local state, run `bash reset.sh --local` in this directory (or `bash reset.sh easydrop --local` from the repository root), preserving `.dev.vars` credentials.
+To reset local state, run `bash reset.sh --local` in this directory, preserving `.dev.vars` credentials.
 
 For quick temporary testing:
 

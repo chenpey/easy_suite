@@ -48,8 +48,6 @@ const usage = `Usage:
 --local   Delete ${project.label} local Wrangler D1/R2 state.
 --remote  Delete all ${project.label} app data in the configured Cloudflare D1/R2
           resources, reset the current D1 schema, and remove the deployed Worker.
-
-From the repository root: bash ../reset.sh ${project.name} --local|--remote
 `;
 
 export function parseArguments(args) {

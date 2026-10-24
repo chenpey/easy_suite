@@ -90,17 +90,15 @@ node scripts/version.mjs check
 
 ## 清空重建
 
-仓库根的 `reset.sh` 只做分发：把命令转给目标目录自己的 `reset.sh`，各项目的清空逻辑和 Cloudflare 资源定义都保存在项目目录内。
+清空脚本由各项目自己维护，命令在项目目录内执行：
 
 ```bash
-bash reset.sh easynote --local
-bash reset.sh easydrop --local
-bash reset.sh easynote --remote
-bash reset.sh easydrop --remote
+cd easynote && bash reset.sh --local
+cd easynote && bash reset.sh --remote
+cd easydrop && bash reset.sh --local
+cd easydrop && bash reset.sh --remote
 ```
 
-也可以进入项目目录直接运行 `bash reset.sh --local` / `--remote`。
-
-本地模式删除所选项目的 `.wrangler/state`，保留 `.dev.vars` 中的本地管理员配置，并提示清除对应浏览器站点数据。远程模式读取该项目的 `wrangler.deploy.json`，要求输入完整确认文本及隐藏的 Cloudflare API Token，然后删除 Worker、清空并重建同名 R2 bucket、重建 D1 Schema。完成后进入对应项目执行 `bash deploy.sh` 即可重新部署。
+本地模式删除该项目的 `.wrangler/state`，保留 `.dev.vars` 中的本地管理员配置，并提示清除对应浏览器站点数据。远程模式读取该项目的 `wrangler.deploy.json`，要求输入完整确认文本及隐藏的 Cloudflare API Token，然后删除 Worker、清空并重建同名 R2 bucket、重建 D1 Schema。完成后在项目目录执行 `bash deploy.sh` 即可重新部署。
 
 远程清理要求 R2 中的对象均由应用记录。若 bucket 中存在孤立对象，脚本会在删除 bucket 时停止；先在 Cloudflare Dashboard 对该 bucket 执行 **Empty Bucket**，再重新运行清理命令。
