@@ -1109,6 +1109,9 @@ dialog {
   box-shadow: var(--panel-shadow);
 }
 dialog::backdrop { background: rgba(0, 0, 0, .34); backdrop-filter: blur(3px); }
+/* Modal hands the initial focus to the dialog container when it has no data-autofocus field; the
+   panel itself already marks where focus went, so skip the ring around the whole dialog. */
+dialog:focus-visible { outline: none; }
 .dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .dialog-header h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .dialog-feedback-anchor:not(:empty) {

@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.4.1`
+Current Version: `1.4.2`
 
 A self-hosted Markdown note-taking application for individuals and small teams. The frontend is React 19 + TypeScript + Vite packaged as an installable PWA. The server is a single Cloudflare Worker serving the API, remote MCP, OAuth and static assets; D1 stores accounts and notes, R2 stores private images and attachments, a Durable Object broadcasts changes, and a Cron trigger cleans up expired data every hour. PDFs are generated structurally with pdfmake and previewed page by page with PDF.js.
 
@@ -302,9 +302,9 @@ Autosave only rewrites the current body, while version slots are consumed by man
 
 ## Release Notes
 
-`1.4.1` (2026-10-19): contents entries no longer generate duplicate counters and use indentation to show hierarchy; navigation, shares, the reader window and PDF behaviour are unchanged.
+`1.4.2` (2026-10-25): dialogs no longer open with the focus on the top-right close button; the Quick Open search field takes focus after `Cmd/Ctrl+O`, so typing and ↑/↓ work immediately and Enter no longer closes the dialog.
 
-`1.4.0` (2026-10-19): note contents arrive — a `[TOC]` paragraph builds a clickable table of contents (quoted headings excluded) across preview, shares, the reader window and PDF; diagrams can be saved as SVG / PNG using the current theme.
+`1.4.1` (2026-10-19): contents entries no longer generate duplicate counters and use indentation to show hierarchy; navigation, shares, the reader window and PDF behaviour are unchanged.
 
 The version source of truth is `package.json` in this directory, with sync rules in [`version.config.json`](version.config.json); the root `versions.json` and version table are generated. Before committing a feature update, run in the repository root:
 

@@ -2349,6 +2349,8 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await page.getByRole('textbox', { name: '笔记正文' }).press('Meta+/');
   const shortcuts = page.getByRole('dialog');
   await expect(shortcuts.getByRole('heading', { name: '快捷键' })).toBeVisible();
+  // Opening a dialog must not leave the default focus on the header close button.
+  await expect(shortcuts.getByRole('button', { name: '关闭' })).not.toBeFocused();
   await expect(shortcuts).toContainText('Cmd/Ctrl+P');
   await expect(shortcuts).toContainText('Cmd/Ctrl+K');
   await expect(shortcuts).toContainText('Cmd/Ctrl+O');
@@ -2363,7 +2365,9 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await page.keyboard.press('Meta+o');
   const palette = page.getByRole('dialog');
   const commandSearch = palette.getByLabel('快速跳转搜索');
-  await commandSearch.fill('设置');
+  await expect(commandSearch).toBeFocused();
+  await page.keyboard.type('设置');
+  await expect(commandSearch).toHaveValue('设置');
   await commandSearch.press('ArrowDown');
   await expect(palette.getByRole('button', { name: '打开设置' })).toBeFocused();
   await page.keyboard.press('Enter');

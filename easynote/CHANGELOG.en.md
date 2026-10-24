@@ -2,6 +2,13 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.4.2 Release Notes (2026-10-25)
+
+- Fix dialogs opening with the focus on the top-right close button: the Quick Open search field now takes the focus after `Cmd/Ctrl+O`, so typing filters right away, ↑/↓ selects, the close button no longer shows a stray selection box and Enter does not close the dialog by accident.
+- When a dialog has no field to type into, the dialog itself takes the initial focus and the panel is not outlined; `Tab` still reaches the close button first and `Esc` still closes the dialog.
+- The bulk tag, folder create/rename and internal link dialogs also land in their own field again.
+- Frontend focus and styling only. The server API, data format, archive format and database schema are unchanged, and no migration is required.
+
 ## 1.4.1 Release Notes (2026-10-19)
 
 - Remove generated `1.` and `1.1` counters from the contents list and retain hierarchy through indentation, avoiding duplicate numbering when headings already include their own numbers.

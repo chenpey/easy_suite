@@ -47,14 +47,23 @@ function Modal({ title, children, close, className }: { title: string; children:
   const ref = useRef<HTMLDialogElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
   const registerFeedback = useContext(DialogFeedbackContext);
-  useEffect(() => { ref.current?.showModal(); }, []);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    dialog.showModal();
+    // showModal() focuses the first focusable control, which is the header close button: it then
+    // shows a stray focus ring and Enter closes the dialog, while the field marked
+    // data-autofocus never gets focus (it mounts before the dialog is open). Claim the intended
+    // target here, falling back to the dialog container so the close button keeps a clean look.
+    (dialog.querySelector<HTMLElement>('[data-autofocus]:not(:disabled)') ?? dialog).focus();
+  }, []);
   useLayoutEffect(() => {
     const target = feedbackRef.current;
     if (!target || !registerFeedback) return;
     registerFeedback(target, true);
     return () => registerFeedback(target, false);
   }, [registerFeedback]);
-  return <dialog className={className} ref={ref}
+  return <dialog className={className} ref={ref} tabIndex={-1}
     onCancel={(e) => { e.preventDefault(); close(); }} onClick={(e) => { if (e.target === ref.current) close(); }}>
     <header className="dialog-header"><h2>{t(title)}</h2><IconButton label={t('close')} onClick={close}><X size={18} /></IconButton></header>
     <div className="dialog-feedback-anchor" ref={feedbackRef} />
@@ -2483,7 +2492,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         notify={showNotice} reportError={book.setError} />
     </Modal>}
     {commandPalette && <Modal title="快速跳转" close={() => setCommandPalette(false)}>
-      <label className="command-search"><Search size={16} /><input autoFocus aria-label={t('快速跳转搜索')} value={commandQuery}
+      <label className="command-search"><Search size={16} /><input data-autofocus aria-label={t('快速跳转搜索')} value={commandQuery}
         onChange={(event) => setCommandQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -2530,7 +2539,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       pendingInsertion.current = null;
       setLinkPicker(false);
     }}>
-      <label className="command-search"><Search size={16} /><input autoFocus aria-label={t('搜索链接目标')} value={linkQuery} onChange={(event) => setLinkQuery(event.target.value)} /></label>
+      <label className="command-search"><Search size={16} /><input data-autofocus aria-label={t('搜索链接目标')} value={linkQuery} onChange={(event) => setLinkQuery(event.target.value)} /></label>
       <div className="command-list">{linkNotes.map((item) =>
         <button key={item.id} onClick={() => insertNoteLink(item)}><Link2 size={16} /><span>{item.title || t('untitled_note')}</span></button>)}</div>
     </Modal>}
@@ -2677,7 +2686,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       </div>
     </Modal>}
     {bulkTagOpen && <Modal title="批量添加标签" close={() => setBulkTagOpen(false)}>
-      <label className="single-field">{t('tags')}<input autoFocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
+      <label className="single-field">{t('tags')}<input data-autofocus maxLength={40} value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} /></label>
       <div className="dialog-actions"><button onClick={() => setBulkTagOpen(false)}>{t('cancel')}</button><button className="primary" disabled={!bulkTag.trim() || disabled} onClick={applyBulkTag}>{t('add')}</button></div>
     </Modal>}
     {folderDialog && folderDialog.mode !== 'move' && <Modal title={folderDialog.mode === 'delete' ? t('删除目录') : folderDialog.mode === 'rename' ? t('重命名目录') : t('新建目录')} close={closeFolderDialog}>
@@ -2689,7 +2698,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </>
       ) : (
         <>
-          <label className="single-field">{t('目录名')}<input autoFocus maxLength={64} value={folderDialog.name ?? ''} onChange={(event) => setFolderDialog({ ...folderDialog, name: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitFolderDialog(); }} /></label>
+          <label className="single-field">{t('目录名')}<input data-autofocus maxLength={64} value={folderDialog.name ?? ''} onChange={(event) => setFolderDialog({ ...folderDialog, name: event.target.value })} onKeyDown={(event) => { if (event.key === 'Enter') submitFolderDialog(); }} /></label>
           <div className="dialog-actions"><button onClick={closeFolderDialog}>{t('cancel')}</button><button className="primary" disabled={!(folderDialog.name ?? '').trim()} onClick={submitFolderDialog}>{folderDialog.mode === 'rename' ? t('rename') : t('create')}</button></div>
         </>
       )}
