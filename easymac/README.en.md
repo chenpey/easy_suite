@@ -149,7 +149,7 @@ This development command generates a compressed mapping from Homebrew's official
 
 ## Versioning & Release
 
-Versions are managed via [`versions.json`](../versions.json) in the repository root:
+The version source of truth is the [`VERSION`](VERSION) file in this directory, with sync rules in [`version.config.json`](version.config.json); the root `versions.json` and version table are generated.
 
 ```bash
 node ../scripts/version.mjs bump easymac patch

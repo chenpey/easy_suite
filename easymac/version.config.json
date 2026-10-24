@@ -1,0 +1,10 @@
+{
+  "title": "EasyMac",
+  "order": 3,
+  "source": { "type": "text", "path": "VERSION" },
+  "targets": [
+    { "type": "version-file", "path": "VERSION" },
+    { "type": "readme", "path": "README.md", "en": "README.en.md" }
+  ],
+  "notes": "CHANGELOG.md"
+}

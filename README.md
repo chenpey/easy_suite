@@ -77,7 +77,7 @@ EasyTest 是一个面向接口和业务流程测试的 Python 工具。测试人
 
 ## 版本管理
 
-版本源文件是 [`versions.json`](versions.json)，不要直接修改各项目的版本文件、`package.json` 或 README 版本行。准备提交功能更新时，在仓库根目录执行：
+每个项目在自己的目录里用 `version.config.json` 声明版本真源和需要同步的文件：EasyDrop、EasyNote 以 `package.json` 为真源，EasyMac 以 `VERSION` 文件，EasyTest 以 `pyproject.toml`。根目录的 [`versions.json`](versions.json) 和版本表由脚本生成，不要手工编辑。准备提交功能更新时，在仓库根目录执行：
 
 ```bash
 node scripts/version.mjs bump easynote patch
@@ -86,11 +86,11 @@ node scripts/version.mjs bump easynote patch
 node scripts/version.mjs check
 ```
 
-脚本会同步项目的版本文件、包清单、锁文件、运行时版本、README 和根目录版本表。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyMac v0.1.0`。
+脚本按项目配置同步版本文件、包清单、锁文件、运行时版本、README 和根目录版本表；新增或删除项目只需增删目录及其 `version.config.json`，不必修改根脚本。`patch` 适合兼容性修复，`minor` 适合新增功能，`major` 适合不兼容变更。随后使用带版本号的提交信息，例如 `发布：EasyMac v0.1.0`。
 
 ## 清空重建
 
-仓库根目录的 `reset.sh` 用于清空 EasyNote 或 EasyDrop：
+仓库根的 `reset.sh` 只做分发：把命令转给目标目录自己的 `reset.sh`，各项目的清空逻辑和 Cloudflare 资源定义都保存在项目目录内。
 
 ```bash
 bash reset.sh easynote --local
@@ -98,6 +98,8 @@ bash reset.sh easydrop --local
 bash reset.sh easynote --remote
 bash reset.sh easydrop --remote
 ```
+
+也可以进入项目目录直接运行 `bash reset.sh --local` / `--remote`。
 
 本地模式删除所选项目的 `.wrangler/state`，保留 `.dev.vars` 中的本地管理员配置，并提示清除对应浏览器站点数据。远程模式读取该项目的 `wrangler.deploy.json`，要求输入完整确认文本及隐藏的 Cloudflare API Token，然后删除 Worker、清空并重建同名 R2 bucket、重建 D1 Schema。完成后进入对应项目执行 `bash deploy.sh` 即可重新部署。
 

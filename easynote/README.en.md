@@ -130,7 +130,7 @@ The first run prepares dependencies and creates a local administrator interactiv
 | `bash reset-password.sh --local` / `--remote` | Reset a local / production account and revoke its sessions and AI tokens |
 | `bash backup.sh --remote` | Create and verify a full D1/R2 disaster-recovery set |
 | `bash restore.sh <dir> --remote [--check]` | Preflight or restore into empty D1/R2 |
-| `bash ../reset.sh easynote --local` / `--remote` | Wipe local / cloud D1, R2 and the Worker after confirmation |
+| `bash reset.sh --local` / `--remote` | Wipe local / cloud D1, R2 and the Worker after confirmation |
 | `npm run test:ai` | Test the remote Streamable HTTP MCP |
 
 Every script supports `--help`. Production requires HTTPS; only local commands allow loopback HTTP.
@@ -306,14 +306,14 @@ Autosave only rewrites the current body, while version slots are consumed by man
 
 `1.4.0` (2026-10-19): note contents arrive — a `[TOC]` paragraph builds a clickable table of contents (quoted headings excluded) across preview, shares, the reader window and PDF; diagrams can be saved as SVG / PNG using the current theme.
 
-Versions live in [`versions.json`](../versions.json) at the repository root; before committing a feature update run:
+The version source of truth is `package.json` in this directory, with sync rules in [`version.config.json`](version.config.json); the root `versions.json` and version table are generated. Before committing a feature update, run in the repository root:
 
 ```bash
 node scripts/version.mjs bump easynote patch   # minor for features, major for breaking changes
 node scripts/version.mjs check
 ```
 
-The script syncs this README, the root README, `package.json`, the lockfile and the version shown in the app.
+The script syncs this README, the root README, `package.json`, the lockfile and the version shown in the app from that config.
 
 - Full release history: [`CHANGELOG.en.md`](CHANGELOG.en.md)
 - AI / MCP setup: [`docs/AI_INTEGRATION.en.md`](docs/AI_INTEGRATION.en.md)

@@ -77,7 +77,7 @@ Refer to each project's README for specific startup, testing, deployment, config
 
 ## Version Management
 
-The single source of truth for versions is [`versions.json`](versions.json). Do not directly edit individual project version files, `package.json`, or README version lines. When preparing to commit functional updates, run in the repository root:
+Each project declares its version source and the files that follow it in its own `version.config.json`: EasyDrop and EasyNote use `package.json`, EasyMac uses the `VERSION` file, and EasyTest uses `pyproject.toml`. The root [`versions.json`](versions.json) and the version tables are generated — do not edit them by hand. When preparing to commit functional updates, run in the repository root:
 
 ```bash
 node scripts/version.mjs bump easynote patch
@@ -86,11 +86,11 @@ node scripts/version.mjs bump easynote patch
 node scripts/version.mjs check
 ```
 
-The script synchronizes project version files, package manifests, lockfiles, runtime versions, README files, and the root version tables. `patch` is suited for backwards-compatible fixes, `minor` for new features, and `major` for breaking changes. Follow up with a versioned commit message, e.g., `发布：EasyMac v0.1.0`.
+The script synchronizes each project's declared files and then regenerates the root version tables; adding or removing a project only adds or removes a directory with its `version.config.json`, never a root script. `patch` is suited for backwards-compatible fixes, `minor` for new features, and `major` for breaking changes. Follow up with a versioned commit message, e.g., `发布：EasyMac v0.1.0`.
 
 ## Clean Reset
 
-The `reset.sh` script in the repository root clears EasyNote or EasyDrop:
+The root `reset.sh` only dispatches: it forwards to the `reset.sh` owned by the target directory, and each project keeps its reset logic and Cloudflare resource definitions inside its own directory.
 
 ```bash
 bash reset.sh easynote --local
@@ -98,6 +98,8 @@ bash reset.sh easydrop --local
 bash reset.sh easynote --remote
 bash reset.sh easydrop --remote
 ```
+
+You can also run `bash reset.sh --local` / `--remote` inside the project directory.
 
 Local mode deletes `.wrangler/state` for the selected project, preserves local administrator configurations in `.dev.vars`, and prompts to clear browser site data. Remote mode reads the project's `wrangler.deploy.json`, prompts for full confirmation text and an invisible Cloudflare API Token, then deletes the Worker, empties and recreates the R2 bucket, and rebuilds the D1 schema. Once completed, navigate into the project and run `bash deploy.sh` to redeploy.
 

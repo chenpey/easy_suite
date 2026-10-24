@@ -15,4 +15,9 @@ jobs:
           node-version: 22
       - run: node scripts/version.mjs check
       - name: Repository script tests
-        run: node --test test/version.test.mjs test/reset.test.mjs
+        run: node --test test/version.test.mjs
+      - name: Project-owned reset tests
+        run: |
+          for file in */test/reset.test.mjs; do
+            node --test "$file"
+          done

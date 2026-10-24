@@ -1,0 +1,18 @@
+{
+  "title": "EasyTest",
+  "order": 4,
+  "source": { "type": "toml-project-version", "path": "pyproject.toml" },
+  "targets": [
+    { "type": "pyproject", "path": "pyproject.toml" },
+    { "type": "uv-lock", "path": "uv.lock", "package": "easytest" },
+    { "type": "python-version", "path": "src/easytest/_version.py" },
+    { "type": "json-field", "path": "examples/jsonplaceholder/cases/demo.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "examples/jsonplaceholder/failure_cases/mock_errors.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "examples/jsonplaceholder/failure_cases/wrong_user_id.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "examples/jsonplaceholder/mock_cases/demo.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "tests/fixtures/project/cases/http/profile_api.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "tests/fixtures/project/cases/rpc/limit_service.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "json-field", "path": "tests/fixtures/project/cases/scenario/account_flow.json", "field": "compiler_version", "require": { "source_mode": "xlsx" } },
+    { "type": "readme", "path": "README.md", "suffix": "，支持 Python 3.12 和 3.13。" }
+  ]
+}

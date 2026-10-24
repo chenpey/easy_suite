@@ -148,7 +148,7 @@ node scripts/update-cask-catalog.mjs
 
 ## 版本与发布
 
-版本由仓库根目录的 [`versions.json`](../versions.json) 统一管理：
+版本真源是本目录的 [`VERSION`](VERSION) 文件，同步规则在 [`version.config.json`](version.config.json)；仓库根的 `versions.json` 与版本表由脚本生成。
 
 ```bash
 node ../scripts/version.mjs bump easymac patch

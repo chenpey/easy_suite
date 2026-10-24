@@ -1,0 +1,10 @@
+{
+  "title": "EasyNote",
+  "order": 2,
+  "source": { "type": "json", "path": "package.json", "field": "version" },
+  "targets": [
+    { "type": "npm", "path": "package.json", "lock": "package-lock.json" },
+    { "type": "runtime-ts", "path": "src/shared/version.ts", "name": "EASYNOTE_VERSION" },
+    { "type": "readme", "path": "README.md", "en": "README.en.md" }
+  ]
+}

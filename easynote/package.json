@@ -16,7 +16,7 @@
     "test": "npm run test:api && npm run test:ai",
     "test:api": "node --import tsx --test test/api.test.ts test/merge.test.ts test/transfer.test.ts test/client-api.test.ts test/math.test.ts test/oauth.test.ts test/events.test.ts",
     "test:ai": "node --import tsx --test test/ai.test.ts",
-    "test:scripts": "node --test test/deploy.test.mjs test/scripts.test.mjs test/maintenance.test.mjs",
+    "test:scripts": "node --test test/deploy.test.mjs test/scripts.test.mjs test/maintenance.test.mjs test/reset.test.mjs",
     "test:ui": "playwright test",
     "backup": "bash backup.sh",
     "restore": "bash restore.sh",

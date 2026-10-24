@@ -1,0 +1,9 @@
+{
+  "title": "EasyDrop",
+  "order": 1,
+  "source": { "type": "json", "path": "package.json", "field": "version" },
+  "targets": [
+    { "type": "npm", "path": "package.json", "lock": "package-lock.json" },
+    { "type": "readme", "path": "README.md", "en": "README.en.md" }
+  ]
+}

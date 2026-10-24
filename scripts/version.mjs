@@ -1,64 +1,30 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
+// The repository script owns no project knowledge. Every project declares its
+// version source and synchronised files in <project>/version.config.json, so
+// adding or removing a project never requires editing this file.
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDirectory, '..');
-const sourcePath = resolve(root, 'versions.json');
+const aggregatePath = resolve(root, 'versions.json');
+const configName = 'version.config.json';
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const projects = {
-  easynote: {
-    title: 'EasyNote',
-    directory: 'easynote',
-    packagePath: 'easynote/package.json',
-    lockPath: 'easynote/package-lock.json',
-    readmePath: 'easynote/README.md',
-    runtimePath: 'easynote/src/shared/version.ts',
-  },
-  easydrop: {
-    title: 'EasyDrop',
-    directory: 'easydrop',
-    packagePath: 'easydrop/package.json',
-    lockPath: 'easydrop/package-lock.json',
-    readmePath: 'easydrop/README.md',
-  },
-  easymac: {
-    title: 'EasyMac',
-    directory: 'easymac',
-    readmePath: 'easymac/README.md',
-    versionPath: 'easymac/VERSION',
-    notesPath: 'easymac/CHANGELOG.md',
-  },
-  easytest: {
-    title: 'EasyTest',
-    directory: 'easytest',
-    readmePath: 'easytest/README.md',
-    readmeVersionSuffix: '，支持 Python 3.12 和 3.13。',
-    pyprojectPath: 'easytest/pyproject.toml',
-    uvLockPath: 'easytest/uv.lock',
-    pythonVersionPath: 'easytest/src/easytest/_version.py',
-    compiledCasePaths: [
-      'easytest/examples/jsonplaceholder/cases/demo.json',
-      'easytest/examples/jsonplaceholder/failure_cases/mock_errors.json',
-      'easytest/examples/jsonplaceholder/failure_cases/wrong_user_id.json',
-      'easytest/examples/jsonplaceholder/mock_cases/demo.json',
-      'easytest/tests/fixtures/project/cases/http/profile_api.json',
-      'easytest/tests/fixtures/project/cases/rpc/limit_service.json',
-      'easytest/tests/fixtures/project/cases/scenario/account_flow.json',
-    ],
-  },
-};
+const sourceTypes = new Set(['json', 'text', 'toml-project-version']);
+const targetTypes = new Set([
+  'npm',
+  'version-file',
+  'pyproject',
+  'uv-lock',
+  'python-version',
+  'runtime-ts',
+  'json-field',
+  'readme',
+]);
 
 function fail(message) {
   throw new Error(message);
-}
-
-function validateProject(name) {
-  if (!projects[name]) {
-    fail(`Unknown project "${name}". Use ${Object.keys(projects).join(', ')}.`);
-  }
-  return projects[name];
 }
 
 function validateVersion(version) {
@@ -96,14 +62,12 @@ export function extractReleaseNotes(content, version, options = {}) {
   return body.trim();
 }
 
-async function readJson(path) {
-  return JSON.parse(await readFile(path, 'utf8'));
+function jsonContent(value) {
+  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-async function readVersions() {
-  const versions = await readJson(sourcePath);
-  for (const name of Object.keys(projects)) validateVersion(versions[name]);
-  return versions;
+async function readJson(path) {
+  return JSON.parse(await readFile(path, 'utf8'));
 }
 
 async function writeIfChanged(path, content) {
@@ -114,119 +78,98 @@ async function writeIfChanged(path, content) {
   if (current !== content) await writeFile(path, content);
 }
 
-function jsonContent(value) {
-  return `${JSON.stringify(value, null, 2)}\n`;
-}
-
-function versionReadmeLine(version, project = {}) {
-  return `当前版本：\`${version}\`${project.readmeVersionSuffix || ''}`;
-}
-
-function versionReadmeEnLine(version) {
-  return `Current Version: \`${version}\``;
-}
-
-// Installed copies ship SKILL.md only, so the version must be readable from it.
-// Only a version that is a direct child of the top-level metadata block counts:
-// a nested metadata: or a version: under another metadata key is not the skill
-// version and must not be accepted.
-function skillFrontmatter(content, label) {
-  const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(content);
-  if (!frontmatter) fail(`${label} has no frontmatter block.`);
-  return frontmatter;
-}
-
-function isIgnoredFrontmatterLine(line) {
-  return !line.trim() || /^[ \t]*#/.test(line);
-}
-
-function metadataVersionLine(lines, label) {
-  const metadataIndex = lines.findIndex((line) => /^metadata:[ \t]*$/.test(line));
-  if (metadataIndex === -1) fail(`${label} frontmatter is missing the metadata block.`);
-  let blockEnd = lines.length;
-  for (let index = metadataIndex + 1; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (isIgnoredFrontmatterLine(line)) continue;
-    if (!/^[ \t]/.test(line)) {
-      blockEnd = index;
-      break;
+function validateConfig(directory, config) {
+  const label = `${directory}/${configName}`;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) fail(`${label} must contain an object.`);
+  if (typeof config.title !== 'string' || !config.title.trim()) fail(`${label} is missing a title.`);
+  if (config.order !== undefined && !Number.isFinite(config.order)) fail(`${label} order must be a number.`);
+  const { source } = config;
+  if (!source || typeof source !== 'object' || !sourceTypes.has(source.type)) {
+    fail(`${label} source.type must be one of ${[...sourceTypes].join(', ')}.`);
+  }
+  if (typeof source.path !== 'string' || !source.path) fail(`${label} source.path is required.`);
+  if (source.type === 'json' && (typeof source.field !== 'string' || !source.field)) {
+    fail(`${label} source.field is required for a json source.`);
+  }
+  const targets = config.targets ?? [];
+  if (!Array.isArray(targets)) fail(`${label} targets must be an array.`);
+  targets.forEach((target, index) => {
+    const where = `${label} target ${index + 1}`;
+    if (!target || typeof target !== 'object' || !targetTypes.has(target.type)) {
+      fail(`${where} type must be one of ${[...targetTypes].join(', ')}.`);
     }
-  }
-  let childIndent = null;
-  for (let index = metadataIndex + 1; index < blockEnd; index += 1) {
-    if (isIgnoredFrontmatterLine(lines[index])) continue;
-    childIndent = /^[ \t]*/.exec(lines[index])[0].length;
-    break;
-  }
-  if (childIndent !== null) {
-    for (let index = metadataIndex + 1; index < blockEnd; index += 1) {
-      const match = /^([ \t]*)version:[ \t]*"?([^"\n]+?)"?[ \t]*$/.exec(lines[index]);
-      if (match && match[1].length === childIndent) {
-        return { index, indent: match[1], version: match[2] };
-      }
+    if (typeof target.path !== 'string' || !target.path) fail(`${where} path is required.`);
+    if (target.type === 'npm' && typeof target.lock !== 'string') fail(`${where} lock is required for an npm target.`);
+    if (target.type === 'uv-lock' && typeof target.package !== 'string') {
+      fail(`${where} package is required for a uv-lock target.`);
     }
+    if (target.type === 'runtime-ts' && typeof target.name !== 'string') {
+      fail(`${where} name is required for a runtime-ts target.`);
+    }
+    if (target.type === 'json-field' && typeof target.field !== 'string') {
+      fail(`${where} field is required for a json-field target.`);
+    }
+  });
+  if (config.notes !== undefined && (typeof config.notes !== 'string' || !config.notes)) {
+    fail(`${label} notes must be a project-relative path.`);
   }
-  fail(`${label} frontmatter is missing metadata.version.`);
+  return {
+    name: directory,
+    title: config.title,
+    order: config.order ?? Number.MAX_SAFE_INTEGER,
+    source,
+    targets,
+    notes: config.notes,
+    directory: resolve(root, directory),
+  };
 }
 
-export function skillFrontmatterVersion(content, label) {
-  const frontmatter = skillFrontmatter(content, label);
-  return metadataVersionLine(frontmatter[1].split('\n'), label).version;
+export async function loadProjects() {
+  const entries = await readdir(root, { withFileTypes: true });
+  const projects = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    let raw;
+    try {
+      raw = await readFile(resolve(root, entry.name, configName), 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+    let config;
+    try {
+      config = JSON.parse(raw);
+    } catch {
+      fail(`${entry.name}/${configName} is not valid JSON.`);
+    }
+    projects.push(validateConfig(entry.name, config));
+  }
+  return projects.sort((left, right) => left.order - right.order || left.name.localeCompare(right.name));
 }
 
-// Shares the reader above so check and sync cannot disagree about what the
-// skill version is or which line carries it.
-export function updateSkillFrontmatterVersion(content, version, label) {
-  const frontmatter = skillFrontmatter(content, label);
-  const lines = frontmatter[1].split('\n');
-  const current = metadataVersionLine(lines, label);
-  lines[current.index] = `${current.indent}version: "${version}"`;
-  const bodyStart = frontmatter.index + '---\n'.length;
-  return [
-    content.slice(0, bodyStart),
-    lines.join('\n'),
-    content.slice(bodyStart + frontmatter[1].length),
-  ].join('');
+function findProject(projects, name) {
+  const project = projects.find((entry) => entry.name === name);
+  if (!project) fail(`Unknown project "${name}". Use ${projects.map((entry) => entry.name).join(', ')}.`);
+  return project;
 }
 
-function rootReadmeBlock(versions) {
-  return [
-    '<!-- versions:start -->',
-    '| 项目 | 当前版本 |',
-    '| --- | --- |',
-    `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
-    `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
-    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
-    `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
-    '<!-- versions:end -->',
-  ].join('\n');
+function projectPath(project, relativePath) {
+  return resolve(project.directory, relativePath);
 }
 
-function rootReadmeEnBlock(versions) {
-  return [
-    '<!-- versions:start -->',
-    '| Project | Current Version |',
-    '| --- | --- |',
-    `| [EasyDrop](easydrop/) | \`${versions.easydrop}\` |`,
-    `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
-    `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
-    `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
-    '<!-- versions:end -->',
-  ].join('\n');
+function projectLabel(project, relativePath) {
+  return `${project.name}/${relativePath}`;
 }
 
-async function syncPackage(project, version) {
-  if (!project.packagePath) return;
-  const packagePath = resolve(root, project.packagePath);
-  const packageJson = await readJson(packagePath);
-  packageJson.version = version;
-  await writeIfChanged(packagePath, jsonContent(packageJson));
-
-  const lockPath = resolve(root, project.lockPath);
-  const lockJson = await readJson(lockPath);
-  lockJson.version = version;
-  if (lockJson.packages?.['']) lockJson.packages[''].version = version;
-  await writeIfChanged(lockPath, jsonContent(lockJson));
+function jsonFieldValue(content, field, label) {
+  let data;
+  try {
+    data = JSON.parse(content);
+  } catch {
+    fail(`${label} is not valid JSON.`);
+  }
+  if (typeof data?.[field] !== 'string') fail(`${label} is missing ${field}.`);
+  return data[field];
 }
 
 function replaceTomlProjectVersion(content, version, label) {
@@ -241,231 +184,287 @@ function tomlProjectVersion(content, label) {
   return match[2];
 }
 
-function replaceUvPackageVersion(content, packageName, version, label) {
-  const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(
-    `(\\[\\[package\\]\\]\\nname = "${escaped}"\\nversion = ")[^"]+(")`,
-  );
-  if (!pattern.test(content)) fail(`${label} is missing package ${packageName}.`);
-  return content.replace(pattern, (_match, prefix, suffix) => `${prefix}${version}${suffix}`);
+async function readVersion(project) {
+  const relativePath = project.source.path;
+  const content = await readFile(projectPath(project, relativePath), 'utf8');
+  if (project.source.type === 'json') {
+    return validateVersion(jsonFieldValue(content, project.source.field, projectLabel(project, relativePath)));
+  }
+  if (project.source.type === 'text') return validateVersion(content.trim());
+  return validateVersion(tomlProjectVersion(content, projectLabel(project, relativePath)));
 }
 
-function uvPackageVersion(content, packageName, label) {
-  const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(
-    `\\[\\[package\\]\\]\\nname = "${escaped}"\\nversion = "([^"]+)"`,
-  ).exec(content);
-  if (!match) fail(`${label} is missing package ${packageName}.`);
-  return match[1];
+async function writeSourceVersion(project, version) {
+  const relativePath = project.source.path;
+  const path = projectPath(project, relativePath);
+  if (project.source.type === 'text') {
+    await writeIfChanged(path, `${version}\n`);
+    return;
+  }
+  if (project.source.type === 'toml-project-version') {
+    const content = await readFile(path, 'utf8');
+    await writeIfChanged(path, replaceTomlProjectVersion(content, version, projectLabel(project, relativePath)));
+    return;
+  }
+  const document = await readJson(path);
+  document[project.source.field] = version;
+  await writeIfChanged(path, jsonContent(document));
 }
 
-async function syncPythonPackage(project, version) {
-  if (!project.pyprojectPath) return;
-  const pyprojectPath = resolve(root, project.pyprojectPath);
-  const pyproject = await readFile(pyprojectPath, 'utf8');
-  await writeIfChanged(
-    pyprojectPath,
-    replaceTomlProjectVersion(pyproject, version, project.pyprojectPath),
-  );
+function uvPackagePattern(packageName) {
+  const escaped = packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(\\[\\[package\\]\\]\\nname = "${escaped}"\\nversion = ")([^"]+)(")`);
+}
 
-  const lockPath = resolve(root, project.uvLockPath);
-  const lock = await readFile(lockPath, 'utf8');
-  await writeIfChanged(
-    lockPath,
-    replaceUvPackageVersion(lock, project.directory, version, project.uvLockPath),
-  );
-  await writeIfChanged(
-    resolve(root, project.pythonVersionPath),
-    `__version__ = "${version}"\n`,
-  );
-
-  for (const relativePath of project.compiledCasePaths || []) {
-    const path = resolve(root, relativePath);
+async function syncTarget(project, target, version) {
+  const path = projectPath(project, target.path);
+  const label = projectLabel(project, target.path);
+  if (target.type === 'npm') {
+    const packageJson = await readJson(path);
+    packageJson.version = version;
+    await writeIfChanged(path, jsonContent(packageJson));
+    const lockPath = projectPath(project, target.lock);
+    const lockJson = await readJson(lockPath);
+    lockJson.version = version;
+    if (lockJson.packages?.['']) lockJson.packages[''].version = version;
+    await writeIfChanged(lockPath, jsonContent(lockJson));
+    return;
+  }
+  if (target.type === 'version-file') {
+    await writeIfChanged(path, `${version}\n`);
+    return;
+  }
+  if (target.type === 'pyproject') {
+    const content = await readFile(path, 'utf8');
+    await writeIfChanged(path, replaceTomlProjectVersion(content, version, label));
+    return;
+  }
+  if (target.type === 'uv-lock') {
+    const content = await readFile(path, 'utf8');
+    const pattern = uvPackagePattern(target.package);
+    if (!pattern.test(content)) fail(`${label} is missing package ${target.package}.`);
+    await writeIfChanged(path, content.replace(pattern, (_match, prefix, _current, suffix) => `${prefix}${version}${suffix}`));
+    return;
+  }
+  if (target.type === 'python-version') {
+    await writeIfChanged(path, `__version__ = "${version}"\n`);
+    return;
+  }
+  if (target.type === 'runtime-ts') {
+    const content = `// Generated from version.config.json. Run node scripts/version.mjs sync after editing the source.\nexport const ${target.name} = '${version}';\n`;
+    await writeIfChanged(path, content);
+    return;
+  }
+  if (target.type === 'json-field') {
     const document = await readJson(path);
-    if (document.source_mode !== 'xlsx') {
-      fail(`${relativePath} must be an XLSX-generated case document.`);
+    for (const [field, value] of Object.entries(target.require ?? {})) {
+      if (document[field] !== value) fail(`${label} must have ${field}: ${value}.`);
     }
-    document.compiler_version = version;
+    document[target.field] = version;
     await writeIfChanged(path, jsonContent(document));
+    return;
   }
-}
-
-async function syncVersionFile(project, version) {
-  if (!project.versionPath) return;
-  await writeIfChanged(resolve(root, project.versionPath), `${version}\n`);
-}
-
-async function syncSkillVersion(project, version) {
-  if (!project.skillPath) return;
-  const path = resolve(root, project.skillPath);
-  const content = await readFile(path, 'utf8');
-  await writeIfChanged(path, updateSkillFrontmatterVersion(content, version, project.skillPath));
-}
-
-async function syncProjectReadme(project, version) {
-  const path = resolve(root, project.readmePath);
-  let content = await readFile(path, 'utf8');
-  const line = versionReadmeLine(version, project);
-  if (/^当前版本：.*$/m.test(content)) {
-    content = content.replace(/^当前版本：.*$/m, line);
-  } else {
-    content = content.replace(new RegExp(`^(# ${project.title}\\n)`), `$1\n${line}\n`);
-  }
-  await writeIfChanged(path, content);
-
-  const enPath = resolve(root, project.directory, 'README.en.md');
-  try {
-    let enContent = await readFile(enPath, 'utf8');
-    const enLine = versionReadmeEnLine(version);
-    if (/^Current Version: .*$/m.test(enContent)) {
-      enContent = enContent.replace(/^Current Version: .*$/m, enLine);
+  if (target.type === 'readme') {
+    let content = await readFile(path, 'utf8');
+    const line = `当前版本：\`${version}\`${target.suffix ?? ''}`;
+    if (/^当前版本：.*$/m.test(content)) {
+      content = content.replace(/^当前版本：.*$/m, line);
     } else {
-      enContent = enContent.replace(new RegExp(`^(# ${project.title}\\n)`), `$1\n${enLine}\n`);
+      content = content.replace(/^(# [^\n]*\n)/, `$1\n${line}\n`);
     }
-    await writeIfChanged(enPath, enContent);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-}
-
-async function syncRuntimeVersion(project, version) {
-  if (!project.runtimePath) return;
-  const content = `// Generated from versions.json. Run node scripts/version.mjs sync after editing the source.\nexport const EASYNOTE_VERSION = '${version}';\n`;
-  await writeIfChanged(resolve(root, project.runtimePath), content);
-}
-
-async function syncReadme(versions) {
-  const path = resolve(root, 'README.md');
-  let content = await readFile(path, 'utf8');
-  const block = rootReadmeBlock(versions);
-  if (/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/.test(content)) {
-    content = content.replace(/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/, block);
-  } else {
-    content = content.replace(/^(Easy Suite[\s\S]*?\n\n)/, `$1## 版本\n\n${block}\n\n`);
-  }
-  await writeIfChanged(path, content);
-
-  const enPath = resolve(root, 'README.en.md');
-  try {
-    let enContent = await readFile(enPath, 'utf8');
-    const enBlock = rootReadmeEnBlock(versions);
-    if (/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/.test(enContent)) {
-      enContent = enContent.replace(/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/, enBlock);
-    }
-    await writeIfChanged(enPath, enContent);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-}
-
-async function syncAll(versions) {
-  for (const [name, project] of Object.entries(projects)) {
-    await syncPackage(project, versions[name]);
-    await syncPythonPackage(project, versions[name]);
-    await syncVersionFile(project, versions[name]);
-    await syncSkillVersion(project, versions[name]);
-    await syncProjectReadme(project, versions[name]);
-    await syncRuntimeVersion(project, versions[name]);
-  }
-  await syncReadme(versions);
-}
-
-async function checkVersions(versions) {
-  const errors = [];
-  for (const [name, project] of Object.entries(projects)) {
-    if (project.packagePath) {
-      const packageJson = await readJson(resolve(root, project.packagePath));
-      if (packageJson.version !== versions[name]) errors.push(`${project.packagePath} version is ${packageJson.version}`);
-      const lockJson = await readJson(resolve(root, project.lockPath));
-      if (lockJson.version !== versions[name] || lockJson.packages?.['']?.version !== versions[name]) {
-        errors.push(`${project.lockPath} root version is not ${versions[name]}`);
-      }
-    }
-    if (project.pyprojectPath) {
-      const pyproject = await readFile(resolve(root, project.pyprojectPath), 'utf8');
-      if (tomlProjectVersion(pyproject, project.pyprojectPath) !== versions[name]) {
-        errors.push(`${project.pyprojectPath} version is not ${versions[name]}`);
-      }
-      const lock = await readFile(resolve(root, project.uvLockPath), 'utf8');
-      if (uvPackageVersion(lock, project.directory, project.uvLockPath) !== versions[name]) {
-        errors.push(`${project.uvLockPath} package version is not ${versions[name]}`);
-      }
-      const pythonVersion = await readFile(
-        resolve(root, project.pythonVersionPath),
-        'utf8',
-      );
-      if (pythonVersion.trim() !== `__version__ = "${versions[name]}"`) {
-        errors.push(`${project.pythonVersionPath} is stale`);
-      }
-      for (const relativePath of project.compiledCasePaths || []) {
-        const document = await readJson(resolve(root, relativePath));
-        if (
-          document.source_mode !== 'xlsx'
-          || document.compiler_version !== versions[name]
-        ) {
-          errors.push(`${relativePath} compiler_version is not ${versions[name]}`);
-        }
-      }
-    }
-    if (project.versionPath) {
-      const versionFile = (await readFile(resolve(root, project.versionPath), 'utf8')).trim();
-      if (versionFile !== versions[name]) errors.push(`${project.versionPath} is ${versionFile}`);
-    }
-    if (project.skillPath) {
-      const skill = await readFile(resolve(root, project.skillPath), 'utf8');
+    await writeIfChanged(path, content);
+    if (target.en) {
+      const enPath = projectPath(project, target.en);
+      let enContent;
       try {
-        const skillVersion = skillFrontmatterVersion(skill, project.skillPath);
-        if (skillVersion !== versions[name]) {
-          errors.push(`${project.skillPath} frontmatter metadata.version is ${skillVersion}`);
-        }
+        enContent = await readFile(enPath, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') return;
+        throw error;
+      }
+      const enLine = `Current Version: \`${version}\``;
+      if (/^Current Version: .*$/m.test(enContent)) {
+        enContent = enContent.replace(/^Current Version: .*$/m, enLine);
+      } else {
+        enContent = enContent.replace(/^(# [^\n]*\n)/, `$1\n${enLine}\n`);
+      }
+      await writeIfChanged(enPath, enContent);
+    }
+    return;
+  }
+  fail(`Unsupported target type "${target.type}".`);
+}
+
+async function checkTarget(project, target, version, errors) {
+  const path = projectPath(project, target.path);
+  const label = projectLabel(project, target.path);
+  if (target.type === 'npm') {
+    const packageJson = await readJson(path);
+    if (packageJson.version !== version) errors.push(`${label} version is ${packageJson.version}`);
+    const lockPath = projectPath(project, target.lock);
+    const lockLabel = projectLabel(project, target.lock);
+    const lockJson = await readJson(lockPath);
+    if (lockJson.version !== version || lockJson.packages?.['']?.version !== version) {
+      errors.push(`${lockLabel} root version is not ${version}`);
+    }
+    return;
+  }
+  if (target.type === 'version-file') {
+    const current = (await readFile(path, 'utf8')).trim();
+    if (current !== version) errors.push(`${label} is ${current}`);
+    return;
+  }
+  if (target.type === 'pyproject') {
+    const content = await readFile(path, 'utf8');
+    if (tomlProjectVersion(content, label) !== version) errors.push(`${label} version is not ${version}`);
+    return;
+  }
+  if (target.type === 'uv-lock') {
+    const content = await readFile(path, 'utf8');
+    const match = uvPackagePattern(target.package).exec(content);
+    if (!match) errors.push(`${label} is missing package ${target.package}`);
+    else if (match[2] !== version) errors.push(`${label} package version is not ${version}`);
+    return;
+  }
+  if (target.type === 'python-version') {
+    const current = (await readFile(path, 'utf8')).trim();
+    if (current !== `__version__ = "${version}"`) errors.push(`${label} is stale`);
+    return;
+  }
+  if (target.type === 'runtime-ts') {
+    const content = await readFile(path, 'utf8');
+    if (!content.includes(`${target.name} = '${version}'`)) errors.push(`${label} is stale`);
+    return;
+  }
+  if (target.type === 'json-field') {
+    const document = await readJson(path);
+    for (const [field, value] of Object.entries(target.require ?? {})) {
+      if (document[field] !== value) errors.push(`${label} must have ${field}: ${value}`);
+    }
+    if (document[target.field] !== version) errors.push(`${label} ${target.field} is not ${version}`);
+    return;
+  }
+  if (target.type === 'readme') {
+    const content = await readFile(path, 'utf8');
+    if (!content.includes(`当前版本：\`${version}\`${target.suffix ?? ''}`)) errors.push(`${label} is missing ${version}`);
+    if (target.en) {
+      const enLabel = projectLabel(project, target.en);
+      let enContent;
+      try {
+        enContent = await readFile(projectPath(project, target.en), 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') return;
+        throw error;
+      }
+      if (!enContent.includes(`Current Version: \`${version}\``)) errors.push(`${enLabel} is missing ${version}`);
+    }
+    return;
+  }
+  fail(`Unsupported target type "${target.type}".`);
+}
+
+async function syncProject(project, version) {
+  for (const target of project.targets) await syncTarget(project, target, version);
+}
+
+function aggregateVersions(entries) {
+  return Object.fromEntries(entries.map(({ project, version }) => [project.name, version]));
+}
+
+function readmeTable(entries, language) {
+  const header = language === 'en'
+    ? ['| Project | Current Version |', '| --- | --- |']
+    : ['| 项目 | 当前版本 |', '| --- | --- |'];
+  return [
+    '<!-- versions:start -->',
+    ...header,
+    ...entries.map(({ project, version }) => `| [${project.title}](${project.name}/) | \`${version}\` |`),
+    '<!-- versions:end -->',
+  ].join('\n');
+}
+
+function replaceTable(content, block, label) {
+  if (!/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/.test(content)) {
+    fail(`${label} is missing the versions:start / versions:end markers.`);
+  }
+  return content.replace(/<!-- versions:start -->[\s\S]*?<!-- versions:end -->/, block);
+}
+
+async function writeAggregate(entries) {
+  await writeIfChanged(aggregatePath, jsonContent(aggregateVersions(entries)));
+  const readmePath = resolve(root, 'README.md');
+  await writeIfChanged(readmePath, replaceTable(await readFile(readmePath, 'utf8'), readmeTable(entries, 'zh'), 'README.md'));
+  const enPath = resolve(root, 'README.en.md');
+  let enContent;
+  try {
+    enContent = await readFile(enPath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  await writeIfChanged(enPath, replaceTable(enContent, readmeTable(entries, 'en'), 'README.en.md'));
+}
+
+async function readEntries(projects) {
+  const entries = [];
+  for (const project of projects) entries.push({ project, version: await readVersion(project) });
+  return entries;
+}
+
+async function checkVersions() {
+  const projects = await loadProjects();
+  const entries = [];
+  const errors = [];
+  for (const project of projects) {
+    let version;
+    try {
+      version = await readVersion(project);
+    } catch (error) {
+      errors.push(error.message);
+      continue;
+    }
+    entries.push({ project, version });
+    for (const target of project.targets) {
+      try {
+        await checkTarget(project, target, version, errors);
       } catch (error) {
         errors.push(error.message);
       }
     }
-    const readme = await readFile(resolve(root, project.readmePath), 'utf8');
-    if (!readme.includes(versionReadmeLine(versions[name], project))) {
-      errors.push(`${project.readmePath} is missing ${versions[name]}`);
-    }
-    const enPath = resolve(root, project.directory, 'README.en.md');
-    try {
-      const enReadme = await readFile(enPath, 'utf8');
-      if (!enReadme.includes(versionReadmeEnLine(versions[name]))) {
-        errors.push(`${project.directory}/README.en.md is missing ${versions[name]}`);
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-    if (project.runtimePath) {
-      const runtime = await readFile(resolve(root, project.runtimePath), 'utf8');
-      if (!runtime.includes(`EASYNOTE_VERSION = '${versions[name]}'`)) errors.push(`${project.runtimePath} is stale`);
-    }
-    if (project.notesPath) {
+    if (project.notes) {
       try {
-        const notesContent = await readFile(resolve(root, project.notesPath), 'utf8');
-        extractReleaseNotes(notesContent, versions[name]);
-      } catch (error) {
-        errors.push(`${project.notesPath} is missing release notes for ${versions[name]}`);
+        extractReleaseNotes(await readFile(projectPath(project, project.notes), 'utf8'), version);
+      } catch {
+        errors.push(`${projectLabel(project, project.notes)} is missing release notes for ${version}`);
       }
     }
   }
-  const rootReadme = await readFile(resolve(root, 'README.md'), 'utf8');
-  if (!rootReadme.includes(rootReadmeBlock(versions))) errors.push('README.md version table is stale');
-  const rootReadmeEnPath = resolve(root, 'README.en.md');
-  try {
-    const rootReadmeEn = await readFile(rootReadmeEnPath, 'utf8');
-    if (!rootReadmeEn.includes(rootReadmeEnBlock(versions))) {
-      errors.push('README.en.md version table is stale');
+  if (!errors.length) {
+    const expected = jsonContent(aggregateVersions(entries));
+    let current = '';
+    try {
+      current = await readFile(aggregatePath, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
     }
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (current !== expected) errors.push('versions.json is stale');
+    const readmePath = resolve(root, 'README.md');
+    const readmeContent = await readFile(readmePath, 'utf8');
+    if (!readmeContent.includes(readmeTable(entries, 'zh'))) errors.push('README.md version table is stale');
+    const enPath = resolve(root, 'README.en.md');
+    try {
+      const enContent = await readFile(enPath, 'utf8');
+      if (!enContent.includes(readmeTable(entries, 'en'))) errors.push('README.en.md version table is stale');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
   if (errors.length) fail(`Version files are out of sync:\n${errors.map((error) => `- ${error}`).join('\n')}`);
 }
 
-function projectFromCwd() {
-  const current = resolve(process.cwd());
-  const match = Object.entries(projects).find(([, project]) => resolve(root, project.directory) === current);
-  return match?.[0] ?? '';
+function projectFromCwd(projects, cwd = process.cwd()) {
+  const current = resolve(cwd);
+  return projects.find((project) => project.directory === current)?.name ?? '';
 }
 
 function usage() {
@@ -477,73 +476,76 @@ function usage() {
   node scripts/version.mjs set <project> <version>
   node scripts/version.mjs bump <project> <major|minor|patch>
 
+Projects are discovered from <project>/${configName}; each project owns its
+version source and the files that must follow it.
+
 From a project directory, the project name may be omitted:
-  cd easymac && node ../scripts/version.mjs bump patch
-  cd easymac && node ../scripts/version.mjs notes`;
+  cd <project> && node ../scripts/version.mjs bump patch
+  cd <project> && node ../scripts/version.mjs notes`;
 }
 
 async function main() {
   const rawArgs = process.argv.slice(2);
   const [command = 'show', first, second] = rawArgs;
-  const versions = await readVersions();
+  const projects = await loadProjects();
   if (command === 'show') {
-    console.log(JSON.stringify(versions, null, 2));
+    const entries = await readEntries(projects);
+    console.log(JSON.stringify(aggregateVersions(entries), null, 2));
     return;
   }
   if (command === 'check') {
-    await checkVersions(versions);
+    await checkVersions();
     console.log('All project versions are synchronized.');
     return;
   }
   if (command === 'sync') {
-    await syncAll(versions);
-    console.log('Synchronized package metadata, runtime versions and README files.');
+    const entries = await readEntries(projects);
+    for (const { project, version } of entries) await syncProject(project, version);
+    await writeAggregate(entries);
+    console.log('Synchronized project version files and the repository version table.');
     return;
   }
   if (command === 'notes') {
     const withTitle = rawArgs.includes('--with-title');
     const positional = rawArgs.slice(1).filter((arg) => !arg.startsWith('--'));
-    const inferred = projectFromCwd();
+    const inferred = projectFromCwd(projects);
     let projectName = '';
     let targetVersion = '';
 
-    if (projects[positional[0]]) {
+    if (projects.some((project) => project.name === positional[0])) {
       projectName = positional[0];
       targetVersion = positional[1] || '';
-    } else if (inferred && projects[inferred]) {
+    } else if (inferred) {
       projectName = inferred;
       targetVersion = positional[0] || '';
     } else if (positional[0]) {
-      validateProject(positional[0]);
+      findProject(projects, positional[0]);
     } else {
       fail('Project name required when not running from a project directory.');
     }
 
-    const project = projects[projectName];
-    if (!project.notesPath) {
-      fail(`Project "${projectName}" does not have a notesPath configured.`);
-    }
-
-    const version = targetVersion || versions[projectName];
+    const project = findProject(projects, projectName);
+    if (!project.notes) fail(`Project "${projectName}" does not declare release notes.`);
+    const version = targetVersion || await readVersion(project);
     validateVersion(version);
-
-    const notesContent = await readFile(resolve(root, project.notesPath), 'utf8');
-    const notes = extractReleaseNotes(notesContent, version, { includeHeading: withTitle });
-    console.log(notes);
+    const notesContent = await readFile(projectPath(project, project.notes), 'utf8');
+    console.log(extractReleaseNotes(notesContent, version, { includeHeading: withTitle }));
     return;
   }
   if (command === 'set' || command === 'bump') {
-    const inferred = projectFromCwd();
-    const projectName = projects[first] ? first : inferred;
-    const value = projects[first] ? second : first;
-    validateProject(projectName);
+    const inferred = projectFromCwd(projects);
+    const projectName = projects.some((project) => project.name === first) ? first : inferred;
+    const value = projects.some((project) => project.name === first) ? second : first;
+    if (!projectName) fail(usage());
     if (!value) fail(`${command} requires a version or bump type.`);
-    versions[projectName] = command === 'set'
-      ? validateVersion(value)
-      : bumpVersion(versions[projectName], value);
-    await writeIfChanged(sourcePath, jsonContent(versions));
-    await syncAll(versions);
-    console.log(`${projects[projectName].title} version: ${versions[projectName]}`);
+    const project = findProject(projects, projectName);
+    const current = await readVersion(project);
+    const next = command === 'set' ? validateVersion(value) : bumpVersion(current, value);
+    await writeSourceVersion(project, next);
+    await syncProject(project, next);
+    const entries = await readEntries(projects);
+    await writeAggregate(entries);
+    console.log(`${project.title} version: ${next}`);
     return;
   }
   fail(usage());

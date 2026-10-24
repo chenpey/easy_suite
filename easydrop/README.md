@@ -281,7 +281,7 @@ npm run dev
 
 `dev` 使用 `.wrangler/` 中的本地 D1/R2 数据。默认地址为 `http://127.0.0.1:8787`；可通过 `npm run dev -- --port 8788` 指定其他端口。
 
-从仓库根目录运行 `bash reset.sh easydrop --local` 可在确认后清空本地 D1/R2 状态，并保留 `.dev.vars` 中的管理员配置。清理后同时在浏览器中清除 `http://127.0.0.1:8787` 的站点数据。
+在本目录运行 `bash reset.sh --local` 可在确认后清空本地 D1/R2 状态，并保留 `.dev.vars` 中的管理员配置；仓库根目录的等价写法是 `bash reset.sh easydrop --local`。清理后同时在浏览器中清除 `http://127.0.0.1:8787` 的站点数据。
 
 依赖安装使用 `package-lock.json`，并在 `package.json` 的 `allowScripts` 中按精确版本允许 esbuild、workerd 和可选的 fsevents 安装脚本。出现新的安装脚本提示时，先核对锁文件中的来源和版本，再更新精确授权。
 
@@ -599,7 +599,7 @@ bash deploy.sh
 - 成功提示及复制反馈约 1.6 秒后自动消失，新反馈替换旧反馈；错误提示保留 8 秒，展开错误详情时保持显示。
 - 删除成功后立即移除对应记录，减少等待列表刷新时的滞留。
 
-版本统一维护在仓库根目录 [`versions.json`](../versions.json)。每次 EasyDrop 功能更新准备提交时，在仓库根目录执行：
+版本真源是本目录的 `package.json`，同步规则在 [`version.config.json`](version.config.json)；仓库根的 `versions.json` 与版本表由脚本生成。每次 EasyDrop 功能更新准备提交时，在仓库根目录执行：
 
 ```bash
 node scripts/version.mjs bump easydrop patch
@@ -620,8 +620,8 @@ git commit -m "发布：EasyDrop v1.1.7 苹果风格界面重构与布局优化"
 | `npm run preview` | 启动随机密码、随机端口的临时预览 |
 | `npm run build` | 仅构建前端，不发布到云端 |
 | `bash deploy.sh` / `npm run deploy` | 使用 API Token 交互式部署 |
-| `bash ../reset.sh easydrop --local` | 确认后清空本地 D1/R2 状态 |
-| `bash ../reset.sh easydrop --remote` | 确认并隐藏输入 Token 后重置 Cloudflare D1/R2 与 Worker |
+| `bash reset.sh --local` | 确认后清空本地 D1/R2 状态 |
+| `bash reset.sh --remote` | 确认并隐藏输入 Token 后重置 Cloudflare D1/R2 与 Worker |
 | `npm run check` | 检查 JavaScript 语法 |
 | `npm test` | 运行 API 与部署协议集成测试 |
 | `npm run test:ui` | 运行 Playwright 浏览器测试 |

@@ -130,7 +130,7 @@ bash dev.sh
 | `bash reset-password.sh --local` / `--remote` | 交互式重置本地 / 生产账号，并撤销该账号会话与 AI 令牌 |
 | `bash backup.sh --remote` | 创建并校验完整 D1/R2 灾备 |
 | `bash restore.sh <目录> --remote [--check]` | 恢复预检或恢复至空的 D1/R2 |
-| `bash ../reset.sh easynote --local` / `--remote` | 确认后清空本地 / 云端 D1、R2 与 Worker |
+| `bash reset.sh --local` / `--remote` | 确认后清空本地 / 云端 D1、R2 与 Worker |
 | `npm run test:ai` | 测试远程 Streamable HTTP MCP |
 
 所有脚本入口都支持 `--help`。生产环境要求 HTTPS，仅本地命令允许环回 HTTP。
@@ -306,14 +306,14 @@ API 测试运行在内存 D1 / R2 上；浏览器测试自动在 `127.0.0.1:8792
 
 `1.4.0`（2026-10-19）：新增笔记内目录，正文单独成段写 `[TOC]` 即生成可点击目录，引用块标题不计入，预览、分享、独立阅读窗口与 PDF 一致；图表可另存为 SVG / PNG，导出沿用当前主题。
 
-版本统一维护在仓库根目录 [`versions.json`](../versions.json)，提交功能更新前执行：
+版本真源是本目录的 `package.json`，同步规则在 [`version.config.json`](version.config.json)；仓库根的 `versions.json` 与版本表由脚本生成。提交功能更新前在仓库根目录执行：
 
 ```bash
 node scripts/version.mjs bump easynote patch   # minor 用于新增功能，major 用于不兼容变更
 node scripts/version.mjs check
 ```
 
-脚本会同步本 README、根 README、`package.json`、锁文件和应用显示版本。
+脚本会按配置同步本 README、根 README、`package.json`、锁文件和应用显示版本。
 
 - 完整版本历史：[`CHANGELOG.md`](CHANGELOG.md)
 - AI / MCP 接入：[`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md)

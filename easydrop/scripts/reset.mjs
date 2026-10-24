@@ -4,83 +4,58 @@ import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
+// Everything this script needs to reset EasyDrop lives in this directory, so
+// the project can be checked out and operated on its own.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
-export const projects = Object.freeze({
-  easynote: {
-    label: "EasyNote",
-    directory: "easynote",
-    r2Binding: "IMAGES",
-    browserOrigin: "http://127.0.0.1:8791",
-    objectTable: "images",
-    objectQuery: "SELECT user_id || '/' || id AS object_key FROM images ORDER BY user_id,id",
-    objectPattern: new RegExp(`^${uuid}/${uuid}$`, "i"),
-    dropSql: [
-      "DROP TABLE IF EXISTS note_shares",
-      "DROP TABLE IF EXISTS image_refs",
-      "DROP TABLE IF EXISTS note_versions",
-      "DROP TABLE IF EXISTS note_changes",
-      "DROP TABLE IF EXISTS purged_notes",
-      "DROP TABLE IF EXISTS images",
-      "DROP TABLE IF EXISTS notes_fts",
-      "DROP TABLE IF EXISTS notes",
-      "DROP TABLE IF EXISTS integration_tokens",
-      "DROP TABLE IF EXISTS sessions",
-      "DROP TABLE IF EXISTS account_attempts",
-      "DROP TABLE IF EXISTS login_attempts",
-      "DROP TABLE IF EXISTS app_state",
-      "DROP TABLE IF EXISTS users",
-      "DROP TABLE IF EXISTS d1_migrations",
-    ].join(";"),
-    nextLocal: "bash dev.sh",
-    nextRemote: "bash deploy.sh",
-  },
-  easydrop: {
-    label: "EasyDrop",
-    directory: "easydrop",
-    r2Binding: "FILES",
-    browserOrigin: "http://127.0.0.1:8787",
-    objectTable: "items",
-    objectQuery: `SELECT 'files/' || id AS object_key FROM items WHERE type='file'
+export const project = Object.freeze({
+  label: "EasyDrop",
+  name: "easydrop",
+  directory: root,
+  r2Binding: "FILES",
+  browserOrigin: "http://127.0.0.1:8787",
+  objectTable: "items",
+  objectQuery: `SELECT 'files/' || id AS object_key FROM items WHERE type='file'
       UNION ALL SELECT 'files/' || id || '/preview' AS object_key FROM items WHERE type='file'
       ORDER BY object_key`,
-    objectPattern: new RegExp(`^files/${uuid}(?:/preview)?$`, "i"),
-    dropSql: [
-      "DROP TABLE IF EXISTS file_shares",
-      "DROP TABLE IF EXISTS multipart_parts",
-      "DROP TABLE IF EXISTS multipart_uploads",
-      "DROP TABLE IF EXISTS operations",
-      "DROP TABLE IF EXISTS items",
-      "DROP TABLE IF EXISTS sessions",
-      "DROP TABLE IF EXISTS account_attempts",
-      "DROP TABLE IF EXISTS login_attempts",
-      "DROP TABLE IF EXISTS app_state",
-      "DROP TABLE IF EXISTS users",
-      "DROP TABLE IF EXISTS d1_migrations",
-    ].join(";"),
-    nextLocal: "npm run dev",
-    nextRemote: "bash deploy.sh",
-  },
+  objectPattern: new RegExp(`^files/${uuid}(?:/preview)?$`, "i"),
+  dropSql: [
+    "DROP TABLE IF EXISTS file_shares",
+    "DROP TABLE IF EXISTS multipart_parts",
+    "DROP TABLE IF EXISTS multipart_uploads",
+    "DROP TABLE IF EXISTS operations",
+    "DROP TABLE IF EXISTS items",
+    "DROP TABLE IF EXISTS sessions",
+    "DROP TABLE IF EXISTS account_attempts",
+    "DROP TABLE IF EXISTS login_attempts",
+    "DROP TABLE IF EXISTS app_state",
+    "DROP TABLE IF EXISTS users",
+    "DROP TABLE IF EXISTS d1_migrations",
+  ].join(";"),
+  nextLocal: "npm run dev",
+  nextRemote: "bash deploy.sh",
 });
 
 const usage = `Usage:
-  bash reset.sh <easynote|easydrop> --local
-  bash reset.sh <easynote|easydrop> --remote
+  bash reset.sh --local
+  bash reset.sh --remote
 
---local   Delete the selected project's local Wrangler D1/R2 state.
---remote  Delete all app data in the configured Cloudflare D1/R2 resources,
-          reset the current D1 schema, and remove the deployed Worker.
+--local   Delete ${project.label} local Wrangler D1/R2 state.
+--remote  Delete all ${project.label} app data in the configured Cloudflare D1/R2
+          resources, reset the current D1 schema, and remove the deployed Worker.
+
+From the repository root: bash ../reset.sh ${project.name} --local|--remote
 `;
 
 export function parseArguments(args) {
   if (args.length === 1 && ["-h", "--help"].includes(args[0])) return { help: true };
-  if (args.length !== 2 || !projects[args[0]] || !["--local", "--remote"].includes(args[1])) {
+  if (args.length !== 1 || !["--local", "--remote"].includes(args[0])) {
     throw new Error(usage.trim());
   }
-  return { project: args[0], mode: args[1].slice(2) };
+  return { mode: args[0].slice(2) };
 }
 
 function validateName(value, label) {
@@ -97,10 +72,8 @@ function validateDatabaseName(value) {
   return value;
 }
 
-export async function loadTarget(projectName, base = root) {
-  const project = projects[projectName];
-  const directory = join(base, project.directory);
-  const configPath = join(directory, "wrangler.deploy.json");
+export async function loadTarget(base = root) {
+  const configPath = join(base, "wrangler.deploy.json");
   let config;
   try {
     config = JSON.parse(await readFile(configPath, "utf8"));
@@ -118,8 +91,7 @@ export async function loadTarget(projectName, base = root) {
   }
   return {
     ...project,
-    projectName,
-    directory,
+    directory: base,
     configPath,
     config,
     accountId: config.account_id,
@@ -282,16 +254,14 @@ async function main() {
     return;
   }
   if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("An interactive terminal is required.");
-  const target = options.mode === "remote"
-    ? await loadTarget(options.project)
-    : { ...projects[options.project], projectName: options.project, directory: join(root, projects[options.project].directory) };
+  const target = options.mode === "remote" ? await loadTarget() : project;
   if (options.mode === "remote") {
     for (const name of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_API_KEY", "CF_API_TOKEN", "CF_API_KEY"]) {
       if (process.env[name]) throw new Error("Environment credentials are not accepted. Enter the API token interactively.");
     }
     console.log(`Worker: ${target.workerName}\nD1: ${target.databaseName}\nR2: ${target.bucketName}`);
   }
-  const phrase = `reset ${options.project} ${options.mode}`;
+  const phrase = `reset ${project.name} ${options.mode}`;
   console.log(`${target.label} ${options.mode} reset permanently deletes all ${options.mode === "local" ? "local" : "Cloudflare"} app data.`);
   if (await ask(`Type ${phrase} to continue: `) !== phrase) throw new Error("Reset cancelled.");
   if (options.mode === "local") {
