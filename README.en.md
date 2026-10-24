@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite contains independent tools for file sharing, note-taking, Mac migration, and automated testing, plus the EasyDev coding skill. Each project has its own configuration and documentation.
+Easy Suite contains independent tools for file sharing, note-taking, Mac migration, and automated testing. Each project has its own configuration and documentation.
 
 ## Versions
 
@@ -13,7 +13,6 @@ Easy Suite contains independent tools for file sharing, note-taking, Mac migrati
 | [EasyNote](easynote/) | `1.4.1` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.11.0` |
 <!-- versions:end -->
 
 ## Projects
@@ -66,14 +65,6 @@ For local development, navigate into the directory and run `uv sync` and `uv run
 
 See [EasyTest README](easytest/README.md) for details.
 
-### [EasyDev](easydev/)
-
-EasyDev is an all-in-one coding skill for AI agents. It selects the necessary design, implementation, debugging, verification, and independent review steps. An optional JSON file outside the installation directory can configure developer, reviewer, and upgrade models; without it, roles inherit the host model.
-
-Supports Codex, Claude Code, OpenCode, Pi, DeepSeek Harness, Cursor, and Google Antigravity App/IDE or CLI. From the repository root, run `npx skills add ./easydev --skill easydev` and select CLI-supported harnesses. DeepSeek Harness can reuse the shared skill directory or use a manual copy; see the installation guide. Personal model configuration lives outside the installation directory.
-
-See [EasyDev installation and usage (Chinese)](easydev/README.md).
-
 ## Usage
 
 The projects are independent; run commands within their respective project directories unless stated otherwise:
@@ -81,7 +72,6 @@ The projects are independent; run commands within their respective project direc
 - EasyDrop and EasyNote require Node.js 22 or later.
 - EasyMac requires macOS 13 or later. After unzipping the release package, complete the one-time authorization command in Terminal per `首次使用.txt` to open, and double-click `EasyMac.app` directly thereafter.
 - EasyTest requires Python 3.12 or 3.13; `uv` is recommended for environment management.
-- EasyDev is an instruction-only skill. Skills CLI installation needs Node.js/npm; manual copying is a plain file operation.
 
 Refer to each project's README for specific startup, testing, deployment, configuration, and security boundaries.
 

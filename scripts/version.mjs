@@ -48,13 +48,6 @@ const projects = {
       'easytest/tests/fixtures/project/cases/scenario/account_flow.json',
     ],
   },
-  easydev: {
-    title: 'EasyDev',
-    directory: 'easydev',
-    readmePath: 'easydev/README.md',
-    notesPath: 'easydev/CHANGELOG.md',
-    skillPath: 'easydev/SKILL.md',
-  },
 };
 
 function fail(message) {
@@ -205,7 +198,6 @@ function rootReadmeBlock(versions) {
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
     `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
-    `| [EasyDev](easydev/) | \`${versions.easydev}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
 }
@@ -219,7 +211,6 @@ function rootReadmeEnBlock(versions) {
     `| [EasyNote](easynote/) | \`${versions.easynote}\` |`,
     `| [EasyMac](easymac/) | \`${versions.easymac}\` |`,
     `| [EasyTest](easytest/) | \`${versions.easytest}\` |`,
-    `| [EasyDev](easydev/) | \`${versions.easydev}\` |`,
     '<!-- versions:end -->',
   ].join('\n');
 }

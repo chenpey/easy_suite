@@ -77,15 +77,15 @@ test("check names every stale version file", async () => {
   packageJson.version = "9.9.9";
   await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
 
-  const skillPath = join(directory, "easydev", "SKILL.md");
+  const skillPath = join(directory, "easytest", "README.md");
   const skill = await readFile(skillPath, "utf8");
-  await writeFile(skillPath, skill.replace(`  version: "${versions.easydev}"`, '  version: "9.9.9"'));
+  await writeFile(skillPath, skill.replace(`当前版本：\`${versions.easytest}\``, "当前版本：`9.9.9`"));
 
   const result = versionCli(directory, "check");
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /easydrop\/package\.json version is 9\.9\.9/);
-  assert.match(result.stderr, /easydev\/SKILL\.md frontmatter metadata\.version is 9\.9\.9/);
+  assert.match(result.stderr, new RegExp(`easytest/README\\.md is missing ${escapeVersion(versions.easytest)}`));
 });
 
 async function repositoryWithReleaseNotes() {

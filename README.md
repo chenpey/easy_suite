@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移、自动化测试工具，以及 EasyDev 编码 Skill。各项目可独立使用，拥有自己的配置和使用文档。
+Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移和自动化测试工具。各项目可独立使用，拥有自己的配置和使用文档。
 
 ## 版本
 
@@ -13,7 +13,6 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 | [EasyNote](easynote/) | `1.4.1` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |
-| [EasyDev](easydev/) | `0.11.0` |
 <!-- versions:end -->
 
 ## 项目目录
@@ -66,14 +65,6 @@ EasyTest 是一个面向接口和业务流程测试的 Python 工具。测试人
 
 详细说明见 [EasyTest README](easytest/README.md)。
 
-### [EasyDev](easydev/)
-
-EasyDev 是面向 AI 编码代理的一体化 Skill，按任务风险组织设计、实现、排障、验证和独立审查。模型分配可通过安装目录外的可选 JSON 文件自定义，未配置时继承宿主模型。
-
-支持 Codex、Claude Code、OpenCode、Pi、DeepSeek Harness、Cursor、Google Antigravity App/IDE 与 CLI。在仓库根目录运行 `npx skills add ./easydev --skill easydev`，选择 CLI 支持的 harness；DeepSeek Harness 可复用共享技能目录或手动复制，详见安装说明。个人模型配置独立于安装目录保存。
-
-详细说明见 [EasyDev 安装与使用](easydev/README.md)。
-
 ## 使用
 
 各项目相互独立，除特别注明外，命令应在对应项目目录中执行：
@@ -81,7 +72,6 @@ EasyDev 是面向 AI 编码代理的一体化 Skill，按任务风险组织设�
 - EasyDrop 和 EasyNote 需要 Node.js 22 或更新版本。
 - EasyMac 需要 macOS 13 或更新版本，解压发布包后按“首次使用.txt”在终端完成单次授权即可打开使用，以后可直接双击 `EasyMac.app`。
 - EasyTest 需要 Python 3.12 或 3.13，并推荐使用 `uv` 管理环境。
-- EasyDev 是纯文件 Skill；Skills CLI 安装需要 Node.js/npm，手动复制只需文件系统操作。
 
 具体启动、测试、部署、配置和安全边界以各项目 README 为准。
 
