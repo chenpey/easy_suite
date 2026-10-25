@@ -1,6 +1,6 @@
 {
   "name": "easynote",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -14,7 +14,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "check": "npm run check:i18n && tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "test": "npm run test:api && npm run test:ai",
-    "test:api": "node --import tsx --test test/api.test.ts test/merge.test.ts test/transfer.test.ts test/client-api.test.ts test/math.test.ts test/oauth.test.ts test/events.test.ts",
+    "test:api": "node --import tsx --test test/api.test.ts test/merge.test.ts test/transfer.test.ts test/client-api.test.ts test/math.test.ts test/oauth.test.ts test/textDiff.test.ts test/livePreviewPlan.test.ts test/events.test.ts",
     "test:ai": "node --import tsx --test test/ai.test.ts",
     "test:scripts": "node --test test/deploy.test.mjs test/scripts.test.mjs test/maintenance.test.mjs test/reset.test.mjs",
     "test:ui": "playwright test",
@@ -27,6 +27,9 @@
   "dependencies": {
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-markdown": "^6.3.4",
+    "@codemirror/language": "^6.12.4",
+    "@lezer/common": "^1.5.2",
+    "@lezer/markdown": "^1.7.2",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.1",
     "@modelcontextprotocol/server": "^2.0.0",

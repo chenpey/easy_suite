@@ -1,9 +1,9 @@
 import type MarkdownIt from 'markdown-it';
 
-const MAX_FORMULA_LENGTH = 10_000;
+export const MAX_FORMULA_LENGTH = 10_000;
 
 // Only $…$ and $$…$$ are formulas: \( and \[ are CommonMark escapes that existing notes use for literal brackets.
-function mathEnd(source: string, start: number, end: number, delimiter: string, budget: { remaining: number }): number {
+export function mathEnd(source: string, start: number, end: number, delimiter: string, budget: { remaining: number }): number {
   let braces = 0;
   for (let pos = start; pos < end; pos++) {
     if (budget.remaining-- <= 0) return -1;
@@ -13,6 +13,15 @@ function mathEnd(source: string, start: number, end: number, delimiter: string, 
     else if (source[pos] === '}') braces--;
   }
   return -1;
+}
+
+// Shared with the live-preview scanner so both surfaces accept exactly the same inline formulas.
+export function mathContentValid(source: string, start: number, end: number, delimiter: string): boolean {
+  if (end <= start) return false;
+  if (delimiter !== '$') return true;
+  if (/\s/.test(source[end - 1] ?? '')) return false;
+  if (/\d/.test(source[end + 1] ?? '')) return false;
+  return !source.slice(start, end).includes('\n');
 }
 
 export function markdownMath(md: MarkdownIt): void {
@@ -32,7 +41,7 @@ export function markdownMath(md: MarkdownIt): void {
     const start = state.pos + delimiter.length;
     if (delimiter === '$' && /\s/.test(state.src[start] ?? ' ')) return false;
     const end = mathEnd(state.src, start, Math.min(state.posMax, start + MAX_FORMULA_LENGTH + delimiter.length), delimiter, budgetFor(state));
-    if (end <= start || delimiter === '$' && (/\s/.test(state.src[end - 1]) || /\d/.test(state.src[end + 1] ?? '') || state.src.slice(start, end).includes('\n'))) return false;
+    if (!mathContentValid(state.src, start, end, delimiter)) return false;
     if (!silent) {
       const token = state.push('math_inline', '', 0);
       token.content = state.src.slice(start, end);

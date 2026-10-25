@@ -1,8 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { Compartment, EditorState, Facet } from '@codemirror/state';
-import { Decoration, EditorView, keymap, placeholder } from '@codemirror/view';
+import { Compartment, EditorState } from '@codemirror/state';
+import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, redo } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
+import { Table, TaskList, Strikethrough } from '@lezer/markdown';
 import MarkdownIt from 'markdown-it';
 import footnote from 'markdown-it-footnote';
 import { markdownMath } from './math';
@@ -10,14 +11,34 @@ import DOMPurify from 'dompurify';
 import { idPattern } from '../shared/types';
 import { t } from './i18n';
 import { downloadDiagram, type DiagramImageFormat } from './diagramExport';
+import { searchHighlights, searchQueryFacet } from './editorSearch';
+import { externalChanges } from './textDiff';
+import { createLivePreview, livePreviewActive, livePreviewMode } from './livePreview';
+import { privateFileId, privateImageId } from './markdownResources';
+
+export { toggleMarkdownTask } from './markdownResources';
+
+export interface EditorViewportAnchor {
+  offset: number;
+  top: number;
+}
 
 interface Props {
   value: string;
+  mode: 'source' | 'live';
+  /** False while reading mode hides the editor; the instance stays mounted to keep history, selection and markers. */
+  active: boolean;
+  maxNoteBytes: number;
   onChange(value: string): void;
   onImages(files: File[], insertion: string): void;
-  onTogglePreview(): void;
+  onToggleReading(): void;
   onShowShortcuts(): void;
   searchQuery?: string;
+  onImage(src: string, release?: () => void): void;
+  onNote(id: string): void;
+  onFile(id: string, href: string): void;
+  resolveFile?(id: string): Promise<string | null>;
+  onRenderFallback?(reason: 'error' | 'size' | 'budget'): void;
 }
 
 export interface EditorHandle {
@@ -27,25 +48,9 @@ export interface EditorHandle {
   cursor(): number;
   goTo(offset: number): void;
   focus(): void;
+  captureViewport(): EditorViewportAnchor | null;
+  restoreViewport(anchor: EditorViewportAnchor): void;
 }
-
-const searchQueryFacet = Facet.define<string, string>({
-  combine: (values) => values.at(-1) ?? '',
-});
-const searchHighlights = EditorView.decorations.compute([searchQueryFacet, 'doc'], (state) => {
-  const query = state.facet(searchQueryFacet).trim();
-  if (!query) return Decoration.none;
-  const text = state.doc.toString();
-  const haystack = text.toLocaleLowerCase();
-  const needle = query.toLocaleLowerCase();
-  const ranges = [];
-  let match = haystack.indexOf(needle);
-  while (match >= 0) {
-    ranges.push(Decoration.mark({ class: 'cm-search-highlight' }).range(match, match + query.length));
-    match = haystack.indexOf(needle, match + query.length);
-  }
-  return Decoration.set(ranges);
-});
 
 function toggleEmphasis(marker: '*' | '**') {
   return (editor: EditorView): boolean => {
@@ -87,21 +92,86 @@ function toggleEmphasis(marker: '*' | '**') {
   };
 }
 
+// The live surface adds only the GFM constructs the reading renderer already understands; markdownLanguage's
+// subscript, superscript and emoji are deliberately not enabled.
+const liveMarkdown = () => markdown({ extensions: [Table, TaskList, Strikethrough] });
+const sourceMarkdown = () => markdown();
+
+const encoder = new TextEncoder();
+
 export const Editor = forwardRef<EditorHandle, Props>(function Editor({
   value,
+  mode,
+  active,
+  maxNoteBytes,
   onChange,
   onImages,
-  onTogglePreview,
+  onToggleReading,
   onShowShortcuts,
   searchQuery = '',
+  onImage,
+  onNote,
+  onFile,
+  resolveFile,
+  onRenderFallback,
 }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const status = useRef<HTMLDivElement>(null);
   const search = useRef(new Compartment());
-  const callbacks = useRef({ onChange, onImages, onTogglePreview, onShowShortcuts });
+  const config = useRef(new Compartment());
+  const language = useRef(new Compartment());
+  const callbacks = useRef({ onChange, onImages, onToggleReading, onShowShortcuts, onImage, onNote, onFile, resolveFile, onRenderFallback, maxNoteBytes });
   const insertions = useRef(new Map<string, number>());
-  callbacks.current = { onChange, onImages, onTogglePreview, onShowShortcuts };
+  callbacks.current = { onChange, onImages, onToggleReading, onShowShortcuts, onImage, onNote, onFile, resolveFile, onRenderFallback, maxNoteBytes };
   const external = useRef(false);
+  const bytes = useRef(encoder.encode(value).length);
+  const oversized = useRef(bytes.current > maxNoteBytes);
+  const statusTimer = useRef(0);
+  const pendingConfig = useRef<{ mode: 'source' | 'live'; active: boolean } | null>(null);
+
+  const notify = (message: string) => {
+    const element = status.current;
+    if (!element) return;
+    element.textContent = message;
+    window.clearTimeout(statusTimer.current);
+    statusTimer.current = window.setTimeout(() => { if (status.current) status.current.textContent = ''; }, 6000);
+  };
+
+  // One stable validator identity keeps the live-preview href cache effective and pins the decision to the
+  // same MarkdownIt instance the reading surface uses.
+  const validateLink = useRef((href: string) => renderer.validateLink(href)).current;
+  const live = useMemo(() => createLivePreview(() => ({
+    validateLink,
+    onImage: (src, release) => callbacks.current.onImage(src, release),
+    onNote: (id) => callbacks.current.onNote(id),
+    onFile: (id, href) => callbacks.current.onFile(id, href),
+    resolveFile: () => callbacks.current.resolveFile,
+    onRenderFallback: (reason) => callbacks.current.onRenderFallback?.(reason),
+    onStatus: notify,
+    bytesOverLimit: () => bytes.current > callbacks.current.maxNoteBytes,
+  })), []);
+
+  // Rendering an oversized draft must degrade in every entry path: first load, mode change and a lowered limit.
+  const reportOversized = () => {
+    const over = bytes.current > callbacks.current.maxNoteBytes;
+    oversized.current = over;
+    if (over) callbacks.current.onRenderFallback?.('size');
+    return over;
+  };
+
+  const applyConfig = (editor: EditorView, nextMode: 'source' | 'live', nextActive: boolean) => {
+    editor.dispatch({
+      effects: [
+        config.current.reconfigure([
+          livePreviewMode.of(nextMode), livePreviewActive.of(nextActive),
+          EditorView.editable.of(nextActive), EditorState.readOnly.of(!nextActive),
+        ]),
+        language.current.reconfigure(nextMode === 'live' ? liveMarkdown() : sourceMarkdown()),
+      ],
+    });
+    if (nextActive) editor.requestMeasure();
+  };
 
   const markInsertion = (position?: number) => {
     const id = crypto.randomUUID();
@@ -138,6 +208,28 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
       editor.focus();
     },
     focus() { view.current?.focus(); },
+    captureViewport() {
+      const editor = view.current;
+      if (!editor) return null;
+      const scroller = document.querySelector<HTMLElement>('.document-scroll');
+      if (!scroller) return null;
+      // The anchor is the source line visible at the top of the editor viewport, not the caret: the user may
+      // have scrolled away from the caret before switching modes.
+      const containerTop = scroller.getBoundingClientRect().top;
+      const block = editor.lineBlockAtHeight(containerTop - editor.documentTop);
+      const coords = editor.coordsAtPos(block.from);
+      return { offset: block.from, top: (coords?.top ?? block.top + editor.documentTop) - containerTop };
+    },
+    restoreViewport(anchor) {
+      const editor = view.current;
+      const scroller = document.querySelector<HTMLElement>('.document-scroll');
+      if (!editor || !scroller) return;
+      editor.requestMeasure();
+      const offset = Math.max(0, Math.min(anchor.offset, editor.state.doc.length));
+      const coords = editor.coordsAtPos(offset);
+      const top = coords?.top ?? editor.lineBlockAt(offset).top + editor.documentTop;
+      scroller.scrollTop += top - scroller.getBoundingClientRect().top - anchor.top;
+    },
   }), []);
 
   useEffect(() => {
@@ -146,12 +238,18 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
       state: EditorState.create({
         doc: value,
         extensions: [
-          markdown(), history(), keymap.of([
+          config.current.of([
+            livePreviewMode.of(mode), livePreviewActive.of(active),
+            EditorView.editable.of(active), EditorState.readOnly.of(!active),
+          ]),
+          language.current.of(mode === 'live' ? liveMarkdown() : sourceMarkdown()),
+          live,
+          history(), keymap.of([
             { key: 'Mod-b', run: toggleEmphasis('**') },
             { key: 'Mod-i', run: toggleEmphasis('*') },
             { key: 'Mod-Shift-z', run: redo, preventDefault: true },
-            { key: 'Ctrl-e', run: () => { callbacks.current.onTogglePreview(); return true; } },
-            { key: 'Meta-e', run: () => { callbacks.current.onTogglePreview(); return true; } },
+            { key: 'Ctrl-e', run: () => { callbacks.current.onToggleReading(); return true; } },
+            { key: 'Meta-e', run: () => { callbacks.current.onToggleReading(); return true; } },
             { key: 'Mod-/', run: () => { callbacks.current.onShowShortcuts(); return true; } },
             ...defaultKeymap,
             ...historyKeymap,
@@ -169,6 +267,13 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
               for (const [id, position] of insertions.current) {
                 insertions.current.set(id, update.changes.mapPos(position, -1));
               }
+              update.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+                bytes.current += encoder.encode(update.state.doc.sliceString(fromB, toB)).length
+                  - encoder.encode(update.startState.doc.sliceString(fromA, toA)).length;
+              });
+              const nowOversized = bytes.current > callbacks.current.maxNoteBytes;
+              if (nowOversized && !oversized.current) callbacks.current.onRenderFallback?.('size');
+              oversized.current = nowOversized;
             }
             if (update.docChanged && !external.current) callbacks.current.onChange(update.state.doc.toString());
           }),
@@ -193,20 +298,63 @@ export const Editor = forwardRef<EditorHandle, Props>(function Editor({
       }),
     });
     view.current = editor;
-    return () => { editor.destroy(); view.current = null; insertions.current.clear(); };
+    const flushPendingConfig = () => {
+      window.requestAnimationFrame(() => {
+        const pending = pendingConfig.current;
+        const current = view.current;
+        if (!pending || !current) return;
+        if (current.composing) { flushPendingConfig(); return; }
+        pendingConfig.current = null;
+        applyConfig(current, pending.mode, pending.active);
+      });
+    };
+    editor.contentDOM.addEventListener('compositionend', flushPendingConfig);
+    if (mode === 'live' && active) reportOversized();
+    return () => {
+      window.clearTimeout(statusTimer.current);
+      editor.contentDOM.removeEventListener('compositionend', flushPendingConfig);
+      editor.destroy();
+      view.current = null;
+      insertions.current.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const editor = view.current;
-    if (!editor || editor.state.doc.toString() === value) return;
+    if (!editor) return;
+    // A mode change during an active composition would rebuild the content DOM under the IME; the request is
+    // queued and applied after the composition commits.
+    if (editor.composing) { pendingConfig.current = { mode, active }; return; }
+    applyConfig(editor, mode, active);
+    if (mode === 'live' && active) reportOversized();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, active]);
+
+  useEffect(() => {
+    if (mode === 'live' && active) reportOversized();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxNoteBytes]);
+
+  useEffect(() => {
+    const editor = view.current;
+    if (!editor) return;
+    const current = editor.state.doc.toString();
+    const changes = externalChanges(current, value);
+    if (!changes.length) return;
+    // Several bounded regions instead of one span keep the selection and insertion markers of the untouched
+    // middle of the note where they are (see textDiff for the size limit of this guarantee).
     external.current = true;
-    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
+    editor.dispatch({ changes });
     external.current = false;
   }, [value]);
   useEffect(() => {
     view.current?.dispatch({ effects: search.current.reconfigure(searchQueryFacet.of(searchQuery)) });
   }, [searchQuery]);
-  return <div className="code-editor" ref={host} />;
+  return <>
+    <div className="code-editor" ref={host} hidden={!active} aria-hidden={!active || undefined} />
+    <div className="editor-status" role="status" aria-live="polite" ref={status} />
+  </>;
 });
 
 const renderer = new MarkdownIt({ html: true, linkify: true, breaks: true }).use(footnote).use(markdownMath);
@@ -246,14 +394,14 @@ renderer.renderer.rules.code_block = (tokens, index) => {
 renderer.renderer.rules.image = (tokens, index) => {
   const token = tokens[index];
   const src = token.attrGet('src') ?? '';
-  const id = /^(?:\/api\/images\/|\/api\/public\/shares\/[a-f0-9]{64}\/images\/)([0-9a-f-]{36})$/i.exec(src)?.[1];
-  if (!id || !idPattern.test(id)) return `<span class="blocked-image">${t('[外部图片未加载]')}</span>`;
+  const id = privateImageId(src);
+  if (!id) return `<span class="blocked-image">${t('[外部图片未加载]')}</span>`;
   return `<img src="${src}" data-private-image="${id}" alt="${renderer.utils.escapeHtml(token.content)}" loading="lazy" />`;
 };
 renderer.renderer.rules.link_open = (tokens, index, options, _env, self) => {
   const href = tokens[index].attrGet('href') ?? '';
-  const id = /^(?:\/api\/files\/|\/api\/public\/shares\/[a-f0-9]{64}\/files\/)([0-9a-f-]{36})$/i.exec(href)?.[1];
-  if (id && idPattern.test(id)) {
+  const id = privateFileId(href);
+  if (id) {
     tokens[index].attrSet('data-private-file', id);
     tokens[index].attrSet('download', '');
   } else {
@@ -282,16 +430,6 @@ renderer.renderer.rules.footnote_anchor = (tokens, index) => {
   const reference = subId > 0 ? `${number}:${subId}` : String(number);
   return ` <a href="#footnote-ref-${reference}" data-footnote-backref="${reference}" aria-label="${t('返回脚注引用')}">↩︎</a>`;
 };
-
-export function toggleMarkdownTask(content: string, sourceLine: number, checked: boolean): string {
-  const lines = content.split('\n');
-  if (!Number.isInteger(sourceLine) || sourceLine < 0 || sourceLine >= lines.length) return content;
-  lines[sourceLine] = lines[sourceLine].replace(
-    /^([ \t>]*(?:(?:[-+*]|\d{1,9}[.)])[ \t]+[ \t>]*)*)\[([ xX]?)\](?=\s|$)/,
-    (_source, prefix: string) => `${prefix}[${checked ? 'x' : ' '}]`,
-  );
-  return lines.join('\n');
-}
 
 function highlightRenderedText(root: HTMLElement, query: string) {
   const needle = query.trim();
@@ -414,8 +552,8 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
   const parsed = new DOMParser().parseFromString(clean, 'text/html');
   parsed.body.querySelectorAll('img').forEach((image) => {
     const src = image.getAttribute('src') ?? '';
-    const id = /^(?:\/api\/images\/|\/api\/public\/shares\/[a-f0-9]{64}\/images\/)([0-9a-f-]{36})$/i.exec(src)?.[1];
-    if (id && idPattern.test(id)) {
+    const id = privateImageId(src);
+    if (id) {
       image.setAttribute('loading', 'lazy');
       image.setAttribute('data-private-image', id);
       return;
@@ -438,9 +576,8 @@ function renderMarkdown(content: string, interactiveTasks: boolean, searchQuery:
       link.removeAttribute('rel');
       return;
     }
-    const fileId = /^(?:\/api\/files\/|\/api\/public\/shares\/[a-f0-9]{64}\/files\/)([0-9a-f-]{36})$/i
-      .exec(link.getAttribute('href') ?? '')?.[1];
-    if (fileId && idPattern.test(fileId)) {
+    const fileId = privateFileId(link.getAttribute('href') ?? '');
+    if (fileId) {
       link.dataset.privateFile = fileId;
       link.setAttribute('download', '');
       link.removeAttribute('target');

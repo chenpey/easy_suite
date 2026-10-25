@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.4.2`
+Current Version: `1.5.0`
 
 A self-hosted Markdown note-taking application for individuals and small teams. The frontend is React 19 + TypeScript + Vite packaged as an installable PWA. The server is a single Cloudflare Worker serving the API, remote MCP, OAuth and static assets; D1 stores accounts and notes, R2 stores private images and attachments, a Durable Object broadcasts changes, and a Cron trigger cleans up expired data every hour. PDFs are generated structurally with pdfmake and previewed page by page with PDF.js.
 
@@ -14,9 +14,11 @@ A self-hosted Markdown note-taking application for individuals and small teams. 
 
 **Notes and editing**
 
-- Create notes with an independent title, Markdown editing and preview, autosave 500 ms after typing stops, pinning, archiving, tags, trash and restore; permanent deletion asks for confirmation.
-- CodeMirror 6 editor; markdown-it parsing with DOMPurify sanitizing; GFM tables, footnotes, syntax highlighting and safe HTML blocks.
-- Tick to-dos directly in preview; double-click a heading, paragraph, list item, table or code block to jump back to its source line and column.
+- Create notes with an independent title, Markdown editing and reading, autosave 500 ms after typing stops, pinning, archiving, tags, trash and restore; permanent deletion asks for confirmation.
+- CodeMirror 6 editor with a Source / Live Preview / Reading switch at the top that defaults to live preview: Markdown source stays the only content format, the block holding the caret shows its source and every other block renders headings, emphasis, lists, to-dos, quotes, tables, highlighted code, math, images and collapsible blocks. Switching modes keeps the selection, undo history and unsaved drafts.
+- Live preview only builds its own DOM: the content of common block-level HTML containers (`<section>`, `<dl>`, `<h1>`, …) is shown as source, so container detection uses a finite tag set and a line-by-line scan and unrecognised containers or pseudo closing tags inside comments and quotes may be scanned as plain text. External images and dangerous link or TeX targets never load or become clickable, and private images and attachments keep the existing account isolation.
+- Reading view keeps markdown-it parsing with DOMPurify sanitizing; GFM tables, footnotes, syntax highlighting and safe HTML blocks.
+- Tick to-dos in reading view or in live preview, which writes the matching source line; double-click a heading, paragraph, list item, table or code block to jump back to its source line and column.
 - Outline, backlinks and stable internal links `[[note UUID|display title]]` that keep working after the target is renamed; a `[TOC]` paragraph of its own (surrounded by blank lines) builds a clickable note contents that matches preview, shares and PDF.
 - KaTeX inline and block math; Pele renders flowcharts, mind maps, sequence diagrams and more, recolouring instantly with the light/dark theme. Save an individual diagram as SVG or PNG from preview or a share page; prefer SVG for vector clarity and smaller files, or PNG for apps that do not support SVG.
 - Version history: manual saves and AI writes create snapshots (20 kept by default) that can be inspected and restored; restoring snapshots the current content first.
@@ -212,7 +214,7 @@ Browser write endpoints require a same-origin `Origin` and `X-CSRF-Token`; AI en
 
 | Syntax | Usage |
 | --- | --- |
-| `- [ ] todo` / `- [x] done` | Tick in preview, written straight back to the source |
+| `- [ ] todo` / `- [x] done` / `- [] todo` | Tick in reading view or live preview, written straight back to the source |
 | `[[note UUID\|display title]]` | Internal link that survives a rename |
 | A `[TOC]` paragraph of its own (blank lines around it) | Builds a clickable note contents indented by heading level; quoted headings are left out and PDF keeps the contents as text |
 | `$x^2$` / `$$…$$` | Inline / block math (KaTeX) |
@@ -220,7 +222,10 @@ Browser write endpoints require a same-origin `Origin` and `X-CSRF-Token`; AI en
 | A ` ```mermaid ` block | Diagrams; start with `flowchart LR`, `mindmap`, `sequenceDiagram` and so on. Use the top-right controls to save a diagram as SVG or PNG |
 | A ` ```python ` block | Syntax highlighting, unknown languages fall back to plain text |
 | `\| :--- \| :---: \| ---: \|` | GFM table alignment for left, centre and right |
-| HTML block | Sanitised by DOMPurify, keeping safe structural tags such as `<section>`, `<mark>`, `<kbd>`, `<details>` and `<summary>` |
+| HTML block | Sanitised by DOMPurify in reading view, keeping safe structural tags such as `<section>`, `<mark>`, `<kbd>`, `<details>` and `<summary>`; live preview shows the content of common block-level containers as source |
+| Standalone `<details>` block | Collapsible in live preview (may span blank lines and nest); only the presence of `open` is read from the source, and details inside recognised common block-level containers are left alone |
+
+Known limitations of live preview: a remote sync that arrives during a pointer drag cancels that gesture and remaps the selection onto the changed document (nothing is written wrongly); two `<details>` blocks with identical source may share fold state after one is inserted, removed or rebuilt; block math only strips the container prefix of the formula's own block, so lines in its body that look like list items stay TeX content; container detection does not cover arbitrary HTML. Known boundary of the external-content sync: a single change of more than 200 lines or 200 segments falls back to one single-segment difference, so caret and insertion-marker positions inside that replaced segment are no longer preserved in full (no text is lost and editing continues).
 
 ````markdown
 ```mermaid
@@ -240,7 +245,7 @@ Import the demos to see the rendering: [`examples/markdown-syntax-demo.en.md`](e
 | `Cmd/Ctrl+O` | Open quick jump to search notes or run commands |
 | `Cmd/Ctrl+Enter` | Create a note in the current folder |
 | `Cmd/Ctrl+S` | Save, sync and record a version immediately |
-| `Cmd/Ctrl+E` | Toggle editing and preview, keeping the source caret |
+| `Cmd/Ctrl+E` | Toggle editing (source or live preview) and reading, keeping the source caret |
 | `Cmd/Ctrl+,` | Open settings |
 | `Cmd/Ctrl+\` | Show or hide the navigation sidebar; open the nav menu on narrow screens |
 | `Cmd/Ctrl+.` | Show or hide the outline and backlinks |
@@ -301,6 +306,8 @@ Autosave only rewrites the current body, while version slots are consumed by man
 - Before going to production, verify account configuration, backup and restore, and Cloudflare usage on a separate temporary instance.
 
 ## Release Notes
+
+`1.5.0` (2026-10-25): adds in-editor live preview (WYSIWYG), turns the display switch into Source / Live Preview / Reading and defaults to live preview; Markdown source stays the only content format, rendering failures fall back to source, and no database or content migration is required.
 
 `1.4.2` (2026-10-25): dialogs no longer open with the focus on the top-right close button; the Quick Open search field takes focus after `Cmd/Ctrl+O`, so typing and ↑/↓ work immediately and Enter no longer closes the dialog.
 

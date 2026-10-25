@@ -6,7 +6,7 @@ import { compareFolders, mixFolderEntries } from '../shared/order';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
 import { AiAccess } from './AiAccess';
-import { Editor, Preview, toggleMarkdownTask, type EditorHandle } from './Editor';
+import { Editor, Preview, toggleMarkdownTask, type EditorHandle, type EditorViewportAnchor } from './Editor';
 import { NoteSharing } from './NoteSharing';
 import { ShareManagement } from './ShareManagement';
 import { UserManagement } from './UserManagement';
@@ -544,10 +544,37 @@ function AccountWorkspace({ session, installApp, logout }: { session: Session; i
   </div></main>;
 }
 
+type DisplayMode = 'source' | 'live' | 'read';
+
+const displayModeKey = (userId: string) => `easynote-display-mode:v1:${userId}`;
+
+// Accounts may still carry the pre-release values written while the editor had two modes.
+function readDisplayMode(userId: string): DisplayMode {
+  try {
+    const stored = localStorage.getItem(displayModeKey(userId));
+    if (stored === 'source' || stored === 'live' || stored === 'read') return stored;
+    if (stored === 'edit') return 'source';
+    if (stored === 'preview') return 'read';
+  } catch { /* Storage can be disabled; the default live mode must still open. */ }
+  return 'live';
+}
+
+function writeDisplayMode(userId: string, mode: DisplayMode) {
+  try { localStorage.setItem(displayModeKey(userId), mode); } catch { /* Preference is optional. */ }
+}
+
 function Notebook({ session, installApp, logout }: { session: Session; installApp?(): Promise<void>; logout(): Promise<void> }) {
   const book = useNotebook(session);
   const [visibleEntryLimit, setVisibleEntryLimit] = useState(50);
-  const [layout, setLayout] = useState<'edit' | 'preview'>('edit');
+  const accountId = session.user?.id ?? '';
+  const [layout, setLayout] = useState<DisplayMode>(() => readDisplayMode(accountId));
+  // The last explicit editing mode; reading mode and programmatic navigation return here.
+  const lastEditingMode = useRef<Exclude<DisplayMode, 'read'>>(readDisplayMode(accountId) === 'source' ? 'source' : 'live');
+  // Failed renders are state, not a ref: clearing one must re-render the note that asked for live again.
+  const [failedNotes, setFailedNotes] = useState<Set<string>>(() => new Set());
+  const viewportAnchor = useRef<EditorViewportAnchor | null>(null);
+  const viewportCorrection = useRef(0);
+  const readButton = useRef<HTMLButtonElement>(null);
   const [mobileNote, updateMobileNote] = useState(false);
   const mobileHistoryKey = 'easynoteMobileNote';
   const mobileHistoryId = useRef(crypto.randomUUID());
@@ -674,7 +701,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   const [versionNoteId, setVersionNoteId] = useState('');
   const [chosenVersion, setChosenVersion] = useState<Version | null>(null);
   const [confirmAction, setConfirmAction] = useState<'trash' | 'bulk-trash' | 'purge' | 'purge-all' | null>(null);
-  const [lightbox, setLightbox] = useState('');
+  const [lightbox, setLightbox] = useState<{ src: string; release?: () => void } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const pdfGeneration = useRef(0);
@@ -782,18 +809,37 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   }, [note?.id]);
   useEffect(() => {
     const pending = pendingEditorOffset.current;
-    if (!pending || layout !== 'edit' || pending.noteId !== note?.id) return;
+    if (!pending || layout === 'read' || pending.noteId !== note?.id) return;
     const offset = pending.offset;
     pendingEditorOffset.current = null;
     const frame = requestAnimationFrame(() => editor.current?.goTo(offset));
     return () => cancelAnimationFrame(frame);
   }, [layout, note?.id]);
+  useLayoutEffect(() => {
+    const anchor = viewportAnchor.current;
+    viewportAnchor.current = null;
+    if (anchor) correctViewport(anchor);
+    // The correction is tied to one switch, not to every note or content change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout]);
+  useEffect(() => () => { viewportCorrection.current++; }, [note?.id]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(null), SUCCESS_FEEDBACK_DURATION_MS);
     return () => clearTimeout(timer);
   }, [notice]);
   const showNotice = (text: string) => setNotice({ id: Date.now(), text });
+  const openLightbox = (src: string, release?: () => void) => setLightbox((previous) => {
+    if (previous?.release) previous.release();
+    return { src, release };
+  });
+  const closeLightbox = () => setLightbox((previous) => {
+    previous?.release?.();
+    return null;
+  });
+  const lightboxLease = useRef<{ release?: () => void } | null>(null);
+  lightboxLease.current = lightbox;
+  useEffect(() => () => { lightboxLease.current?.release?.(); }, []);
   useEffect(() => {
     if (!pdfExport || !printNote) return;
     const generation = ++pdfGeneration.current;
@@ -831,24 +877,132 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setCommandPalette(false);
     setShortcutHelp(true);
   };
+  // Reading has no caret, so its anchor comes from the nearest rendered block that carries a source line.
+  const captureReadingAnchor = (): EditorViewportAnchor | null => {
+    const scroller = document.querySelector<HTMLElement>('.document-scroll');
+    if (!scroller || !note) return null;
+    const top = scroller.getBoundingClientRect().top;
+    const blocks = [...scroller.querySelectorAll<HTMLElement>('.markdown [data-source-line]')];
+    let target: HTMLElement | null = null;
+    for (const block of blocks) {
+      if (block.getBoundingClientRect().top <= top + 4) target = block;
+      else break;
+    }
+    target ??= blocks[0] ?? null;
+    if (!target) return null;
+    const line = Number(target.dataset.sourceLine);
+    if (!Number.isInteger(line)) return null;
+    return { offset: sourceLineOffset(note.content, line), top: target.getBoundingClientRect().top - top };
+  };
+  const correctViewport = (anchor: EditorViewportAnchor) => {
+    // The rendered layout has a different height than the source layout, so restore the same source block
+    // instead of an absolute scroll offset. The correction really stops on user input, note switch or unmount.
+    const scroller = document.querySelector<HTMLElement>('.document-scroll');
+    if (!scroller) return;
+    const generation = ++viewportCorrection.current;
+    const timers: number[] = [];
+    const frames: number[] = [];
+    const detach = () => {
+      scroller.removeEventListener('wheel', cancel);
+      scroller.removeEventListener('touchstart', cancel);
+      scroller.removeEventListener('keydown', cancel);
+      for (const timer of timers) window.clearTimeout(timer);
+      for (const frame of frames) window.cancelAnimationFrame(frame);
+    };
+    const cancel = () => {
+      if (viewportCorrection.current !== generation) return;
+      viewportCorrection.current++;
+      detach();
+    };
+    scroller.addEventListener('wheel', cancel, { passive: true });
+    scroller.addEventListener('touchstart', cancel, { passive: true });
+    scroller.addEventListener('keydown', cancel);
+    timers.push(window.setTimeout(cancel, 600));
+    const apply = () => {
+      if (viewportCorrection.current !== generation) return;
+      if (layout === 'read') {
+        const line = (note?.content ?? '').slice(0, anchor.offset).split('\n').length - 1;
+        const blocks = [...scroller.querySelectorAll<HTMLElement>('.markdown [data-source-line]')];
+        let target: HTMLElement | null = null;
+        for (const block of blocks) {
+          const value = Number(block.dataset.sourceLine);
+          if (Number.isInteger(value) && value <= line) target = block;
+        }
+        if (!target) return;
+        scroller.scrollTop += target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.top;
+        return;
+      }
+      editor.current?.restoreViewport(anchor);
+    };
+    frames.push(window.requestAnimationFrame(apply));
+    timers.push(window.setTimeout(apply, 120));
+  };
+  // A failed render is remembered per note: it only makes that note fall back, never another one. The account
+  // mode keeps its own value, so opening a healthy note comes back to live.
+  const failed = !!note && failedNotes.has(note.id);
+  const activeLayout: DisplayMode = failed && layout !== 'read' ? 'source' : layout;
+  const effectiveEditingMode = (noteId: string | undefined): Exclude<DisplayMode, 'read'> =>
+    noteId && failedNotes.has(noteId) ? 'source' : lastEditingMode.current;
+  const switchMode = (next: DisplayMode, options: { persist?: boolean } = {}) => {
+    if (!note || note.deletedAt) return;
+    const anchor = (layout === 'read' ? captureReadingAnchor() : editor.current?.captureViewport()) ?? null;
+    // Only an explicit source/live choice changes the editing preference. Leaving an editing mode for reading
+    // must keep the user's own choice: `activeLayout` may be a fault fallback, which is never a preference.
+    if (next !== 'read') lastEditingMode.current = next;
+    if (options.persist) writeDisplayMode(accountId, next);
+    viewportAnchor.current = anchor;
+    setLayout(next);
+    // Entering an editing mode hands the keyboard to the editor (with the existing selection); reading has no
+    // input target, so the reading button keeps the focus there.
+    if (next === 'read') requestAnimationFrame(() => readButton.current?.focus());
+    else requestAnimationFrame(() => editor.current?.focus());
+  };
+  const ensureEditingMode = () => {
+    if (layout !== 'read') return;
+    // A programmatic entry restores the user's own editing mode. The open note's fault is applied by
+    // `activeLayout` alone, so a failed note being read cannot push its source fallback onto whatever note the
+    // action is about to open.
+    setLayout(lastEditingMode.current);
+  };
+  const chooseMode = (next: DisplayMode) => {
+    // An explicit live request clears the per-note failure and retries; a still broken note simply falls back
+    // again, so the mode switch can never silently bypass the degradation.
+    if (next === 'live' && note) {
+      setFailedNotes((previous) => {
+        if (!previous.has(note.id)) return previous;
+        const next = new Set(previous);
+        next.delete(note.id);
+        return next;
+      });
+    }
+    switchMode(next, { persist: true });
+  };
   const editAt = (offset: number) => {
     editorCursor.current = offset;
-    if (layout === 'edit') {
+    if (layout !== 'read') {
       editor.current?.goTo(offset);
       return;
     }
     if (note) pendingEditorOffset.current = { noteId: note.id, offset };
-    setLayout('edit');
+    ensureEditingMode();
+    requestAnimationFrame(() => editor.current?.focus());
   };
-  const showPreview = () => {
-    if (!note || note.deletedAt) return;
-    editorCursor.current = editor.current?.cursor() ?? editorCursor.current;
-    setLayout('preview');
-  };
+  const showReading = () => switchMode('read', { persist: true });
   const toggleLayout = () => {
     if (!note || note.deletedAt) return;
-    if (layout === 'edit') showPreview();
-    else editAt(Math.min(editorCursor.current, note.content.length));
+    if (layout !== 'read') {
+      editorCursor.current = editor.current?.cursor() ?? editorCursor.current;
+      showReading();
+      return;
+    }
+    // The shortcut restores the user's own editing mode. A fault fallback only decides the effective mode of
+    // the current note, so it must never be promoted into the account preference.
+    switchMode(lastEditingMode.current, { persist: true });
+  };
+  const handleRenderFallback = (reason: 'error' | 'size' | 'budget') => {
+    if (!note) return;
+    setFailedNotes((previous) => previous.has(note.id) ? previous : new Set(previous).add(note.id));
+    showNotice(reason === 'size' ? t('live_preview_large_document') : reason === 'budget' ? t('live_preview_budget_exceeded') : t('live_preview_unavailable'));
   };
   const toggleDocumentWidth = () => setWideDocument((current) => {
     const next = !current;
@@ -863,7 +1017,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     setMobileNavigation(false);
     setMobileNoteActions(false);
     setMobileNote(true);
-    setLayout('edit');
+    ensureEditingMode();
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.note-title')?.focus());
   });
   const insertFiles = async (files: File[], insertion?: string) => {
@@ -1135,14 +1289,14 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     await loadTasks();
   };
   const openTask = async (task: NoteTask) => {
-    if (note?.id === task.noteId && layout === 'edit') {
+    if (note?.id === task.noteId && layout !== 'read') {
       setTaskCenter(false);
       setMobileNote(true);
       requestAnimationFrame(() => requestAnimationFrame(() => editor.current?.goTo(task.offset)));
       return;
     }
     pendingEditorOffset.current = { noteId: task.noteId, offset: task.offset };
-    setLayout('edit');
+    ensureEditingMode();
     setTaskCenter(false);
     await openNote(task.noteId);
   };
@@ -1176,7 +1330,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       if (!await book.retry()) return;
       setVersionList(null);
       setChosenVersion(null);
-      setLayout('edit');
+      ensureEditingMode();
       showNotice(t('已恢复版本，恢复前内容已保留'));
     } finally {
       setSyncing(false);
@@ -1287,7 +1441,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       if (event.shiftKey) {
         if (key === 'f') openGlobalSearch();
         else if (key === 'k' && note && !note.deletedAt && !transfer) {
-          setLayout('edit');
+          ensureEditingMode();
           requestAnimationFrame(beginLinkInsertion);
         } else if (key === 'l') setDark((value) => !value);
         else return;
@@ -1442,8 +1596,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
   });
   const contextEdit = (noteId: string) => void run(async () => {
     await openNote(noteId);
-    setLayout('edit');
-    requestAnimationFrame(() => editor.current?.goTo(0));
+    ensureEditingMode();
+    // Focusing keeps the selection the editor already had; jumping to 0 would drop it.
+    requestAnimationFrame(() => editor.current?.focus());
   });
   const contextTrash = (noteId: string, trashed: boolean) => {
     const ids = [noteId];
@@ -1702,10 +1857,25 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       },
     },
     {
-      id: 'layout', label: layout === 'edit' ? t('切换到预览模式') : t('切换到编辑模式'),
-      aliases: ['编辑', '预览', '切换', 'edit', 'preview'], icon: layout === 'edit' ? <BookOpen size={16} /> : <PenLine size={16} />,
+      id: 'layout', label: t('editing_reading_shortcut'),
+      aliases: ['编辑', '阅读', '切换', 'edit', 'read'], icon: layout === 'read' ? <PenLine size={16} /> : <BookOpen size={16} />,
       shortcut: 'Cmd/Ctrl+E', disabled: !note || !!note.deletedAt,
       action: () => { setCommandPalette(false); toggleLayout(); },
+    },
+    {
+      id: 'source-mode', label: t('switch_to_source_mode'), aliases: ['源码', 'source', 'markdown'],
+      icon: <FileText size={16} />, shortcut: '', disabled: !note || !!note.deletedAt,
+      action: () => { setCommandPalette(false); chooseMode('source'); },
+    },
+    {
+      id: 'live-mode', label: t('switch_to_live_mode'), aliases: ['即时渲染', 'live', 'preview'],
+      icon: <PenLine size={16} />, shortcut: '', disabled: !note || !!note.deletedAt,
+      action: () => { setCommandPalette(false); chooseMode('live'); },
+    },
+    {
+      id: 'read-mode', label: t('switch_to_read_mode'), aliases: ['阅读', 'read'],
+      icon: <BookOpen size={16} />, shortcut: '', disabled: !note || !!note.deletedAt,
+      action: () => { setCommandPalette(false); chooseMode('read'); },
     },
     {
       id: 'pin', label: note?.pinned ? t('取消置顶') : t('置顶笔记'), aliases: ['置顶', 'pin', 'unpin'],
@@ -1743,7 +1913,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       shortcut: 'Cmd/Ctrl+Shift+K', disabled: !note || !!note.deletedAt || !!transfer,
       action: () => {
         setCommandPalette(false);
-        setLayout('edit');
+        ensureEditingMode();
         requestAnimationFrame(beginLinkInsertion);
       },
     },
@@ -2121,7 +2291,11 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <IconButton label="返回笔记列表" className="icon-button mobile-back" onClick={() => setMobileNote(false)}><ArrowLeft size={18} /></IconButton>
         <span className={`save-status ${book.pending.length ? 'pending' : ''}`}><span className="status-dot" />{uploading ? t('uploading_files') : syncing ? t('syncing') : note ? book.status : t('note_workspace')}</span>
         <div className="toolbar-right">
-          {note && <><div className="segmented" aria-label={t('显示模式')}><button title={t('edit')} aria-label={t('编辑模式')} aria-pressed={layout === 'edit'} onClick={() => editAt(Math.min(editorCursor.current, note.content.length))}><PenLine size={16} /></button><button title={t('preview')} aria-label={t('预览模式')} aria-pressed={layout === 'preview'} onClick={showPreview}><BookOpen size={16} /></button></div>
+          {note && <><div className="segmented editor-display-mode" role="group" aria-label={t('显示模式')}>
+            <button type="button" title={t('source_mode_title')} aria-label={t('source_mode')} aria-pressed={activeLayout === 'source'} disabled={!!note.deletedAt} onClick={() => chooseMode('source')}><FileText size={16} /></button>
+            <button type="button" title={t('live_mode_title')} aria-label={t('live_mode')} aria-pressed={activeLayout === 'live'} disabled={!!note.deletedAt} onClick={() => chooseMode('live')}><PenLine size={16} /></button>
+            <button type="button" ref={readButton} title={t('read_mode_title')} aria-label={t('read_mode')} aria-pressed={activeLayout === 'read'} onClick={() => chooseMode('read')}><BookOpen size={16} /></button>
+          </div>
             <IconButton label="插入内部链接" className="icon-button toolbar-link-action" disabled={!!note.deletedAt || !!transfer} onClick={beginLinkInsertion}><Link2 size={17} /></IconButton>
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
             <IconButton label={wideDocument ? '使用阅读宽度' : '使用宽屏'} className="icon-button document-width-toggle" aria-pressed={wideDocument} onClick={toggleDocumentWidth}>{wideDocument ? <Minimize2 size={17} /> : <Maximize2 size={17} />}</IconButton>
@@ -2147,17 +2321,27 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             <div className={`document ${wideDocument ? 'wide' : ''}`}>
               <input className="note-title" aria-label={t('note_title')} placeholder={t('untitled_note')} maxLength={256} value={note.title} readOnly={!!note.deletedAt || !!transfer} onChange={(e) => setNoteFields({ title: e.target.value })} />
               <div className="document-meta"><time>{new Date(note.createdAt).toLocaleDateString(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>{uiLanguage() === 'en' ? `Rev ${note.revision}` : `修订 ${note.revision}`}</span></div>
-              {layout === 'preview' || note.deletedAt || transfer
-                ? <Preview content={note.content} name={note.title} onImage={setLightbox} onNote={(id) => void openNote(id)}
-                    onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
-                    onTask={!note.deletedAt && !transfer ? (sourceLine, checked) =>
-                      setNoteFields({ content: toggleMarkdownTask(note.content, sourceLine, checked) }) : undefined}
-                    resolveFile={book.offlineLibrary ? book.cachedFile : undefined}
-                    searchQuery={book.query}
-                    onEditLine={!note.deletedAt && !transfer ? (line) => editAt(sourceLineOffset(note.content, line)) : undefined} />
-                : <Editor ref={editor} key={note.id} value={note.content} onChange={(content) => setNoteFields({ content })}
-                    onImages={(files, insertion) => void insertFiles(files, insertion)}
-                    onTogglePreview={toggleLayout} onShowShortcuts={showShortcutHelp} searchQuery={book.query} />}
+              {(layout === 'read' || note.deletedAt || transfer) &&
+                <Preview content={note.content} name={note.title} onImage={openLightbox} onNote={(id) => void openNote(id)}
+                  onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
+                  onTask={!note.deletedAt && !transfer ? (sourceLine, checked) =>
+                    setNoteFields({ content: toggleMarkdownTask(note.content, sourceLine, checked) }) : undefined}
+                  resolveFile={book.offlineLibrary ? book.cachedFile : undefined}
+                  searchQuery={book.query}
+                  onEditLine={!note.deletedAt && !transfer ? (line) => editAt(sourceLineOffset(note.content, line)) : undefined} />}
+              {!note.deletedAt && !transfer &&
+                <Editor ref={editor} key={note.id} value={note.content}
+                  mode={activeLayout === 'read' ? effectiveEditingMode(note?.id) : activeLayout}
+                  active={layout !== 'read'}
+                  maxNoteBytes={session.config.maxNoteBytes}
+                  onChange={(content) => setNoteFields({ content })}
+                  onImages={(files, insertion) => void insertFiles(files, insertion)}
+                  onToggleReading={toggleLayout} onShowShortcuts={showShortcutHelp} searchQuery={book.query}
+                  onImage={openLightbox}
+                  onNote={(id) => void openNote(id)}
+                  onFile={(id, href) => void run(() => downloadPrivateFile(id, href))}
+                  resolveFile={book.offlineLibrary ? book.cachedFile : undefined}
+                  onRenderFallback={handleRenderFallback} />}
             </div>
           </div>
           {inspector && <aside className="knowledge-panel" aria-label={t('笔记导航')}>
@@ -2517,7 +2701,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <div><span>{t('打开快速跳转')}</span><kbd>Cmd/Ctrl+O</kbd></div>
         <div><span>{t('新建笔记')}</span><kbd>Cmd/Ctrl+Enter</kbd></div>
         <div><span>{t('sync_and_save_version')}</span><kbd>Cmd/Ctrl+S</kbd></div>
-        <div><span>{t('编辑 / 预览')}</span><kbd>Cmd/Ctrl+E</kbd></div>
+        <div><span>{t('editing_reading_shortcut')}</span><kbd>Cmd/Ctrl+E</kbd></div>
         <div><span>{t('打开设置')}</span><kbd>Cmd/Ctrl+,</kbd></div>
         <div><span>{t('切换导航侧栏')}</span><kbd>Cmd/Ctrl+\</kbd></div>
         <div><span>{t('大纲与反向链接')}</span><kbd>Cmd/Ctrl+.</kbd></div>
@@ -2780,7 +2964,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     </Modal>}
     {versionList && versionNoteId === note?.id && <Modal title="历史版本" close={() => { setVersionList(null); setChosenVersion(null); }}>
       <div className="version-list">{versionList.map((version) => <button key={version.revision} className={chosenVersion?.revision === version.revision ? 'selected' : ''} onClick={() => setChosenVersion(version)}><span>{t('修订 {0}', version.revision)} · {version.actorType === 'ai' ? `AI：${version.actorName}` : version.actorName}</span><time>{new Date(version.savedAt).toLocaleString(dateLocale())}</time></button>)}</div>
-      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} name={chosenVersion.title} onImage={setLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
+      {chosenVersion && <><div className="version-preview"><h3>{chosenVersion.title}</h3><Preview content={chosenVersion.content} name={chosenVersion.title} onImage={openLightbox} onFile={(id, href) => void run(() => downloadPrivateFile(id, href))} resolveFile={book.offlineLibrary ? book.cachedFile : undefined} /></div><div className="dialog-actions"><button className="primary" disabled={disabled || !!note?.deletedAt} onClick={() => void restoreVersion()}>
         <RotateCcw size={15} />{t('恢复此版本')}
       </button></div></>}
     </Modal>}
@@ -2842,7 +3026,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         </div>
       </div>
     </Modal>}
-    {lightbox && <Modal title="图片" close={() => setLightbox('')}><img className="lightbox-image" src={lightbox} alt={t('笔记图片')} /></Modal>}
+    {lightbox && <Modal title="图片" close={closeLightbox}><img className="lightbox-image" src={lightbox.src} alt={t('笔记图片')} /></Modal>}
     {printNote && <section className={`print-document ${pdfExport ? 'pdf-rendering' : ''}`} data-printing={pdfExport ? 'true' : 'false'} aria-hidden="true">
       <Preview content={printNote.content} name={printNote.title} onImage={() => undefined}
         resolveFile={book.offlineLibrary ? book.cachedFile : undefined} eagerImages />

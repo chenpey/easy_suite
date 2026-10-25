@@ -797,7 +797,7 @@ test('create, autosave, reload, edit Markdown and preview safely', async ({ page
   await page.reload();
   await page.getByRole('button').filter({ hasText: title }).click();
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('本周阅读');
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   await expect(page.getByRole('heading', { name: '本周阅读' })).toBeVisible();
   await expect(page.locator('.markdown script')).toHaveCount(0);
   const documentLayout = () => page.locator('.document').evaluate((element) => {
@@ -847,7 +847,7 @@ test('footnotes, lazy code highlighting and precise source switching work', asyn
   ].join('\n');
   await page.goto('/');
   await newNote(page, `阅读增强-${randomUUID().slice(0, 6)}`, content);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   const preview = page.locator('.document .markdown');
   await expect(preview.locator('a[data-footnote-ref="1"]')).toHaveText('[1]');
@@ -863,7 +863,7 @@ test('footnotes, lazy code highlighting and precise source switching work', asyn
     .toContain('定位：精准目标段落[^detail]');
 
   await page.keyboard.press('Control+e');
-  await expect(page.getByRole('button', { name: '预览模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '阅读模式' })).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Control+e');
   await expect(editor).toBeFocused();
   await page.keyboard.type('继续');
@@ -899,7 +899,7 @@ test('a note contents directive builds a clickable table of contents', async ({ 
   ].join('\n');
   await page.goto('/');
   await newNote(page, `目录-${randomUUID().slice(0, 6)}`, content);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   const preview = page.locator('.document .markdown');
   const contents = preview.locator('nav.note-toc');
@@ -964,7 +964,7 @@ test('an empty contents directive reports that there are no headings', async ({ 
   await page.goto('/');
   // 空标题（`## ` 渲染为 <h2></h2>）不进入目录，也不能借用笔记级文案。
   await newNote(page, `空目录-${randomUUID().slice(0, 6)}`, '[TOC]\n\n## \n\n只有正文，没有标题。');
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   const contents = page.locator('.document .markdown nav.note-toc');
   await expect(contents.locator('.note-toc-empty')).toHaveText('没有标题');
   await expect(contents.getByRole('link')).toHaveCount(0);
@@ -1063,7 +1063,7 @@ test('Mermaid flowcharts, mindmaps and sanitized HTML blocks render safely', asy
   const content = `${example}\n\n${styledDiagram}\n\n${shapedMindmap}\n\n${unsafeHtml}`;
   await page.goto('/');
   await newNote(page, `图表与HTML-${randomUUID().slice(0, 6)}`, content);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   const diagrams = page.locator('.mermaid-diagram svg');
   await expect(diagrams).toHaveCount(4, { timeout: 15000 });
@@ -1193,7 +1193,7 @@ test('a broken diagram renders an inline error instead of failing the preview', 
   ].join('\n');
   await page.goto('/');
   await newNote(page, `图表错误-${randomUUID().slice(0, 6)}`, content);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(2, { timeout: 15000 });
   const errors = page.locator('.document .mermaid-error');
@@ -1216,7 +1216,7 @@ test('Mermaid diagrams can be saved as standalone SVG and PNG images', async ({ 
     '  Solo',
     '```',
   ].join('\n'));
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   const diagram = page.locator('.document .mermaid-diagram').first();
   const narrowDiagram = page.locator('.document .mermaid-diagram').nth(1);
@@ -1285,7 +1285,7 @@ test('the preview renders at most 20 diagrams and reports the rest as errors', a
   ]).join('\n');
   await page.goto('/');
   await newNote(page, `图表上限-${randomUUID().slice(0, 6)}`, content);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(20, { timeout: 30000 });
   const errors = page.locator('.document .mermaid-error');
@@ -1488,7 +1488,7 @@ test('images render, export includes bytes, and import creates a readable copy',
   await page.locator('input[type=file][accept^="image"]').setInputFiles({ name: '笔记截图.png', mimeType: 'image/png', buffer: image });
   await expect(page.getByText('图片已插入', { exact: true })).toBeVisible();
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   await expect(page.locator('.markdown img')).toBeVisible();
   await expect.poll(() => page.locator('.markdown img').evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
   await page.screenshot({ path: 'test-results/desktop-image.png', fullPage: true });
@@ -1855,7 +1855,7 @@ test('search highlights title and a matching excerpt from deep in the note', asy
   await expect(row.locator('.note-excerpt mark.search-highlight')).toHaveCount(2);
   await row.click();
   await expect(page.locator('.cm-search-highlight')).toHaveCount(2);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   await expect(page.locator('.markdown mark.search-highlight')).toHaveText(marker);
 });
 
@@ -2308,7 +2308,7 @@ test('command palette, cursor-position image insertion and private attachments w
   });
   await expect(page.getByText('附件已插入', { exact: true })).toBeVisible();
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   await expect(page.getByRole('link', { name: '资料.pdf' })).toHaveAttribute('href', /\/api\/files\/[0-9a-f-]{36}$/);
 
   await page.keyboard.press('Meta+o');
@@ -2343,9 +2343,9 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await expect(editor).toHaveText('*格式文本*');
 
   await editor.press('Meta+e');
-  await expect(page.getByRole('button', { name: '预览模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '阅读模式' })).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.press('Meta+e');
-  await expect(page.getByRole('button', { name: '编辑模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('textbox', { name: '笔记正文' }).press('Meta+/');
   const shortcuts = page.getByRole('dialog');
   await expect(shortcuts.getByRole('heading', { name: '快捷键' })).toBeVisible();
@@ -2355,6 +2355,9 @@ test('editing shortcuts and keyboard navigation work without pointer input', asy
   await expect(shortcuts).toContainText('Cmd/Ctrl+K');
   await expect(shortcuts).toContainText('Cmd/Ctrl+O');
   await expect(shortcuts).toContainText('Cmd/Ctrl+Enter');
+  // The help documents the current edit/read pair, not the removed preview mode.
+  await expect(shortcuts).toContainText('编辑 / 阅读');
+  await expect(shortcuts).not.toContainText('编辑 / 预览');
   await shortcuts.getByRole('button', { name: '关闭' }).click();
 
   await page.keyboard.press('Control+k');
@@ -2471,6 +2474,9 @@ for (const modifier of ['Control', 'Meta']) {
     await editor.press(`${modifier}+Shift+k`);
     await expect(page.getByRole('dialog').getByRole('heading', { name: '插入内部链接' })).toBeVisible();
     await page.keyboard.press('Escape');
+    // The heading block is not the active block here, so its markers are hidden in live preview; read the
+    // source in source mode and keep the original assertion untouched.
+    await page.getByRole('button', { name: '源码模式' }).click();
     await expect(editor).toHaveText(content.replace('\n', ''));
 
     await editor.press(`${modifier}+Shift+l`);
@@ -2545,7 +2551,7 @@ test('Markdown todo items render and persist interactive checkbox changes', asyn
   const title = `待办事项-${randomUUID().slice(0, 6)}`;
   await page.goto('/');
   await newNote(page, title, '- [] 兼容简写\n- [x] 已完成\n- [ ] 标准待办');
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
 
   const compact = page.getByRole('checkbox', { name: '待办事项：兼容简写' });
   const completed = page.getByRole('checkbox', { name: '待办事项：已完成' });
@@ -2562,7 +2568,7 @@ test('Markdown todo items render and persist interactive checkbox changes', asyn
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/desktop-todo.png', fullPage: true });
 
-  await page.getByRole('button', { name: '编辑模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
   const editor = page.getByRole('textbox', { name: '笔记正文' });
   await expect(editor).toContainText('- [x] 兼容简写');
   await expect(editor).toContainText('- [ ] 已完成');
@@ -2585,7 +2591,7 @@ test('preview task changes use source lines across code, quotes and ordered or n
   await page.goto('/');
   await newNote(page, title, content);
   const { notes } = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   await expect(page.locator('.markdown input[type=checkbox]')).toHaveCount(6);
   for (const task of ['引用待办', '有序待办', '嵌套待办', '续行待办', '紧贴引用', '普通待办']) {
     await page.getByRole('checkbox', { name: `待办事项：${task}`, exact: true }).check();
@@ -2641,7 +2647,7 @@ test('offline cold start renders previously unopened Mermaid diagrams and highli
   try {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('[data-note-row]').filter({ hasText: title }).click();
-    await page.getByRole('button', { name: '预览模式', exact: true }).click();
+    await page.getByRole('button', { name: '阅读模式', exact: true }).click();
     await expect(page.locator('.document .mermaid-diagram svg')).toHaveCount(2);
     await expect(page.locator('.document code.hljs .hljs-keyword')).toHaveText('const');
     await expect(page.locator('.document .mermaid-error')).toHaveCount(0);
@@ -2853,7 +2859,7 @@ test('outline, stable internal links and backlinks navigate between notes', asyn
   await picker.getByRole('button', { name: targetTitle, exact: true }).click();
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText(/\[\[[0-9a-f-]{36}\|知识目标-/);
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   await page.getByRole('link', { name: targetTitle }).click();
   await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(targetTitle);
   await expect(panel.getByRole('button', { name: sourceTitle, exact: true })).toBeVisible();
@@ -2941,12 +2947,12 @@ test('full offline library supports cold start, full-text search and note readin
   await expect(page.getByRole('button').filter({ hasText: title })).toBeVisible();
   await page.getByRole('button').filter({ hasText: title }).click();
   await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText(`检索词-${marker}`);
-  await page.getByRole('button', { name: '预览模式' }).click();
+  await page.getByRole('button', { name: '阅读模式' }).click();
   const cachedImage = page.locator('.markdown img');
   await expect(cachedImage).toBeVisible();
   await expect.poll(() => cachedImage.evaluate((element: HTMLImageElement) =>
     element.src.startsWith('blob:') && element.complete && element.naturalWidth > 0)).toBe(true);
-  await page.getByRole('button', { name: '编辑模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
   const editor = page.getByRole('textbox', { name: '笔记正文' });
   await expect(editor).toBeFocused();
   await editor.press('Control+End');
@@ -3506,7 +3512,7 @@ test('math formulas render in preview, shared and popout readers, PDF and an off
   const content = await readFile(new URL('../examples/math-demo.md', import.meta.url), 'utf8');
   await page.goto('/');
   await newNote(page, title, content);
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   const preview = page.locator('.document .markdown');
   await expect(preview.locator('math')).toHaveCount(7);
   await expect(preview.locator('.math-display')).toHaveCount(2);
@@ -3544,7 +3550,7 @@ test('math formulas render in preview, shared and popout readers, PDF and an off
   await context.setOffline(true);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-note-row]').filter({ hasText: title }).click();
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   await expect(page.locator('.document .markdown math')).toHaveCount(7);
   await context.setOffline(false);
 });
@@ -3554,6 +3560,9 @@ test('a large private image and inline math export together, with cached images 
   await page.goto('/');
   const title = `大图公式-${randomUUID().slice(0, 8)}`;
   await newNote(page, title);
+  // This case is about image bytes and PDF export, so it reads and edits the Markdown source directly; the
+  // switch happens in the scenario setup so no mode change can race the later fills.
+  await page.getByRole('button', { name: '源码模式' }).click();
   const dataUrl = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
@@ -3584,13 +3593,13 @@ test('a large private image and inline math export together, with cached images 
     } finally { db.close(); }
   }, `${testUserId}:${imagePath.split('/').pop()}`)).toBe(true);
   await page.evaluate(() => { Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false }); });
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   const image = page.locator('.document .markdown img');
   await expect(image).toHaveJSProperty('naturalWidth', 1024);
   await expect(image).toHaveAttribute('src', imagePath);
-  await page.getByRole('button', { name: '编辑模式', exact: true }).click();
+  await page.getByRole('button', { name: '即时渲染模式', exact: true }).click();
   await page.route(`**${imagePath}`, (route) => route.abort('failed'));
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   await expect(image).toHaveAttribute('src', /^blob:/);
   await expect(image).toHaveJSProperty('naturalWidth', 1024);
   await expect(page.locator('.document .markdown math')).toHaveCount(2);
@@ -3619,7 +3628,7 @@ test('invalid or untrusted TeX stays safe without breaking other formulas', asyn
   page.on('request', (request) => { if (request.url().includes('example.invalid')) externalRequests++; });
   await page.goto('/');
   await newNote(page, title, content);
-  await page.getByRole('button', { name: '预览模式', exact: true }).click();
+  await page.getByRole('button', { name: '阅读模式', exact: true }).click();
   const preview = page.locator('.document .markdown');
   await expect(preview.locator('math').first()).toBeVisible();
   await expect(preview.locator('[data-math-display]')).toHaveCount(0);
@@ -4818,6 +4827,2000 @@ test('native drag Escape cancels and edge rows keep scrolling without a folder t
   await page.keyboard.press('Escape');
   await page.mouse.up();
   expect((await (await page.request.get(`/api/notes?folder=${folderId}&sort=manual`)).json()).notes.map((note: { id: string }) => note.id)).toEqual(ids);
+});
+
+test('live preview is the default editing mode and keeps the Markdown source authoritative', async ({ page }) => {
+  const title = `即时模式-${randomUUID().slice(0, 6)}`;
+  const preferenceKey = `easynote-display-mode:v1:${testUserId}`;
+  await page.goto('/');
+  await newNote(page, title, '第一段正文\n\n第二段正文');
+  const source = page.getByRole('button', { name: '源码模式' });
+  const live = page.getByRole('button', { name: '即时渲染模式' });
+  const read = page.getByRole('button', { name: '阅读模式' });
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await expect(live).toHaveAttribute('aria-pressed', 'true');
+  await expect(source).toHaveAttribute('aria-pressed', 'false');
+  await expect(read).toHaveAttribute('aria-pressed', 'false');
+
+  await editor.press('Control+End');
+  await editor.pressSequentially('末尾');
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await read.click();
+  await expect(page.locator('.document .markdown')).toContainText('第二段正文末尾');
+  await live.click();
+  await expect(editor).toContainText('第二段正文末尾');
+  await editor.pressSequentially('END');
+  await expect.poll(async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content;
+  }).toBe('第一段正文\n\n第二段正文末尾END');
+  await editor.press('Meta+z');
+  await expect(editor).not.toContainText('END');
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+
+  await source.click();
+  await expect(source).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('source');
+  await page.reload();
+  await page.locator('[data-note-row]').filter({ hasText: title }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText('第一段正文');
+
+  await page.evaluate((key) => localStorage.setItem(key, 'unsupported'), preferenceKey);
+  await page.reload();
+  await page.locator('[data-note-row]').filter({ hasText: title }).click();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('live preview renders supported blocks and exposes their source on edit', async ({ page }) => {
+  const title = `即时渲染-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '# 标题一',
+    '',
+    '段落 **粗体** *斜体* ~~删除~~ `行内代码` [相对链接](/relative/path) 行内公式 $a^2$ 结尾。',
+    '',
+    '## 第二级',
+    '',
+    '- 无序项',
+    '- [ ] 待办项',
+    '',
+    '> 引用一行',
+    '',
+    '| 列一 | 列二 |',
+    '| :--: | --: |',
+    '| 前缀 **粗体值** 后缀 | 值二 |',
+    '',
+    '```js',
+    'const probe = 1;',
+    '```',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  A --> B',
+    '```',
+    '',
+    '$$',
+    '\\frac{a}{b} + x^2',
+    '$$',
+    '',
+    '$$x$$ TAIL',
+    '',
+    '前文 $$a',
+    'b$$ 后文',
+    '',
+    '<https://auto.example/auto>',
+    '',
+    '---',
+    '',
+    '<details open>',
+    '<summary>折叠标题</summary>',
+    '',
+    '折叠正文',
+    '',
+    '</details>',
+    '',
+    '结束段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+
+  await expect(page.locator('.cm-live-heading.cm-live-h1')).toHaveText('标题一');
+  await expect(page.locator('.cm-live-h2')).toHaveText('第二级');
+  await expect(page.locator('.cm-live-strong')).toHaveText('粗体');
+  await expect(page.locator('.cm-live-em')).toHaveText('斜体');
+  await expect(page.locator('.cm-live-del')).toHaveText('删除');
+  await expect(page.locator('.cm-live-inline-code')).toHaveText('行内代码');
+  await expect(page.locator('a.cm-live-link', { hasText: '相对链接' })).toHaveAttribute('href', '/relative/path');
+  await expect(page.locator('.cm-live-math.cm-live-math-display')).toHaveCount(1);
+  await expect(page.locator('.cm-live-math-display math mfrac')).toHaveCount(1);
+  await expect(page.locator('.cm-live-math-display math msup')).toHaveCount(1);
+  await expect(page.locator('.cm-live-math:not(.cm-live-math-display) math msup')).toHaveCount(1);
+  await expect(page.locator('.cm-live-table th')).toHaveText(['列一', '列二']);
+  await expect(page.locator('.cm-live-table td')).toHaveText(['前缀 粗体值 后缀', '值二']);
+  await expect(page.locator('.cm-live-table td strong')).toHaveText('粗体值');
+  // Alignment from the delimiter row wins over the table's default left alignment.
+  const alignments = await page.locator('.cm-live-table th').evaluateAll((cells) =>
+    cells.map((cell) => getComputedStyle(cell).textAlign));
+  expect(alignments).toEqual(['center', 'right']);
+  // A Mermaid fence stays complete source in the editing surface: no hidden fence marks, no rendering.
+  await expect(page.locator('.cm-line').filter({ hasText: '```mermaid' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: 'A --> B' })).toHaveCount(1);
+  await expect(page.locator('.cm-live-code pre', { hasText: 'flowchart LR' })).toHaveCount(0);
+  // A block formula keeps the text that follows its closing delimiter on the same line.
+  await expect(page.locator('.cm-line').filter({ hasText: 'TAIL' })).toHaveCount(1);
+  // A `$$` range that covers a line break stays source instead of being replaced from the view plugin.
+  await expect(page.locator('.cm-line').filter({ hasText: 'b$$ 后文' })).toHaveCount(1);
+  // An autolink keeps its URL text and its action; only the angle brackets disappear.
+  const autolink = page.locator('a.cm-live-link', { hasText: 'https://auto.example/auto' });
+  await expect(autolink).toHaveAttribute('href', 'https://auto.example/auto');
+  await expect(page.locator('.cm-live-code pre')).toContainText('const probe = 1;');
+  await expect(page.locator('.cm-live-code .hljs-keyword')).toHaveText('const');
+  const tokenColors = await page.evaluate(() => {
+    const code = document.querySelector('.cm-live-code code')!;
+    const keyword = code.querySelector('.hljs-keyword')!;
+    return [getComputedStyle(keyword).color, getComputedStyle(code).color];
+  });
+  expect(tokenColors[0]).not.toBe(tokenColors[1]);
+  await expect(page.locator('.cm-live-rule hr')).toHaveCount(1);
+  await expect(page.locator('.cm-live-details details')).toHaveAttribute('open', '');
+  await expect(page.locator('.cm-live-details-body')).toContainText('折叠正文');
+  await expect(page.locator('.cm-live-task')).toHaveCount(1);
+  // The rendered heading is announced as a heading of the right level, not just styled.
+  await expect(page.locator('.cm-line.cm-live-h1')).toHaveAttribute('role', 'heading');
+  await expect(page.locator('.cm-line.cm-live-h1')).toHaveAttribute('aria-level', '1');
+
+  // A block widget click exposes the whole structure as editable source.
+  await page.locator('.cm-live-table td').first().click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(0);
+  await expect(editor).toContainText('| 列一 | 列二 |');
+  await page.locator('.cm-line').filter({ hasText: '结束段落。' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+
+  await page.locator('.cm-live-code pre').click();
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await expect(editor).toContainText('```js');
+  await page.locator('.cm-line').filter({ hasText: '结束段落。' }).click();
+
+  await page.locator('.cm-live-details summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.cm-live-details details')).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(page.locator('.cm-live-details details')).not.toHaveAttribute('open', '');
+
+  await editor.press('Control+End');
+  await editor.pressSequentially('附加');
+  await expect.poll(async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content;
+  }).toBe(`${content}附加`);
+});
+
+test('live preview task checkboxes write the precise source line once per toggle', async ({ page }) => {
+  const title = `即时待办-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '- [ ] 普通',
+    '- [] 简写',
+    '1. [ ] 有序',
+    '> - [ ] 引用',
+    '- \\[ ] 转义',
+    '- [ ] 最后',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  // The last task line holds the caret, so it shows its source; the other four, including the `- []` shorthand, render.
+  await expect(page.locator('.cm-live-task')).toHaveCount(4);
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+
+  await page.getByRole('checkbox', { name: '待办事项：普通', exact: true }).check();
+  await expect.poll(stored).toBe([
+    '- [x] 普通',
+    '- [] 简写',
+    '1. [ ] 有序',
+    '> - [ ] 引用',
+    '- \\[ ] 转义',
+    '- [ ] 最后',
+  ].join('\n'));
+
+  await page.getByRole('checkbox', { name: '待办事项：引用', exact: true }).check();
+  await expect.poll(stored).toBe([
+    '- [x] 普通',
+    '- [] 简写',
+    '1. [ ] 有序',
+    '> - [x] 引用',
+    '- \\[ ] 转义',
+    '- [ ] 最后',
+  ].join('\n'));
+
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe([
+    '- [x] 普通',
+    '- [] 简写',
+    '1. [ ] 有序',
+    '> - [ ] 引用',
+    '- \\[ ] 转义',
+    '- [ ] 最后',
+  ].join('\n'));
+});
+
+test('live preview resources stay safe and usable', async ({ page }) => {
+  const targetTitle = `即时链接目标-${randomUUID().slice(0, 6)}`;
+  const targetId = randomUUID();
+  const created = await page.request.post(`${origin}/api/notes/${targetId}`, {
+    headers,
+    data: {
+      title: targetTitle, content: '目标正文', tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID(),
+    },
+  });
+  expect(created.status()).toBe(201);
+  const external: string[] = [];
+  await page.route('**/*', async (route) => {
+    const url = route.request().url();
+    if (!url.startsWith(origin) && !url.startsWith('blob:') && !url.startsWith('data:')) external.push(url);
+    await route.continue();
+  });
+
+  const title = `即时安全-${randomUUID().slice(0, 6)}`;
+  const externalHost = 'external.invalid';
+  const content = [
+    '<script>window.__livePwned = 1</script>',
+    '',
+    `<img src="https://${externalHost}/pixel.png" onerror="window.__livePwned = 2">`,
+    '',
+    `[危险](javascript:alert(1)) [实体](java&#x73;cript:alert(2)) [外链](https://${externalHost}/page)`,
+    '',
+    `![外图](https://${externalHost}/image.png)`,
+    '',
+    `[混合斜杠](/\\${externalHost}/x) [反斜杠](\\\\${externalHost}/y) [同源相对](/relative/path)`,
+
+    `[[${targetId}|目标标签]]`,
+    '',
+    '结尾正文。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await page.getByRole('textbox', { name: '笔记标题' }).click();
+  await expect(page.locator('.cm-content script')).toHaveCount(0);
+  await expect(page.locator('.cm-content img[src^="https"]')).toHaveCount(0);
+  await expect(page.locator('.cm-content a[href^="javascript"]')).toHaveCount(0);
+  await expect(page.locator('.cm-content a[href^="java"]')).toHaveCount(0);
+  await expect(page.locator('a.cm-live-link', { hasText: '危险' })).toHaveCount(0);
+  await expect(page.locator('a.cm-live-link', { hasText: '实体' })).toHaveCount(0);
+  await expect(page.locator('a.cm-live-link', { hasText: '外链' })).toHaveAttribute('href', `https://${externalHost}/page`);
+  // A mixed-slash target resolves to another origin in the browser, so it is not a same-site relative link.
+  await expect(page.locator('a.cm-live-link', { hasText: '混合斜杠' })).toHaveCount(0);
+  await expect(page.locator('a.cm-live-link', { hasText: '反斜杠' })).toHaveCount(0);
+  await expect(page.locator('a.cm-live-link', { hasText: '同源相对' })).toHaveAttribute('href', '/relative/path');
+  expect(await page.evaluate(() => (window as unknown as { __livePwned?: number }).__livePwned)).toBeUndefined();
+  expect(external.filter((url) => url.includes(externalHost))).toEqual([]);
+
+  await page.locator('a.cm-live-wikilink').click();
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(targetTitle);
+  await expect(editor).toContainText('目标正文');
+
+  const imageNoteTitle = `即时图片-${randomUUID().slice(0, 6)}`;
+  await newNote(page, imageNoteTitle, '图片段落');
+  const shot = await page.locator('.document').screenshot({ type: 'png' });
+  await page.locator('input[type=file][accept^="image"]').setInputFiles({ name: '即时图片.png', mimeType: 'image/png', buffer: shot });
+  await expect(page.getByText('图片已插入', { exact: true })).toBeVisible();
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  const image = page.locator('.cm-live-inline-image img, .cm-live-image img');
+  await expect(image).toHaveCount(1);
+  await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+  await image.click();
+  const lightbox = page.getByRole('dialog');
+  await expect(lightbox.getByRole('img', { name: '笔记图片' })).toBeVisible();
+  await lightbox.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(image).toHaveCount(1);
+});
+
+test('live preview block content keeps link and attachment actions', async ({ page, context }) => {
+  const fileId = randomUUID();
+  const uploaded = await page.request.put(`${origin}/api/files/${fileId}`, {
+    headers: { ...headers, 'Content-Type': 'text/plain', 'X-Filename': 'block.txt' }, data: '块内附件正文',
+  });
+  expect(uploaded.status()).toBe(201);
+  // The action itself is what is asserted, so the window it would open is recorded instead of navigating.
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url: string) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return null;
+    }) as typeof window.open;
+  });
+  const target = `${origin}/autolink-target`;
+  const title = `即时块内动作-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '| 链接 | 附件 |',
+    '| --- | --- |',
+    `| <${target}> | [附件](/api/files/${fileId}) |`,
+    '',
+    '<details open>',
+    '<summary>块内动作</summary>',
+    '',
+    `<${target}>`,
+    '',
+    `[正文附件](/api/files/${fileId})`,
+    '',
+    '</details>',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  await page.locator('.cm-line').filter({ hasText: '结尾段落。' }).click();
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+
+  // A mouse click on an autolink inside a table runs the link action; it must not be swallowed as "edit this
+  // whole block" by the widget under the pointer.
+  const tableLink = page.locator('.cm-live-table a.cm-live-link', { hasText: target });
+  await expect(tableLink).toHaveAttribute('data-live-action', 'href');
+  await tableLink.click();
+  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toEqual([target]);
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+  await expect(page.locator('.cm-live-details > details')).toHaveCount(1);
+
+  // A private attachment inside a rendered block goes through the same download entry, here from the keyboard.
+  const tableFile = page.locator('.cm-live-table a.cm-live-link', { hasText: '附件' });
+  await expect(tableFile).toHaveAttribute('data-live-action', 'file');
+  const tableDownload = page.waitForEvent('download');
+  await tableFile.focus();
+  await page.keyboard.press('Enter');
+  await tableDownload;
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+
+  const bodyFile = page.locator('.cm-live-details-body a.cm-live-link', { hasText: '正文附件' });
+  const bodyDownload = page.waitForEvent('download');
+  await bodyFile.focus();
+  await page.keyboard.press('Enter');
+  await bodyDownload;
+  await expect(page.locator('.cm-live-details > details')).toHaveCount(1);
+  // The action never rewrote the document.
+  expect(await stored()).toBe(content);
+});
+
+test('live preview drag stops at a remote change instead of keeping stale source offsets', async ({ page }) => {
+  const title = `即时拖选同步-${randomUUID().slice(0, 6)}`;
+  const id = randomUUID();
+  const content = [
+    '起始段落',
+    '',
+    '| 甲 | 乙 |',
+    '| --- | --- |',
+    '| 值甲 | 值乙 |',
+    '',
+    '```js',
+    'const drag = 1;',
+    '```',
+    '',
+    '结尾段落',
+  ].join('\n');
+  expect((await page.request.post(`${origin}/api/notes/${id}`, {
+    headers,
+    data: { title, content, tags: [], pinned: false, archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+  })).status()).toBe(201);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill(title);
+  const row = page.locator('[data-note-row]').filter({ hasText: title }).first();
+  await expect(row).toBeVisible();
+  await row.click();
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await page.locator('.cm-line').filter({ hasText: '结尾段落' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  const cell = (await page.locator('.cm-live-table td').first().boundingBox())!;
+  const code = (await page.locator('.cm-live-code pre').boundingBox())!;
+
+  // A gesture that starts on the table and reaches the code block keeps both as source.
+  await page.mouse.move(cell.x + 6, cell.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(code.x + 20, code.y + 10, { steps: 10 });
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+
+  // A remote update inserts text in front of the gesture while the pointer is still down. The anchor of the
+  // gesture described the previous text, so it must not be dispatched again.
+  const remote = await page.request.put(`${origin}/api/notes/${id}`, {
+    headers,
+    data: {
+      title, content: `X${content}`, tags: [], pinned: false, archived: false, deletedAt: null, revision: 1,
+      operationId: randomUUID(),
+    },
+  });
+  expect(remote.status()).toBe(200);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(editor).toContainText('X起始段落');
+  const mapped = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  await page.mouse.move(code.x + 40, code.y + 40, { steps: 5 });
+  await page.mouse.up();
+  const afterMove = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(afterMove).toBe(mapped);
+  // The note is unchanged apart from the remote text.
+  const stored = async () => {
+    const note = await (await page.request.get(`${origin}/api/notes/${id}`)).json();
+    return note.note.content as string;
+  };
+  expect(await stored()).toBe(`X${content}`);
+
+  // After that cancellation the keyboard still copies the plain Markdown: the table and the fence are only
+  // hidden from the screen, so the selection's text carries their full source. The data is read from the event
+  // itself, which needs no system clipboard permission.
+  await page.evaluate(() => {
+    const record = { copy: '', cut: '' };
+    (window as unknown as { __clipboard: typeof record }).__clipboard = record;
+    document.addEventListener('copy', (event) => {
+      record.copy = (event as ClipboardEvent).clipboardData?.getData('text/plain') ?? '';
+    });
+    document.addEventListener('cut', (event) => {
+      record.cut = (event as ClipboardEvent).clipboardData?.getData('text/plain') ?? '';
+    });
+  });
+  await page.locator('.cm-line').filter({ hasText: '结尾段落' }).click();
+  await editor.press('Meta+a');
+  await editor.press('Meta+c');
+  expect(await page.evaluate(() => (window as unknown as { __clipboard: { copy: string } }).__clipboard.copy))
+    .toBe(`X${content}`);
+  await editor.press('Meta+x');
+  expect(await page.evaluate(() => (window as unknown as { __clipboard: { cut: string } }).__clipboard.cut))
+    .toBe(`X${content}`);
+  await expect.poll(stored).toBe('');
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(`X${content}`);
+});
+
+test('live preview falls back to source without losing the draft', async ({ page }) => {
+  const title = `即时降级-${randomUUID().slice(0, 6)}`;
+  const missingId = randomUUID();
+  const content = `重要文本\n\n![缺失附件](/api/images/${missingId})\n\n尾部正文`;
+  await page.goto('/');
+  // A missing private attachment intentionally keeps the note as a local draft instead of a cloud save.
+  await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+  await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await editor.fill(content);
+  await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
+  await expect(page.locator('.cm-live-image')).toHaveCount(0);
+  await expect(page.locator('.cm-line').filter({ hasText: `![缺失附件](/api/images/${missingId})` }).first()).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: '图片加载失败' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '源码模式' })).toBeEnabled();
+  await editor.press('Control+End');
+  await editor.pressSequentially('继续编辑');
+  // A missing attachment keeps the note as a local draft by design; the edit must still be kept in full.
+  await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(async (marker) => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('easynote');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const drafts = await new Promise<Array<{ note: { content: string } }>>((resolve, reject) => {
+        const request = db.transaction('drafts').objectStore('drafts').getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return drafts.some((draft) => draft.note.content.endsWith(`${marker}继续编辑`));
+    } finally { db.close(); }
+  }, '尾部正文')).toBe(true);
+});
+
+test('live preview keeps narrow screens and keyboard controls usable', async ({ page }) => {
+  const title = `即时窄屏-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '# 窄屏标题',
+    '',
+    '<details>',
+    '<summary>折叠标题</summary>',
+    '',
+    '折叠正文',
+    '',
+    '</details>',
+    '',
+    '| 很长的列一 | 很长的列二 |',
+    '| --- | --- |',
+    '| 值一 | 值二 |',
+    '',
+    '结尾正文。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  await page.evaluate(() => localStorage.setItem('easynote-theme', 'dark'));
+  await page.reload();
+  await page.locator('[data-note-row]').filter({ hasText: title }).click();
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 740 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => {
+      const scroller = document.querySelector('.document-scroll');
+      return !scroller || scroller.scrollWidth <= scroller.clientWidth + 1;
+    })).toBe(true);
+    for (const name of ['源码模式', '即时渲染模式', '阅读模式']) {
+      await expect(page.getByRole('button', { name })).toBeVisible();
+    }
+  }
+  await expect(page.locator('.cm-live-details details')).toHaveCount(1);
+  await page.locator('.cm-live-details summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.cm-live-details details')).toHaveAttribute('open', '');
+});
+
+test('live preview keeps collapsible blocks independent and inside their own structure', async ({ page }) => {
+  const title = `即时折叠-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>',
+    '<summary>相同折叠</summary>',
+    '',
+    '相同正文',
+    '',
+    '</details>',
+    '',
+    '<details open>',
+    '<summary>相同折叠</summary>',
+    '',
+    '相同正文',
+    '',
+    '</details>',
+    '',
+    '<details open>',
+    '<summary>外层折叠</summary>',
+    '',
+    '外层正文',
+    '',
+    '<details open>',
+    '<summary>内层折叠</summary>',
+    '',
+    '内层正文',
+    '',
+    '</details>',
+    '',
+    '</details>',
+    '',
+    '<details title=" open ">',
+    '<summary>属性里的 open</summary>',
+    '',
+    '属性正文',
+    '',
+    '</details>',
+    '',
+    '<section>',
+    '<details>',
+    '<summary>不应折叠</summary>',
+    '',
+    '容器正文',
+    '',
+    '</details>',
+    '</section>',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+
+  // Two identical blocks are two widgets with their own state; a nested block and a plain `open` attribute are
+  // handled separately, while a details inside another raw HTML block stays literal source.
+  await expect(page.locator('.cm-live-details > details')).toHaveCount(4);
+  await expect(page.locator('.cm-live-details-body')).toContainText(['相同正文', '相同正文', '外层正文', '属性正文']);
+  await expect(page.locator('.cm-live-details-body details')).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '<summary>不应折叠</summary>' })).toHaveCount(1);
+  const attributed = page.locator('.cm-live-details details').filter({ hasText: '属性里的 open' });
+  await expect(attributed).not.toHaveAttribute('open', '');
+
+  const identical = page.locator('.cm-live-details details').filter({ hasText: '相同折叠' });
+  await expect(identical).toHaveCount(2);
+  await identical.first().locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(identical.first()).not.toHaveAttribute('open', '');
+  await expect(identical.nth(1)).toHaveAttribute('open', '');
+  // Reading has no input target, so its button keeps the focus; every editing mode hands it to the editor.
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  await expect(page.getByRole('button', { name: '阅读模式' })).toBeFocused();
+  // The state belongs to the block position, so it survives a source/live round trip.
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  // Entering an editing mode hands the keyboard back to the editor with the existing selection.
+  await expect(editor).toBeFocused();
+  await expect(identical.first()).not.toHaveAttribute('open', '');
+  await expect(identical.nth(1)).toHaveAttribute('open', '');
+
+  // The nested block folds on its own.
+  const nested = page.locator('.cm-live-details-body details').first();
+  await expect(nested.locator('summary')).toHaveText('内层折叠');
+  await nested.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(nested).not.toHaveAttribute('open', '');
+  await expect(page.locator('.cm-live-details details').filter({ hasText: '外层折叠' })).toHaveAttribute('open', '');
+});
+
+test('live preview enters block widgets from any column and drags a source selection', async ({ page }) => {
+  const title = `即时进入-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '前面的普通段落',
+    '```js',
+    'const inside = 1;',
+    '```',
+    '中间的普通段落',
+    '',
+    '| 甲 | 乙 |',
+    '| --- | --- |',
+    '| 值甲 | 值乙 |',
+    '',
+    '结尾段落',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await expect(page.locator('.cm-live-code pre')).toBeVisible();
+
+  // ArrowDown from the middle of the line above the fence reaches it; a caret at a specific column is not required.
+  await page.locator('.cm-line').filter({ hasText: '前面的普通段落' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await expect(editor).toContainText('const inside = 1;');
+
+  // ArrowUp from the middle of the line below the fence does the same.
+  await page.locator('.cm-line').filter({ hasText: '中间的普通段落' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowUp');
+  await expect(editor).toContainText('const inside = 1;');
+
+  // A drag that starts on a block widget selects the real Markdown across blocks.
+  await page.locator('.cm-line').filter({ hasText: '结尾段落' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+  const cell = await page.locator('.cm-live-table td').first().boundingBox();
+  const tail = await page.locator('.cm-line').filter({ hasText: '结尾段落' }).boundingBox();
+  expect(cell && tail).toBeTruthy();
+  await page.mouse.move(cell!.x + 6, cell!.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(tail!.x + 20, tail!.y + tail!.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(selected).toContain('| 甲 | 乙 |');
+  expect(selected).toContain('结尾段落');
+
+  // Leaving the block restores its rendering.
+  await page.locator('.cm-line').filter({ hasText: '前面的普通段落' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+});
+
+test('live preview task checkboxes keep the right line when text above changes', async ({ page }) => {
+  const title = `即时待办行-${randomUUID().slice(0, 6)}`;
+  const content = ['开头段落', '', '- [ ] 甲任务', '- [ ] 乙任务', '', '结尾段落'].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+
+  // Lines are inserted above the tasks while the caret stays in the first block.
+  await page.locator('.cm-line').filter({ hasText: '开头段落' }).click();
+  await editor.press('End');
+  await editor.press('Enter');
+  await editor.pressSequentially('新增一行');
+  await page.getByRole('checkbox', { name: '待办事项：乙任务', exact: true }).check();
+  await expect.poll(stored).toBe(['开头段落', '新增一行', '', '- [ ] 甲任务', '- [x] 乙任务', '', '结尾段落'].join('\n'));
+  // One undo reverts exactly that task marker.
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(['开头段落', '新增一行', '', '- [ ] 甲任务', '- [ ] 乙任务', '', '结尾段落'].join('\n'));
+});
+
+test('live preview falls back per note and only retries that note', async ({ page }) => {
+  const normalTitle = `即时正常-${randomUUID().slice(0, 6)}`;
+  const brokenTitle = `即时超限-${randomUUID().slice(0, 6)}`;
+  const preferenceKey = `easynote-display-mode:v1:${testUserId}`;
+  // Formula scanning that exceeds the plan budget degrades that note to source; the note is created through the
+  // API so this case is only about the rendering mode.
+  const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
+    headers,
+    data: {
+      title: brokenTitle, content: '$a{'.repeat(12000), tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID(),
+    },
+  });
+  expect(created.status()).toBe(201);
+  await page.goto('/');
+  await newNote(page, normalTitle, '# 正常标题\n\n正常正文');
+  await expect(page.locator('.cm-live-h1')).toHaveText('正常标题');
+
+  await page.locator('[data-note-row]').filter({ hasText: brokenTitle }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('这篇笔记结构过于复杂，已切回源码模式，内容仍会完整保留。')).toBeVisible();
+  // The automatic fallback never writes an account preference.
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBeNull();
+
+  // Reading the failed note and coming back with the shortcut keeps the user's own editing mode: the fault only
+  // decides the effective mode of this note, so `source` must not become the account preference.
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  await expect(page.getByRole('button', { name: '阅读模式' })).toBeFocused();
+  await page.keyboard.press('Control+e');
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('live');
+  await page.locator('[data-note-row]').filter({ hasText: normalTitle }).click();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  // The freshly opened note starts with the caret in its first block, so move it before checking the rendering.
+  await page.locator('.cm-line').filter({ hasText: '正常正文' }).click();
+  await expect(page.locator('.cm-live-h1')).toHaveText('正常标题');
+  await page.locator('[data-note-row]').filter({ hasText: brokenTitle }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Leaving the fault fallback for reading must not promote the fallback to the editing preference: a healthy
+  // note opened from reading comes back to live with Cmd/Ctrl+E.
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  await expect(page.getByRole('button', { name: '阅读模式' })).toBeFocused();
+  await page.locator('[data-note-row]').filter({ hasText: normalTitle }).click();
+  await expect(page.getByRole('button', { name: '阅读模式' })).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Control+e');
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Another note keeps the live mode.
+  await page.locator('[data-note-row]').filter({ hasText: normalTitle }).click();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('.cm-line').filter({ hasText: '正常正文' }).click();
+  await expect(page.locator('.cm-live-h1')).toHaveText('正常标题');
+
+  // Returning to the broken note stays in source; an explicit retry falls back again instead of being bypassed.
+  await page.locator('[data-note-row]').filter({ hasText: brokenTitle }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('这篇笔记结构过于复杂，已切回源码模式，内容仍会完整保留。')).toBeVisible();
+
+  await page.locator('[data-note-row]').filter({ hasText: normalTitle }).click();
+  await page.locator('.cm-line').filter({ hasText: '正常正文' }).click();
+  await expect(page.locator('.cm-live-h1')).toHaveText('正常标题');
+});
+
+test('live preview restores the editing preference when a task opens another note', async ({ page }) => {
+  const brokenTitle = `即时故障源-${randomUUID().slice(0, 6)}`;
+  const normalTitle = `即时任务目标-${randomUUID().slice(0, 6)}`;
+  const preferenceKey = `easynote-display-mode:v1:${testUserId}`;
+  const created = await page.request.post(`${origin}/api/notes/${randomUUID()}`, {
+    headers,
+    data: {
+      title: brokenTitle, content: '$a{'.repeat(12000), tags: [], pinned: false, archived: false,
+      deletedAt: null, revision: 0, operationId: randomUUID(),
+    },
+  });
+  expect(created.status()).toBe(201);
+  await page.goto('/');
+  await newNote(page, normalTitle, '## 正常标题\n\n- [ ] 打开这一项\n\n正常结尾');
+  await page.locator('[data-note-row]').filter({ hasText: brokenTitle }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  // Reading the failed note records the explicit reading choice, never the source fallback.
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  await expect(page.getByRole('button', { name: '阅读模式' })).toBeFocused();
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('read');
+  // The task centre opens the healthy note reached from that reading state. The programmatic entry must restore
+  // the user's own editing mode; the fault of the note being read only applies to that note.
+  await page.getByRole('button', { name: '任务中心', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button').filter({ hasText: '打开这一项' }).click();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'false');
+  expect(await page.evaluate((key) => localStorage.getItem(key), preferenceKey)).toBe('read');
+  // The healthy note really renders, so the mode bar is not the only evidence.
+  await expect(page.locator('.cm-live-h2')).toHaveText('正常标题');
+  await page.locator('.cm-line').filter({ hasText: '正常结尾' }).click();
+  await expect(page.locator('.cm-live-h2')).toHaveText('正常标题');
+});
+
+test('live preview degrades an oversized draft on first load', async ({ page }) => {
+  const title = `即时额度-${randomUUID().slice(0, 6)}`;
+  await page.goto('/');
+  await newNote(page, title, '额度开头');
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const draft = () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('easynote');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const drafts = await new Promise<Array<{ note: { content: string } }>>((resolve, reject) => {
+        const request = db.transaction('drafts').objectStore('drafts').getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return drafts.map((entry) => entry.note.content);
+    } finally { db.close(); }
+  });
+  // 256 KiB is the default session limit, so this draft stays local and exceeds it.
+  await editor.fill(`额度正文开始\n\n${'a'.repeat(262144)}\n\n额度结束标记`);
+  await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Reloading restores the oversized draft; the first render must degrade without waiting for an edit, and the
+  // draft itself stays complete.
+  await page.reload();
+  await page.locator('[data-note-row]').filter({ hasText: title }).click();
+  await expect(page.getByRole('button', { name: '源码模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('这篇笔记超过当前正文额度，已切回源码模式，内容仍会完整保留。')).toBeVisible();
+  await expect.poll(async () => (await draft()).some((content) => content.endsWith('额度结束标记') && content.length > 262144)).toBe(true);
+});
+
+test('live preview keeps a near-limit note live while typing', async ({ page }) => {
+  const title = `即时大笔记-${randomUUID().slice(0, 6)}`;
+  // 240 KiB of rich Markdown stays below the 256 KiB session limit, so the note saves while it is edited. The
+  // same scale is the smallest sample that reliably re-rendered the whole document on one keystroke.
+  const block = (index: number) => [
+    `## 章节 ${index}`, '',
+    `这一段包含 **加粗 ${index}**、*斜体*、~~删除~~、\`code-${index}\` 和 [相对链接](/x/${index}) 以及行内公式 $a_${index}^2$。`, '',
+    `- 列表项 ${index}`, `- [ ] 待办 ${index}`, `  - 嵌套项 ${index}`, '',
+    `> 引用第 ${index} 段`, '',
+    `| 列甲 ${index} | 列乙 |`, '| --- | --- |', `| 值 ${index} | 值二 |`, '',
+    '```js', `const value${index} = ${index};`, '```', '',
+    '---', '',
+    '<details>', `<summary>折叠 ${index}</summary>`, '', `折叠正文 ${index}`, '', '</details>', '',
+  ].join('\n');
+  let content = '';
+  for (let index = 0; Buffer.byteLength(content + block(index), 'utf8') <= 240 * 1024; index++) content += block(index);
+  // The tail itself holds a structure: it can only show its widget once the plan described that range.
+  content += '\n```js\nconst tailMarker = 1;\n```\n\n尾部标记';
+  expect(Buffer.byteLength(content, 'utf8')).toBeLessThan(250 * 1024);
+
+  const id = randomUUID();
+  const created = await page.request.post(`${origin}/api/notes/${id}`, {
+    headers,
+    data: { title, content, tags: [], pinned: false, archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+  });
+  expect(created.status()).toBe(201);
+
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill(title);
+  await page.locator('[data-note-row]').filter({ hasText: title }).first().click();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.cm-live-widget').first()).toBeVisible();
+
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await editor.click();
+  // Cmd-End is CodeMirror's document-end binding on macOS; Control-End only moves through rendered lines in a
+  // virtualized document.
+  await editor.press('Meta+End');
+  await editor.pressSequentially('X');
+  // Typing only re-renders the region around the caret: the mode and the note stay live.
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('这篇笔记结构过于复杂，已切回源码模式，内容仍会完整保留。')).toHaveCount(0);
+  await expect.poll(async () => {
+    const note = await (await page.request.get(`${origin}/api/notes/${id}`)).json();
+    return note.note.content.endsWith('尾部标记X');
+  }).toBe(true);
+
+  // The tail was owed work while the parser caught up; once it advances the plan finishes that range instead of
+  // leaving it as source forever, so the block above the caret really is rendered.
+  await expect(page.locator('.cm-live-code pre').filter({ hasText: 'const tailMarker = 1;' })).toHaveCount(1, { timeout: 20000 });
+  // Scrolling back to a block that is certainly not active shows its rendering again after the edit.
+  await page.locator('.document-scroll').evaluate((element) => { element.scrollTop = 0; });
+  await expect(page.locator('.cm-live-heading.cm-live-h2').first()).toBeVisible();
+  await expect(page.locator('.cm-live-table').first()).toBeVisible();
+
+  // A burst of typing stays live as well.
+  await editor.pressSequentially('0123456789', { delay: 40 });
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '即时渲染模式' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('这篇笔记结构过于复杂，已切回源码模式，内容仍会完整保留。')).toHaveCount(0);
+  await expect.poll(async () => {
+    const note = await (await page.request.get(`${origin}/api/notes/${id}`)).json();
+    return note.note.content.endsWith('尾部标记X0123456789');
+  }).toBe(true);
+});
+
+test('live preview keeps multi-line link titles and autolinks readable', async ({ page }) => {
+  const title = `即时链接-${randomUUID().slice(0, 6)}`;
+  const filler = Array.from({ length: 40 }, (_, index) => `第 ${index} 段填充正文`).join('\n\n');
+  const url = 'https://auto.example';
+  const content = [
+    '前言段落。',
+    '',
+    `<${url}/top>`,
+    '',
+    `<user@example.com>`,
+    '',
+    '| 自动链接 | 邮箱 |',
+    '| --- | --- |',
+    `| <${url}/cell> | <cell@example.com> |`,
+    '',
+    '<details open>',
+    '<summary>自动链接正文</summary>',
+    '',
+    `<${url}/body>`,
+    '',
+    '</details>',
+    '',
+    filler,
+    '',
+    `[多行标题](https://example.com "第一行`,
+    '第二行")',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await page.getByRole('textbox', { name: '笔记标题' }).click();
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+
+  await page.waitForTimeout(600);
+  // Autolinks keep their whole text: HTTP in place, and an email becomes a mailto target instead of a
+  // same-origin relative path.
+  await expect(page.locator('a.cm-live-link', { hasText: `${url}/top` })).toHaveAttribute('href', `${url}/top`);
+  await expect(page.locator('a.cm-live-link', { hasText: 'user@example.com' })).toHaveAttribute('href', 'mailto:user@example.com');
+  await expect(page.locator('.cm-live-table a.cm-live-link', { hasText: `${url}/cell` })).toHaveAttribute('href', `${url}/cell`);
+  await expect(page.locator('.cm-live-table a.cm-live-link', { hasText: 'cell@example.com' })).toHaveAttribute('href', 'mailto:cell@example.com');
+  await expect(page.locator('.cm-live-details-body a.cm-live-link', { hasText: `${url}/body` })).toHaveAttribute('href', `${url}/body`);
+
+  // A link title that covers a line break keeps its source: CodeMirror refuses a cross-line replacement from a
+  // view plugin, and that check runs after the decoration builders returned.
+  for (let index = 0; index < 40; index++) {
+    await page.locator('.document-scroll').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    if (await page.locator('.cm-line').filter({ hasText: '结尾段落。' }).count()) break;
+    await page.waitForTimeout(80);
+  }
+  await expect(page.locator('.cm-line').filter({ hasText: '第二行\"' })).toHaveCount(1);
+  await expect(page.locator('a.cm-live-link', { hasText: '多行标题' })).toHaveCount(1);
+
+  // Selection changes and a search hit on the same offset keep the editor usable.
+  await page.locator('.cm-line').filter({ hasText: '第二行\"' }).click();
+  await expect(page.locator('.cm-line').filter({ hasText: '第一行' })).toHaveCount(1);
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill('多行标题');
+  await expect(page.locator('.cm-search-highlight')).toHaveCount(1);
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill('');
+  await expect(page.locator('.cm-search-highlight')).toHaveCount(0);
+
+  await editor.press('Meta+End');
+  await editor.pressSequentially('追加');
+  await expect.poll(stored).toBe(`${content}追加`);
+  expect(errors.filter((message) => message.includes('line break'))).toEqual([]);
+});
+
+test('live preview block math follows containers and raw HTML', async ({ page }) => {
+  const title = `即时公式容器-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<section>',
+    '',
+    '$$htmlInside$$',
+    '',
+    '</section>',
+    '',
+    '> $$',
+    '> q^2',
+    '> $$',
+    '',
+    '- $$',
+    '  l^2',
+    '  $$',
+    '',
+    '$$',
+    '\\frac{a}{b}',
+    '$$',
+    '',
+    '$$',
+    '- x',
+    '$$',
+    '',
+    '> $$',
+    '> - y',
+    '> $$',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+
+  // Raw HTML stays literal, both inside one HTML block and beyond the blank line the parser splits on.
+  await expect(page.locator('.cm-line').filter({ hasText: '$$htmlInside$$' })).toHaveCount(1);
+  // A quote and a list container hold the same formula the standalone form uses.
+  await expect(page.locator('.cm-live-math.cm-live-math-display')).toHaveCount(5);
+  await expect(page.locator('.cm-live-math-display math msup')).toHaveCount(2);
+  await expect(page.locator('.cm-live-math-display math mfrac')).toHaveCount(1);
+
+  // `- x` on a TeX line is a minus, not a list marker to strip: the editor and the reading surface agree.
+  const negatives = page.locator('.cm-live-math-display').filter({ hasText: '−' });
+  await expect(negatives).toHaveCount(2);
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  await expect(page.locator('.document .markdown math').filter({ hasText: '−' })).toHaveCount(2);
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(page.locator('.cm-live-math.cm-live-math-display')).toHaveCount(5);
+
+  // Entering the container formula shows its whole source, including the quote markers.
+  await page.locator('.cm-live-math-display').first().click();
+  await expect(page.locator('.cm-live-math-display')).toHaveCount(4);
+  await expect(editor).toContainText('> q^2');
+});
+
+test('live preview details scanning stays inside its own structure', async ({ page }) => {
+  const title = `即时折叠结构-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<section>',
+    '',
+    '<!-- </section> -->',
+    '',
+    '<details>',
+    '<summary>容器内折叠</summary>',
+    '',
+    '容器正文',
+    '',
+    '</details>',
+    '',
+    '</section>',
+    '',
+    '<dl>',
+    '',
+    '<details open>',
+    '<summary>列表容器折叠</summary>',
+    '',
+    '列表容器正文',
+    '',
+    '</details>',
+    '',
+    '</dl>',
+    '',
+    '<details open>',
+    '<summary>围栏示例</summary>',
+    '',
+    '```html',
+    '<details><summary>示例</summary>示例正文</details>',
+    '```',
+    '',
+    '</details>',
+    '',
+    '<details open>',
+    '<summary>伪闭合</summary>',
+    '',
+    '正文 </detailsXYZ> 保留',
+    '',
+    '</details>',
+    '',
+    '<details open>',
+    '<summary>尾随文字</summary>',
+    '',
+    '尾随正文',
+    '',
+    '</details> 尾随文字',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+
+  // A container element that closes after a blank line still blocks the details inside it, and the pseudo close
+  // tag in the body does not end anything. A closing tag inside a comment is not a closing tag.
+  await expect(page.locator('.cm-line').filter({ hasText: '<summary>容器内折叠</summary>' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '<!-- </section> -->' })).toHaveCount(1);
+  // Block containers outside the old fixed set (`dl`, `h1`, …) are not interpreted either.
+  await expect(page.locator('.cm-line').filter({ hasText: '<summary>列表容器折叠</summary>' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '列表容器正文' })).toHaveCount(1);
+  await expect(page.locator('.cm-live-details > details')).toHaveCount(2);
+  await expect(page.locator('.cm-live-details-body details')).toHaveCount(0);
+  await expect(page.locator('.cm-live-details-body').filter({ hasText: '</detailsXYZ>' })).toContainText('正文 </detailsXYZ> 保留');
+  // The fenced example keeps its literal text instead of becoming a second collapsible control.
+  await expect(page.locator('.cm-live-details-body pre')).toContainText('<summary>示例</summary>');
+  // Trailing text after the closing tag keeps that candidate as source instead of being cut off.
+  await expect(page.locator('.cm-line').filter({ hasText: '</details> 尾随文字' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '尾随正文' })).toHaveCount(1);
+});
+
+test('live preview keeps ordinary Markdown inside a recognised HTML container as source', async ({ page }) => {
+  const title = `即时容器源码-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<section>', '',
+    '容器内 **强调** 与 `代码`', '',
+    '- [ ] 容器内任务', '',
+    '```js', 'const inside = 1;', '```', '',
+    '</section>', '',
+    '容器外 **强调** 与 `代码`', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // Every marker inside the container stays visible; only the block after it is decorated.
+  await expect(page.locator('.cm-line').filter({ hasText: '容器内 **强调** 与 `代码`' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '- [ ] 容器内任务' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: '```js' })).toHaveCount(1);
+  await expect(page.locator('.cm-line').filter({ hasText: 'const inside = 1;' })).toHaveCount(1);
+  await expect(page.locator('.cm-live-strong')).toHaveCount(1);
+  await expect(page.locator('.cm-live-strong')).toHaveText('强调');
+  await expect(page.locator('.cm-live-inline-code')).toHaveCount(1);
+  await expect(page.locator('.cm-live-task')).toHaveCount(0);
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+});
+
+test('live preview details keeps a nested list inside its parent item', async ({ page }) => {
+  const title = `即时折叠列表-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>嵌套列表</summary>', '',
+    '- 父项', '  - 子项', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const body = page.locator('.cm-live-details-body');
+  await expect(body.locator('> ul > li > ul > li')).toHaveText('子项');
+  const structure = await body.locator('> ul').evaluate((list) => ({
+    siblings: list.children.length,
+    parent: list.querySelector(':scope > li > p')?.textContent ?? '',
+    nested: list.querySelector(':scope > li > ul > li')?.textContent ?? '',
+  }));
+  expect(structure.siblings).toBe(1);
+  expect(structure.parent).toContain('父项');
+  expect(structure.nested).toContain('子项');
+  const text = await body.innerText();
+  expect(text.indexOf('父项')).toBeLessThan(text.indexOf('子项'));
+});
+
+test('live preview details body headings keep their level without their marks', async ({ page }) => {
+  const title = `即时正文标题-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>正文标题</summary>', '',
+    '## 二级标题', '',
+    '### 三级标题', '',
+    'Setext 标题', '---', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const body = page.locator('.cm-live-details-body');
+  // A heading in the body is rendered as its level, so its own `HeaderMark`s are syntax: ATX openers and closers
+  // and the Setext underline stay out of the visible text.
+  await expect(body.locator('h2')).toHaveText(['二级标题', 'Setext 标题']);
+  await expect(body.locator('h3')).toHaveText('三级标题');
+  const text = await body.innerText();
+  expect(text).not.toContain('##');
+  expect(text).not.toContain('---');
+  expect(text).toContain('二级标题');
+});
+
+test('live preview hides a Setext underline inside a quote', async ({ page }) => {
+  const title = `即时引用标题-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '普通 Setext', '===', '',
+    '> 引用 Setext', '> ---', '',
+    '> **加粗引用** 与 `代码` [链接](/quoted)', '> ===', '',
+    '- 列表项', '', '  Setext 标题', '  ---', '',
+    '> ## 引用 ATX', '',
+    '<details open>', '<summary>引用标题</summary>', '',
+    '> 正文引用标题', '> ---', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  // The underline of a Setext heading is syntax whichever container holds it, so its whole line disappears
+  // together with the quote prefix instead of staying on screen as `> ---`.
+  const text = await editor.innerText();
+  expect(text).not.toContain('---');
+  expect(text).not.toContain('===');
+  expect(text).not.toMatch(/^>\s*$/m);
+  await expect(page.locator('.cm-line.cm-live-h1').filter({ hasText: '普通 Setext' })).toHaveText('普通 Setext');
+  const setext = page.locator('.cm-line.cm-live-h2').filter({ hasText: '引用 Setext' });
+  await expect(setext).toHaveText('> 引用 Setext');
+  await expect(setext).toHaveAttribute('aria-level', '2');
+  // The same holds when the heading text is indented inside a list item.
+  await expect(page.locator('.cm-line.cm-live-h2').filter({ hasText: 'Setext 标题' })).toHaveAttribute('aria-level', '2');
+  // The heading keeps its inline nodes although its underline came from a quoted line.
+  const quoted = page.locator('.cm-line.cm-live-h1').filter({ hasText: '加粗引用' });
+  await expect(quoted.locator('strong')).toHaveText('加粗引用');
+  await expect(quoted.locator('.cm-live-inline-code')).toHaveText('代码');
+  await expect(quoted.locator('a.cm-live-link')).toHaveText('链接');
+  await expect(quoted.locator('a.cm-live-link')).toHaveAttribute('href', '/quoted');
+  // An ATX heading inside a quote still hides its own marks.
+  const atx = page.locator('.cm-line').filter({ hasText: '引用 ATX' });
+  await expect(atx).toHaveCount(1);
+  const atxText = await atx.innerText();
+  expect(atxText).toContain('引用 ATX');
+  expect(atxText).not.toContain('##');
+  // The details body keeps the same heading text without its underline.
+  const body = page.locator('.cm-live-details-body');
+  await expect(body.locator('blockquote h2')).toHaveText('正文引用标题');
+  expect(await body.innerText()).not.toContain('---');
+});
+
+test('live preview details body lists keep their source numbering', async ({ page }) => {
+  const title = `即时正文编号-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>正文编号</summary>', '',
+    '3. 第三步', '4. 第四步', '',
+    '> 3. 引用第三步', '> 4. 引用第四步', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const body = page.locator('.cm-live-details-body');
+  // The source numbering is the list's first number, not the browser's default of 1; a quoted list goes through
+  // the same branch.
+  await expect(body.locator('> ol')).toHaveAttribute('start', '3');
+  await expect(body.locator('> ol > li')).toHaveText(['第三步', '第四步']);
+  await expect(body.locator('blockquote ol')).toHaveAttribute('start', '3');
+  await expect(body.locator('blockquote ol > li')).toHaveText(['引用第三步', '引用第四步']);
+  const text = await body.innerText();
+  expect(text).not.toContain('3. 第三步');
+});
+
+test('live preview hides inline code delimiters at their real edges', async ({ page }) => {
+  const title = `即时行内代码-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '行内 `单反引号` 与 ``双反引号`` 结束。', '',
+    '| 列 |', '| --- |', '| ``表格反引号`` |', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // The whole visible line is the rendered text: no backtick survives outside the code element.
+  const inlineLine = page.locator('.cm-line').filter({ hasText: '单反引号' });
+  await expect(inlineLine).toHaveText('行内 单反引号 与 双反引号 结束。');
+  await expect(inlineLine.locator('.cm-live-inline-code')).toHaveText(['单反引号', '双反引号']);
+  // The safe DOM inside the table follows the same `CodeMark` edges.
+  await expect(page.locator('.cm-live-table td')).toHaveText('表格反引号');
+  await expect(page.locator('.cm-live-table td code')).toHaveText('表格反引号');
+});
+
+test('live preview keeps cell literal hashes out of the heading rule', async ({ page }) => {
+  const title = `即时表格井号-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '| 列 |', '| --- |', '| ## **粗体** `代码` [链接](/cell) |', '',
+    '<details open>', '<summary>表格井号</summary>', '',
+    '| 表头 |', '| --- |', '| ## 正文标签 | 普通值 |', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // A table cell is inline Markdown: its `##` is text, not a heading opener, so the cell keeps it while the
+  // emphasis, code span and link inside it are still built.
+  const table = page.locator('.cm-live-table').first();
+  await expect(table.locator('th')).toHaveText('列');
+  await expect(table.locator('td')).toHaveText('## 粗体 代码 链接');
+  await expect(table.locator('td strong')).toHaveText('粗体');
+  await expect(table.locator('td code')).toHaveText('代码');
+  await expect(table.locator('td a.cm-live-link')).toHaveAttribute('href', '/cell');
+  // The same rule holds inside a details body, and an ordinary cell beside it is unaffected.
+  const body = page.locator('.cm-live-details-body');
+  await expect(body.locator('table th')).toHaveText('表头');
+  await expect(body.locator('table td')).toHaveText(['## 正文标签', '普通值']);
+});
+
+test('live preview keeps a recognised HTML container inside a details body as source', async ({ page }) => {
+  const title = `即时折叠容器-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>折叠容器</summary>', '',
+    '<section>', '',
+    '容器内 **隐藏** 与 `代码`', '',
+    '</section>', '',
+    '容器外 **显示**', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // The details body is Markdown again, but a recognised container inside it is still literal source: the same
+  // boundary the note plan applies, not a second interpretation of the widget DOM.
+  const body = page.locator('.cm-live-details-body');
+  await expect(body).toContainText('<section>');
+  await expect(body).toContainText('**隐藏**');
+  await expect(body).toContainText('`代码`');
+  await expect(body.locator('strong')).toHaveCount(1);
+  await expect(body.locator('strong')).toHaveText('显示');
+  await expect(body.locator('code')).toHaveCount(0);
+});
+
+test('live preview keeps a quoted details body as blocks instead of one paragraph', async ({ page }) => {
+  const title = `即时折叠引用-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>引用结构</summary>', '',
+    '- 列表项', '',
+    '  > 引用段落', '  >', '  > - 父项', '  >   - 子项', '  >', '  > > 深层引用', '  >',
+    '  > ```js', '  > const quoted = 1;', '  >', '  > const later = 2;', '  > ```', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const body = page.locator('.cm-live-details-body');
+  // A quote inside the body holds nested blocks: its own list levels, a nested quote and a code block.
+  await expect(body.locator('li > blockquote')).toHaveCount(1);
+  await expect(body.locator('blockquote')).toHaveCount(2);
+  await expect(body.locator('blockquote ul > li > ul > li')).toHaveText('子项');
+  await expect(body.locator('blockquote blockquote')).toContainText('深层引用');
+  // A quoted fence is split into one code line per child with the quote's own marks between them: every line and
+  // the blank line between them keep their place in the code element.
+  await expect(body.locator('blockquote pre > code')).toContainText('const quoted = 1;');
+  expect(await body.locator('blockquote pre > code').evaluate((code) => code.textContent))
+    .toBe('const quoted = 1;\n\nconst later = 2;');
+  const text = await body.innerText();
+  for (const word of ['列表项', '引用段落', '父项', '子项', '深层引用', 'const quoted = 1;', 'const later = 2;']) {
+    expect(text.split(word).length - 1, `${word} appears once`).toBe(1);
+  }
+  expect(text.indexOf('列表项')).toBeLessThan(text.indexOf('引用段落'));
+  expect(text.indexOf('父项')).toBeLessThan(text.indexOf('子项'));
+  // Only the quote markers disappear together with the structure they belonged to.
+  expect(text).not.toContain('>');
+});
+
+test('live preview keeps every line of a quoted code block', async ({ page }) => {
+  const title = `即时引用围栏-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '> ```js', '> const quotedFirst = 1;', '>', '> const quotedSecond = 2;', '> ```', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // A fence continued across quote lines is one block whose body is every code line of the quote: the second
+  // line and the blank line before it keep their place instead of the first line being the only one rendered.
+  const code = page.locator('.cm-live-code code');
+  await expect(code).toHaveCount(1);
+  expect(await code.evaluate((element) => element.textContent)).toBe('const quotedFirst = 1;\n\nconst quotedSecond = 2;');
+});
+
+test('live preview keeps a recognised container inside a details list item as source', async ({ page }) => {
+  const title = `即时列表容器-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>列表容器正文</summary>', '',
+    '- 父项', '',
+    '  <section>', '',
+    '  **隐藏** 与 `代码`', '',
+    '  </section>', '',
+    '  容器外 **显示**', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  // The first paragraph of a list item goes through the same container judgement as every other block: a
+  // recognised container stays literal source there too, and only the Markdown outside it is decorated.
+  const body = page.locator('.cm-live-details-body');
+  await expect(body.locator('> ul > li')).toHaveCount(1);
+  await expect(body).toContainText('**隐藏**');
+  await expect(body).toContainText('`代码`');
+  await expect(body.locator('strong')).toHaveCount(1);
+  await expect(body.locator('strong')).toHaveText('显示');
+  await expect(body.locator('code')).toHaveCount(0);
+});
+
+test('live preview details body tasks keep their own source position', async ({ page }) => {
+  const title = `即时正文待办-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>', '<summary>正文待办</summary>', '',
+    '> - [ ] 引用待办', '',
+    '- [ ] 列表待办', '',
+    '- [] 简写待办', '',
+    '> - [] 引用简写', '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+  const marked = (source: string, line: string) => source.split('\n')
+    .map((text) => (text === line ? text.replace(/\[[ xX]?\]/, '[x]') : text)).join('\n');
+  const body = page.locator('.cm-live-details-body');
+  // A task inside a details body is a real checkbox, not the `[ ]` text of its marker. The `- []` shorthand is
+  // the same list-item rule the note plan applies, so it is a checkbox here too.
+  await expect(body.locator('.cm-live-task')).toHaveCount(4);
+
+  await page.getByRole('checkbox', { name: '待办事项：引用待办', exact: true }).check();
+  await expect.poll(stored).toBe(marked(content, '> - [ ] 引用待办'));
+  // One undo restores that one marker, so the write went through the same isolated task transaction.
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(content);
+
+  await page.getByRole('checkbox', { name: '待办事项：列表待办', exact: true }).check();
+  const listChecked = marked(content, '- [ ] 列表待办');
+  await expect.poll(stored).toBe(listChecked);
+
+  // `[]` is two characters and `[x]` three: the marker at the checkbox's own offset is the replaced one.
+  await page.getByRole('checkbox', { name: '待办事项：简写待办', exact: true }).check();
+  await expect.poll(stored).toBe(marked(listChecked, '- [] 简写待办'));
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(listChecked);
+
+  await page.getByRole('checkbox', { name: '待办事项：引用简写', exact: true }).check();
+  await expect.poll(stored).toBe(marked(listChecked, '> - [] 引用简写'));
+});
+
+test('live preview details body tasks keep the marker they show on a shared line', async ({ page }) => {
+  const title = `即时同行待办-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>',
+    '<summary>',
+    '- [ ] 标题任务</summary>- [ ] 正文任务',
+    '</details>',
+    '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+  const summary = page.locator('.cm-live-details summary');
+  // A summary that closes on a later line makes the body start mid-line: the title's own task is text, the body's
+  // second marker is the checkbox, and only the marker the checkbox shows may be written back.
+  await expect(summary).toHaveText('- [ ] 标题任务');
+  await expect(page.locator('.cm-live-details-body .cm-live-task')).toHaveCount(1);
+
+  await page.getByRole('checkbox', { name: '待办事项：正文任务', exact: true }).check();
+  await expect.poll(stored).toBe(content.replace('- [ ] 正文任务', '- [x] 正文任务'));
+  // The title in the summary is a byte-for-byte part of that same line.
+  await expect(summary).toHaveText('- [ ] 标题任务');
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(content);
+});
+
+test('live preview details body tasks write back when no marker precedes them on the line', async ({ page }) => {
+  const title = `即时同行无前置-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>',
+    '<summary>前情摘要</summary>- [ ] 无前置任务',
+    '</details>',
+    '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+  // The body slice starts right after `</summary>`, so its marker is the only task on that line. A rule that looks
+  // for a task at the start of the line cannot find it at all.
+  await expect(page.locator('.cm-live-details-body .cm-live-task')).toHaveCount(1);
+
+  await page.getByRole('checkbox', { name: '待办事项：无前置任务', exact: true }).check();
+  await expect.poll(stored).toBe(content.replace('- [ ] 无前置任务', '- [x] 无前置任务'));
+  await editor.press('Meta+z');
+  await expect.poll(stored).toBe(content);
+});
+
+test('live preview resolves angle-bracket targets before its whitelist', async ({ page }) => {
+  const fileId = randomUUID();
+  const uploaded = await page.request.put(`${origin}/api/files/${fileId}`, {
+    headers: { ...headers, 'Content-Type': 'text/plain', 'X-Filename': 'angle.txt' }, data: '尖括号附件正文',
+  });
+  expect(uploaded.status()).toBe(201);
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url: string) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return null;
+    }) as typeof window.open;
+  });
+  // The target is absolute because it carries a scheme; the test origin keeps the expectation exact.
+  const target = `${origin}/angle-target`;
+  const title = `即时尖括号目标-${randomUUID().slice(0, 6)}`;
+  const content = [
+    `[尖括号链接](<${target}>)`,
+    '',
+    '[危险尖括号](<javascript:alert(1)>)',
+    '',
+    `[尖括号附件](</api/files/${fileId}>)`,
+    '',
+    '<details open>',
+    '<summary>尖括号目标</summary>',
+    '',
+    `[正文尖括号](<${target}/body>)`,
+    '',
+    `[正文角附件](</api/files/${fileId}>)`,
+    '',
+    '</details>',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+
+  // `<…>` is Markdown syntax: the protocol check sees the target itself, so an absolute URL stays absolute.
+  const link = page.locator('a.cm-live-link', { hasText: '尖括号链接' });
+  await expect(link).toHaveAttribute('href', target);
+  await link.click();
+  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toContain(target);
+  // A dangerous scheme stays plain text even with the shell around it.
+  await expect(page.locator('a.cm-live-link', { hasText: '危险尖括号' })).toHaveCount(0);
+
+  // The same target in the safe DOM, and a private attachment that still reaches its own download action.
+  const bodyLink = page.locator('.cm-live-details-body a.cm-live-link', { hasText: '正文尖括号' });
+  await expect(bodyLink).toHaveAttribute('href', `${target}/body`);
+  await bodyLink.click();
+  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toContain(`${target}/body`);
+
+  const file = page.locator('.cm-live-details-body a.cm-live-link', { hasText: '正文角附件' });
+  await expect(file).toHaveAttribute('href', `/api/files/${fileId}`);
+  await expect(file).toHaveAttribute('data-live-action', 'file');
+  await expect(file).toHaveAttribute('data-file-id', fileId);
+  const download = page.waitForEvent('download');
+  await file.focus();
+  await page.keyboard.press('Enter');
+  await download;
+
+  // The plan's own link mark resolves the shell the same way.
+  const marked = page.locator('a.cm-live-link', { hasText: '尖括号附件' });
+  await expect(marked).toHaveAttribute('data-live-action', 'file');
+  await expect(marked).toHaveAttribute('href', `/api/files/${fileId}`);
+});
+
+test('live preview builds link labels from their inline nodes in the safe DOM', async ({ page }) => {
+  const title = `即时链接标签-${randomUUID().slice(0, 6)}`;
+  const target = 'https://example.com/label';
+  // The image target contains a `]` the parser accepts, so the label edges may not come from the node's end.
+  const imageTarget = '/asset]part';
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  const content = [
+    '| 链接 | 组合 |', '| --- | --- |',
+    '| [`x`](/relative/path) | [**强** ``y``](https://example.com/label) |', '',
+    '<details open>', '<summary>正文链接</summary>', '',
+    '[`正文代码`](/details/target)', '',
+    `[![图](${imageTarget})](/target)`,
+    '',
+    '</details>', '',
+    '结尾段落。', '',
+  ].join('\n');
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url: string) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return null;
+    }) as typeof window.open;
+  });
+  await page.goto('/');
+  await newNote(page, title, content);
+  // The label range of a link goes through the same inline construction as a paragraph, so code and emphasis
+  // inside it keep their structure instead of showing their delimiters.
+  const codeCell = page.locator('.cm-live-table td').nth(0);
+  await expect(codeCell.locator('a.cm-live-link')).toHaveText('x');
+  await expect(codeCell.locator('a.cm-live-link code')).toHaveText('x');
+  await expect(codeCell.locator('a.cm-live-link')).toHaveAttribute('href', '/relative/path');
+  await expect(codeCell.locator('a.cm-live-link')).toHaveAttribute('data-live-action', 'href');
+
+  const mixed = page.locator('.cm-live-table td').nth(1).locator('a.cm-live-link');
+  await expect(mixed).toHaveText('强 y');
+  await expect(mixed.locator('strong')).toHaveText('强');
+  await expect(mixed.locator('code')).toHaveText('y');
+  await expect(mixed).toHaveAttribute('href', target);
+
+  const bodyLink = page.locator('.cm-live-details-body a.cm-live-link', { hasText: '正文代码' });
+  await expect(bodyLink).toHaveText('正文代码');
+  await expect(bodyLink.locator('code')).toHaveText('正文代码');
+  await expect(bodyLink).toHaveAttribute('href', '/details/target');
+  await expect(bodyLink).toHaveAttribute('data-live-action', 'href');
+  // The unified action marker still reaches the link action through its new child nodes.
+  await bodyLink.click();
+  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toContain('/details/target');
+  await expect(page.locator('.cm-live-details > details')).toHaveCount(1);
+
+  // An image label ends at the `]` the parser closed it with; a `]` inside the image target stays in the target,
+  // so the visible text is the alt only and no image request is made.
+  const imageLabel = page.locator('.cm-live-details-body a.cm-live-link', { hasText: '图' });
+  await expect(imageLabel).toHaveText('图');
+  await expect(imageLabel).toHaveAttribute('href', '/target');
+  await expect(imageLabel).toHaveAttribute('data-live-action', 'href');
+  await expect(imageLabel.locator('img')).toHaveCount(0);
+  await imageLabel.click();
+  expect(await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened)).toContain('/target');
+  expect(requests.filter((url) => url.includes(imageTarget))).toEqual([]);
+});
+
+test('live preview fold state follows its block and survives rebuilds', async ({ page }) => {
+  const title = `即时折叠身份-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>',
+    '<summary>相同折叠</summary>',
+    '',
+    '相同正文',
+    '',
+    '</details>',
+    '',
+    '<details open>',
+    '<summary>外层折叠</summary>',
+    '',
+    '外层正文',
+    '',
+    '<details open>',
+    '<summary>内层折叠</summary>',
+    '',
+    '内层正文',
+    '',
+    '</details>',
+    '',
+    '</details>',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const first = page.locator('.cm-live-details details').filter({ hasText: '相同折叠' });
+  const outer = page.locator('.cm-live-details details').filter({ hasText: '外层折叠' });
+  const inner = page.locator('.cm-live-details-body details').first();
+
+  // Fold the first block, then insert text in front of it in source mode: the state belongs to the block, not
+  // to the offset it used to start at.
+  await first.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(first).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.locator('.cm-line').filter({ hasText: '<details open>' }).first().click({ position: { x: 4, y: 4 } });
+  await editor.press('Home');
+  await editor.press('Enter');
+  await editor.press('ArrowUp');
+  await editor.pressSequentially('intro');
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  // Source mode only mapped the plan; returning to live has to render the block the edit touched.
+  await expect(first).toBeVisible();
+  await expect(first).not.toHaveAttribute('open', '');
+
+  // A same-length replacement is a different block: it starts from its own source `open` instead of inheriting
+  // the previous state.
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.locator('.cm-line').filter({ hasText: '<summary>相同折叠</summary>' }).click();
+  await editor.press('Home');
+  for (let index = 0; index < 9; index++) await editor.press('ArrowRight');
+  for (let index = 0; index < 4; index++) await editor.press('Shift+ArrowRight');
+  await editor.pressSequentially('别的折叠');
+  await editor.press('Meta+End');
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  const replaced = page.locator('.cm-live-details details').filter({ hasText: '别的折叠' });
+  await expect(replaced).toHaveAttribute('open', '');
+
+  // A nested block keeps its own state across a rebuild and across an outer toggle.
+  await inner.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(inner).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(page.locator('.cm-live-details-body details').first()).not.toHaveAttribute('open', '');
+
+  // One focus, then consecutive Enter presses: an open/close updates the existing control in place, so the
+  // summary keeps the keyboard focus and the block can be toggled again without being re-focused by the test.
+  // Entering a mode hands the keyboard to the editor first, so wait for that before moving to the summary.
+  await expect(editor).toBeFocused();
+  const summary = outer.locator('summary').first();
+  // The marker only survives if the widget keeps its own DOM; a rebuild would drop it together with the focus.
+  await summary.evaluate((element) => { (element as HTMLElement).dataset.focusProbe = '1'; });
+  await summary.focus();
+  await expect(summary).toBeFocused();
+  for (const expected of [false, true, false]) {
+    await page.keyboard.press('Enter');
+    if (expected) await expect(outer).toHaveAttribute('open', '');
+    else await expect(outer).not.toHaveAttribute('open', '');
+    await expect(page.locator('.cm-live-details summary[data-focus-probe="1"]')).toHaveCount(1);
+    await expect(summary).toBeFocused();
+  }
+  // A nested block keeps its own state while its outer block opens and closes.
+  await expect(page.locator('.cm-live-details-body details').first()).not.toHaveAttribute('open', '');
+});
+
+test('live preview fold state belongs to the block at its own position', async ({ page }) => {
+  const title = `即时折叠位置-${randomUUID().slice(0, 6)}`;
+  const identical = ['<details open>', '<summary>相同折叠</summary>', '', '相同正文', '', '</details>', '', ''].join('\n');
+  const content = [
+    identical,
+    '<details open>', '<summary>外层折叠</summary>', '',
+    '<details open>', '<summary>相同内层</summary>', '', '内层正文', '', '</details>', '',
+    '<details open>', '<summary>相同内层</summary>', '', '内层正文', '', '</details>', '',
+    '</details>', '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const blocks = page.locator('.cm-live-details details').filter({ hasText: '相同折叠' });
+
+  // Fold the only identical block, then add a copy of it in front: the copy starts from its own `open` source
+  // and the folded state stays with the block that was folded, not with its content.
+  await blocks.first().locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(blocks.first()).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.locator('.cm-line').filter({ hasText: '<details open>' }).first().click({ position: { x: 4, y: 4 } });
+  await editor.press('Home');
+  // A real paste of the same block in front of it goes through CodeMirror's own input pipeline.
+  await page.evaluate((text) => {
+    const data = new DataTransfer();
+    data.setData('text/plain', text);
+    document.querySelector('.cm-content')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  }, identical);
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await page.locator('.cm-line').filter({ hasText: '结尾段落。' }).click();
+  await expect(blocks).toHaveCount(2);
+  await expect(blocks.nth(0)).toHaveAttribute('open', '');
+  await expect(blocks.nth(1)).not.toHaveAttribute('open', '');
+
+  // Two nested siblings with identical source keep separate state, here and across a rebuild.
+  const nested = page.locator('.cm-live-details-body details').filter({ hasText: '相同内层' });
+  await expect(nested).toHaveCount(2);
+  await nested.nth(0).locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(nested.nth(0)).not.toHaveAttribute('open', '');
+  await expect(nested.nth(1)).toHaveAttribute('open', '');
+  await nested.nth(1).locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(nested.nth(1)).not.toHaveAttribute('open', '');
+  await nested.nth(0).locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(nested.nth(0)).toHaveAttribute('open', '');
+  await expect(nested.nth(1)).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(nested.nth(0)).toHaveAttribute('open', '');
+  await expect(nested.nth(1)).not.toHaveAttribute('open', '');
+});
+
+test('live preview renders details after an edit above them returns from source mode', async ({ page }) => {
+  const title = `即时折叠恢复-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '<details open>',
+    '<summary>上方折叠</summary>',
+    '',
+    '折叠正文',
+    '',
+    '</details>',
+    '',
+    '结尾段落。',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const details = page.locator('.cm-live-details details').filter({ hasText: '上方折叠' });
+  await expect(details).toBeVisible();
+
+  // A source-mode insertion immediately above the opening tag accumulates in the mapped plan's dirty region.
+  await page.getByRole('button', { name: '源码模式' }).click();
+  await page.locator('.cm-line').filter({ hasText: '<details open>' }).click();
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await editor.press('Home');
+  await editor.press('Enter');
+  await editor.press('ArrowUp');
+  await editor.pressSequentially('intro');
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  await expect(details).toBeVisible();
+  await expect(details.locator('summary')).toHaveText('上方折叠');
+});
+
+test('live preview drag keeps every crossed block as source until the gesture ends', async ({ page }) => {
+  const title = `即时拖选-${randomUUID().slice(0, 6)}`;
+  const content = [
+    '起始段落',
+    '',
+    '| 甲 | 乙 |',
+    '| --- | --- |',
+    '| 值甲 | 值乙 |',
+    '',
+    '```js',
+    'const drag = 1;',
+    '```',
+    '',
+    '中间段落',
+    '',
+    '> 引用块',
+    '',
+    '结尾段落',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  await page.locator('.cm-line').filter({ hasText: '结尾段落' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+  const cell = (await page.locator('.cm-live-table td').first().boundingBox())!;
+  const code = (await page.locator('.cm-live-code pre').boundingBox())!;
+  const quote = (await page.locator('.cm-line').filter({ hasText: '引用块' }).boundingBox())!;
+
+  await page.mouse.move(cell.x + 6, cell.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(quote.x + 20, quote.y + quote.height / 2, { steps: 10 });
+  await expect(page.locator('.cm-live-table')).toHaveCount(0);
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  // Moving back over a block the gesture already crossed must not restore it before the pointer is released.
+  await page.mouse.move(cell.x + 6, cell.y + 6, { steps: 10 });
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('| 甲 | 乙 |');
+
+  // A reverse gesture selects the real Markdown all the way up to the first block.
+  await expect(page.locator('.cm-live-code pre')).toBeVisible();
+  const rendered = (await page.locator('.cm-live-code pre').boundingBox())!;
+  const paragraph = (await page.locator('.cm-line').filter({ hasText: '起始段落' }).boundingBox())!;
+  await page.mouse.move(rendered.x + 20, rendered.y + 10);
+  await page.mouse.down();
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await page.mouse.move(paragraph.x + 2, paragraph.y + 2, { steps: 10 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(selected.startsWith('起始段落')).toBe(true);
+  expect(selected).toContain('| 甲 | 乙 |');
+
+  // A forward gesture that ends below the block selects its real Markdown as well.
+  await page.locator('.cm-line').filter({ hasText: '起始段落' }).click();
+  await expect(page.locator('.cm-live-table')).toHaveCount(1);
+  const table = (await page.locator('.cm-live-table td').first().boundingBox())!;
+  const middle = (await page.locator('.cm-line').filter({ hasText: '中间段落' }).boundingBox())!;
+  await page.mouse.move(table.x + 6, table.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(middle.x + 30, middle.y + middle.height / 2, { steps: 10 });
+  await page.mouse.up();
+  const forward = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(forward).toContain('```js');
+  expect(forward).toContain('const drag = 1;');
+  expect(forward).toContain('中间段落');
+});
+
+test('live preview arrow keys respect wrapped lines and exposed blocks', async ({ page }) => {
+  const title = `即时方向键-${randomUUID().slice(0, 6)}`;
+  const marker = `mark-${randomUUID().slice(0, 8)}`;
+  const paragraph = `${'段落内容'.repeat(30)}末标记`;
+  const lines = (first: string, last = '```') => [
+    paragraph, first, `const first = 1; // ${marker}`, 'const second = 2;', last, '下面的段落',
+  ].join('\n');
+  await page.goto('/');
+  await newNote(page, title, lines('```js'));
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  const stored = async () => {
+    const listed = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return (await (await page.request.get(`/api/notes/${listed.notes[0].id}`)).json()).note.content as string;
+  };
+
+  // The paragraph is one logical line with several screen lines: the first ArrowDown must stay inside it.
+  await page.locator('.cm-line').filter({ hasText: '末标记' }).click({ position: { x: 4, y: 4 } });
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  for (let index = 0; index < 6 && await page.locator('.cm-live-code').count(); index++) {
+    await page.keyboard.press('ArrowDown');
+  }
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await page.keyboard.type('X');
+  // The caret really is inside the block source, not merely near the widget: the character lands on the fence.
+  await expect.poll(stored).toBe(lines('X```js'));
+  await page.keyboard.press('Meta+z');
+  await expect.poll(stored).toBe(lines('```js'));
+
+  // Coming from below, ArrowUp enters the block at its last line so its source can be walked upwards.
+  await page.locator('.cm-line').filter({ hasText: '下面的段落' }).click();
+  await page.keyboard.press('Home');
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.type('Y');
+  await expect.poll(stored).toBe(lines('```js', '```Y'));
+  await page.keyboard.press('Meta+z');
+  await expect.poll(stored).toBe(lines('```js'));
+
+  // Backspace next to a rendered block exposes its source instead of deleting the closing fence.
+  await page.locator('.cm-line').filter({ hasText: '下面的段落' }).click();
+  await page.keyboard.press('Home');
+  await expect(page.locator('.cm-live-code')).toHaveCount(1);
+  const before = await stored();
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  expect(await stored()).toBe(before);
+
+  // A block that a search hit already shows as source keeps the default keymap: Delete joins the line above
+  // instead of only moving the caret.
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill(marker);
+  await expect(page.locator('.cm-live-code')).toHaveCount(0);
+  await page.locator('.cm-line').filter({ hasText: '下面的段落' }).click();
+  await page.locator('.cm-line').filter({ hasText: '末标记' }).click({ position: { x: 4, y: 4 } });
+  await page.keyboard.press('End');
+  await page.keyboard.press('End');
+  const beforeDelete = await stored();
+  await page.keyboard.press('Delete');
+  await expect.poll(stored).toBe(beforeDelete.replace('末标记\nX```js', '末标记X```js'));
+});
+
+test('live preview keeps the visible source block when the caret is scrolled away', async ({ page }) => {
+  const title = `即时视口-${randomUUID().slice(0, 6)}`;
+  const content = Array.from({ length: 80 }, (_, index) => `第${index}段正文 ${'填充'.repeat(10)}`).join('\n\n');
+  await page.goto('/');
+  await newNote(page, title, content);
+  const editor = page.getByRole('textbox', { name: '笔记正文' });
+  await editor.click();
+  await editor.press('Meta+End');
+  const scroller = page.locator('.document-scroll');
+  await scroller.evaluate((element) => { element.scrollTop = 0; });
+  await page.waitForTimeout(50);
+  const containerTop = (await scroller.boundingBox())!.y;
+
+  // Reading starts at the source block that was visible, not at the caret's block at the end.
+  await page.getByRole('button', { name: '阅读模式' }).click();
+  const firstParagraph = page.locator('.markdown p[data-source-line]').first();
+  await expect(firstParagraph).toContainText('第0段正文');
+  await expect.poll(async () => ((await firstParagraph.boundingBox())?.y ?? 99999) - containerTop).toBeLessThan(160);
+
+  // Coming back to the editor restores the same source block near the top.
+  await page.getByRole('button', { name: '即时渲染模式' }).click();
+  const firstLine = page.locator('.cm-line').first();
+  await expect(firstLine).toContainText('第0段正文');
+  await expect.poll(async () => ((await firstLine.boundingBox())?.y ?? 99999) - containerTop).toBeLessThan(160);
+});
+
+test('live preview renders unopened math and highlighted code offline', async ({ page, context }) => {
+  const title = `即时离线-${randomUUID().slice(0, 6)}`;
+  const id = randomUUID();
+  const content = ['# 离线标题', '', '$$', '\\frac{a}{b} + c^2', '$$', '', '```js', 'const offline = 1;', '```', '', '结尾段落。'].join('\n');
+  // The note is created through the API, so neither the formula nor the code has ever been rendered here.
+  expect((await page.request.post(`${origin}/api/notes/${id}`, {
+    headers,
+    data: { title, content, tags: [], pinned: false, archived: false, deletedAt: null, revision: 0, operationId: randomUUID() },
+  })).status()).toBe(201);
+  await page.goto('/');
+  await page.getByRole('textbox', { name: '搜索笔记' }).fill(title);
+  await expect(page.locator('[data-note-row]').filter({ hasText: title })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await expect.poll(async () => !!(await storedOrderNote(page, id, 'notes'))).toBe(true);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('Network.clearBrowserCache');
+  await cdp.detach();
+  await context.setOffline(true);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('textbox', { name: '搜索笔记' }).fill(title);
+    await page.locator('[data-note-row]').filter({ hasText: title }).click();
+    await expect(page.locator('.cm-live-math-display math mfrac')).toHaveCount(1);
+    await expect(page.locator('.cm-live-code .hljs-keyword')).toHaveText('const');
+  } finally { await context.setOffline(false); }
+});
+
+test.describe('live preview with touch input', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test('a touch tap toggles details and opens the image lightbox', async ({ page }) => {
+    const title = `即时触摸-${randomUUID().slice(0, 6)}`;
+    const content = [
+      '<details open>',
+      '<summary>触摸折叠</summary>',
+      '',
+      '触摸正文',
+      '',
+      '</details>',
+      '',
+      '图片段落',
+    ].join('\n');
+    await page.goto('/');
+    await newNote(page, title, content);
+    const summary = page.locator('.cm-live-details summary');
+    await summary.tap();
+    await expect(page.locator('.cm-live-details details')).not.toHaveAttribute('open', '');
+    await summary.tap();
+    await expect(page.locator('.cm-live-details details')).toHaveAttribute('open', '');
+
+    const shot = await page.locator('.document').screenshot({ type: 'png' });
+    await page.locator('input[type=file][accept^="image"]').setInputFiles({ name: '触摸图片.png', mimeType: 'image/png', buffer: shot });
+    await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+    const image = page.locator('.cm-live-image-button img, .cm-live-inline-image img').first();
+    await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.complete && element.naturalWidth > 0)).toBe(true);
+    await page.locator('.cm-live-image-button, .cm-live-inline-image button').first().tap();
+    const lightbox = page.getByRole('dialog');
+    await expect(lightbox.getByRole('img', { name: '笔记图片' })).toBeVisible();
+    await lightbox.getByRole('button', { name: '关闭', exact: true }).click();
+  });
 });
 
 test('account security changes the password and logs out every device', async ({ page }) => {
