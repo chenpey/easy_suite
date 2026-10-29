@@ -153,6 +153,28 @@ EasyDrop 是一个基于 Cloudflare Workers 的文本与文件分享工具，使
 
 系统分享面板的可用性和更新时机由浏览器与操作系统控制，更新部署后可能需要重新打开一次 PWA。
 
+#### 分享面板里看不到 EasyDrop 时
+
+Android 的分享条目不是网页运行时能力：Chrome 在“安装应用”时把它写进生成的 WebAPK（一个真正的 Android 应用），之后只在 WebAPK 更新时刷新。因此站点刚加入或修改 `share_target`、或刚部署新版本时，分享面板可能暂时仍没有 EasyDrop；Chrome 对每个 WebAPK 的更新检查大约每天一次，并在后台异步安装。
+
+前提：必须用支持 Web Share Target 的 Chromium 浏览器（Chrome、Edge 等）通过“安装应用”安装，而不是“添加到主屏幕”生成的普通快捷方式；Firefox 和 iOS/Safari 不支持该能力。
+
+按以下顺序排查：
+
+1. 在手机浏览器打开 `<站点地址>/manifest.webmanifest`，确认内容里有 `"share_target"`。没有说明手机侧仍是旧缓存，或站点还没有部署带该字段的新版本。
+2. 确认装的是 WebAPK：长按图标应有“应用信息”，并且在 `chrome://webapks` 的列表里能看到 EasyDrop。只有普通快捷方式时不会注册分享目标。
+3. 用 Google 官方示例 `https://web-share-target-demo.glitch.me/` 在同一台设备上安装并分享一次。示例同样不出现在分享面板，说明该系统或 ROM 裁剪了 Web Share Target，与本应用无关。
+4. 彻底重铸 WebAPK（删除桌面图标不等于卸载）：设置 → 应用 → EasyDrop → 卸载；在 `chrome://webapks` 确认它已消失；用 Chrome 打开站点，菜单选择“安装应用”；从图标启动一次后再试分享。
+5. 仍然没有时，可用电脑配合 adb 确认系统是否登记了过滤器：
+
+   ```sh
+   adb shell cmd package query-activities --brief -a android.intent.action.SEND -t text/plain | grep -i easydrop
+   ```
+
+   若列不出 EasyDrop，说明 WebAPK 里没有分享过滤器，需要等 WebAPK 更新或重新安装。
+
+重新安装后需要重新登录，不需要清除站点数据；分享目标只影响系统分享面板，不影响站点其他功能。
+
 ## 架构与数据存储
 
 | 组件 | 职责 |

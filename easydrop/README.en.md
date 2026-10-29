@@ -153,6 +153,28 @@ Opening EasyDrop from a share only stages the content; nothing is saved automati
 
 Share-sheet availability and update timing are controlled by the browser and operating system, so a fresh deployment may require reopening the PWA once.
 
+#### When EasyDrop is missing from the share sheet
+
+The Android share entry is not a runtime web capability: Chrome writes it into the generated WebAPK (a real Android app) at "Install app" time, and only refreshes it when the WebAPK is updated. So right after `share_target` is added or changed, or right after a new deployment, the share sheet may still not list EasyDrop; Chrome checks each WebAPK for updates roughly once a day and installs them in the background.
+
+Prerequisite: install through a Chromium browser that supports Web Share Target (Chrome, Edge, and similar) using "Install app", not the plain shortcut created by "Add to Home screen". Firefox and iOS/Safari do not support this capability.
+
+Check in this order:
+
+1. Open `<site>/manifest.webmanifest` in the phone's browser and confirm it contains `"share_target"`. If it does not, the phone still has a cached copy or the site has not been deployed with the new field yet.
+2. Confirm the app really is a WebAPK: long-pressing the icon should offer "App info", and EasyDrop should be listed in `chrome://webapks`. A plain shortcut never registers a share target.
+3. Install Google's demo `https://web-share-target-demo.glitch.me/` on the same device and share once. If the demo is missing from the share sheet too, that system or ROM strips Web Share Target and the app is not at fault.
+4. Re-create the WebAPK properly (deleting the home-screen icon is not an uninstall): Settings → Apps → EasyDrop → Uninstall; confirm it is gone from `chrome://webapks`; open the site in Chrome and choose "Install app"; launch it once from the icon and try sharing again.
+5. If it is still missing, check from a computer with adb whether the system registered the filter:
+
+   ```sh
+   adb shell cmd package query-activities --brief -a android.intent.action.SEND -t text/plain | grep -i easydrop
+   ```
+
+   An empty result means the WebAPK carries no share filter, so it must be updated or reinstalled.
+
+Reinstalling requires signing in again; clearing site data is not needed, and the share target only affects the system share sheet, not the rest of the site.
+
 ## Architecture & Data Storage
 
 | Component | Responsibility |
