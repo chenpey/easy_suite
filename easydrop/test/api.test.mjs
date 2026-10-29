@@ -1175,3 +1175,82 @@ test("failed operations can be atomically retried while pending operations remai
   assert.equal((await send()).status, 200);
   assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM items").first()).n, 1);
 });
+
+test("share target fallback returns the bilingual page without authentication or CSRF", async () => {
+  const responses = [
+    await mf.dispatchFetch(`${origin}/share-target`, { method: "POST" }),
+    await mf.dispatchFetch(`${origin}/share-target`, { method: "POST", headers: { Origin: "https://192.0.2.10:9" } }),
+  ];
+  await signIn();
+  responses.push(await request("/share-target", { method: "POST", headers: { Cookie: cookie } }));
+  for (const response of responses) {
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("Content-Type"), /^text\/html; charset=utf-8$/);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.equal(response.headers.get("Set-Cookie"), null);
+    assert.match(response.headers.get("Content-Security-Policy"), /frame-ancestors 'none'/);
+    const body = await response.text();
+    assert.match(body, /无法接收分享/);
+    assert.match(body, /Unable to receive share/);
+    assert.match(body, /href="\/"/);
+    assert.doesNotMatch(body, /<script/i);
+    assert.doesNotMatch(body, /\{\{/);
+  }
+});
+
+test("share target fallback never reads or stores its body", async () => {
+  const sentinel = "SHARE-TARGET-SENTINEL";
+  const encoder = new TextEncoder();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`--boundary\r\nContent-Disposition: form-data; name="text"\r\n\r\n${sentinel}\r\n--boundary--\r\n`));
+    },
+  });
+  let timer;
+  try {
+    const response = await Promise.race([
+      mf.dispatchFetch(`${origin}/share-target`, {
+        method: "POST", body, duplex: "half",
+        headers: { "Content-Type": "multipart/form-data; boundary=boundary" },
+      }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("fallback waited for the request body")), 5000); }),
+    ]);
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(await response.text(), new RegExp(sentinel));
+    for (const table of ["items", "operations", "multipart_uploads"]) {
+      assert.equal((await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()).n, 0, table);
+    }
+    assert.deepEqual((await bucket.list()).objects, []);
+  } finally {
+    clearTimeout(timer);
+    await body.cancel().catch(() => undefined);
+  }
+});
+
+test("share target fallback leaves authorization and private assets unchanged", async () => {
+  assert.equal((await jsonRequest("/api/text", { text: "unauthorized" })).status, 401);
+  assert.equal((await mf.dispatchFetch(`${origin}/share-target-fallback.html`)).status, 401);
+  assert.equal((await mf.dispatchFetch(`${origin}/share-target`)).status, 401);
+  await signIn();
+  assert.equal((await jsonRequest("/api/text", { text: "no csrf" }, false, { Cookie: cookie })).status, 403);
+  assert.equal((await request("/share-target-fallback.html", { authenticated: true })).status, 404);
+  const get = await request("/share-target", { authenticated: true });
+  assert.equal(get.status, 404);
+  assert.equal(get.headers.get("Cache-Control"), "no-store");
+});
+
+test("share target fallback ignores conditional request headers", async () => {
+  const first = await mf.dispatchFetch(`${origin}/share-target`, { method: "POST" });
+  const firstBody = await first.text();
+  assert.equal(first.status, 200);
+  assert.ok(firstBody.length > 0);
+  const etag = first.headers.get("ETag");
+  assert.ok(etag, "the fallback page must carry an ETag for this regression");
+  const second = await mf.dispatchFetch(`${origin}/share-target`, {
+    method: "POST", headers: etag ? { "If-None-Match": etag } : {},
+  });
+  assert.equal(second.status, 200);
+  assert.equal(second.headers.get("Cache-Control"), "no-store");
+  assert.equal(second.headers.get("Set-Cookie"), null);
+  assert.equal(await second.text(), firstBody);
+});

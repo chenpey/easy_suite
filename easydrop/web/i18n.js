@@ -193,6 +193,15 @@ export const zh = {
   pasted_clipboard_text: "已将剪贴板内容填入文本框",
   pagination_page: "第{0}/{1}页",
   files_count: "{0} 个文件",
+  // 系统分享接收
+  share_target_received: "已接收分享，请确认内容后点击「分享文本」或「继续上传」保存。",
+  share_target_expired: "分享内容已过期（有效期为 10 分钟），请从来源应用重新分享。",
+  share_target_text_too_large: "分享文本超过当前大小上限，已保留在输入框中，请编辑后提交。",
+  share_target_busy: "当前文本或文件操作尚未结束，未替换现有内容。请操作完成后从来源应用重新分享。",
+  share_target_fallback_title: "无法接收分享",
+  share_target_fallback_body: "此次分享未能接收。请确认已安装并打开过 EasyDrop PWA，且浏览器存储可用，然后通过系统分享面板重试。",
+  share_target_fallback_manual: "也可以打开 EasyDrop，手动粘贴文本或选择文件。iOS/Safari 不支持系统分享接收。",
+  share_target_fallback_open: "打开 EasyDrop",
 };
 
 export const en = {
@@ -388,6 +397,15 @@ export const en = {
   pasted_clipboard_text: "Pasted clipboard text into input",
   pagination_page: "Page {0}/{1}",
   files_count: "{0} files",
+  // System share receiving
+  share_target_received: "Share received. Review the content, then choose Share text or Resume upload to save it.",
+  share_target_expired: "This share expired after 10 minutes. Please share it again from the source app.",
+  share_target_text_too_large: "The shared text exceeds the current size limit. It remains in the input box; edit it before submitting.",
+  share_target_busy: "A text or file operation is still in progress, so the current content was kept. Share again from the source app after it finishes.",
+  share_target_fallback_title: "Unable to receive share",
+  share_target_fallback_body: "This share could not be received. Make sure EasyDrop is installed, has been opened as a PWA, and browser storage is available, then try again through the system share sheet.",
+  share_target_fallback_manual: "You can also open EasyDrop and paste text or select files manually. iOS/Safari does not support receiving system shares.",
+  share_target_fallback_open: "Open EasyDrop",
 };
 
 const dictionaries = { zh, en };

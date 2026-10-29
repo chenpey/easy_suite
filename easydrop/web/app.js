@@ -1,6 +1,7 @@
 import { createIcons, LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image as ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound, Globe, ChevronDown } from "lucide";
 import QRCode from "qrcode";
 import { t, uiLanguage, dateLocale, setLanguage, renderStaticI18n } from "./i18n.js";
+import { claimPendingShare } from "./share-target-store.js";
 
 const icons = { LogIn, LogOut, QrCode, Text, Files, FileUp, Send, Download, Pause, Play, RefreshCw, Trash2, X, Copy, Eye, EyeOff, Check, Image: ImageIcon, FileText, Users, UserPlus, Pencil, UserCheck, UserX, Share2, Unlink, KeyRound, UserRound, Globe, ChevronDown };
 const APP_VERSION = __EASYDROP_VERSION__;
@@ -1294,7 +1295,7 @@ async function initializeApp() {
   $("clear").disabled = false;
   updateUploadControls();
 
-  const enqueueFiles = (files) => {
+  const enqueueFiles = (files, { autoStart = true } = {}) => {
     if (!files || !files.length || uploading) return false;
     $("upload-list").replaceChildren();
     const records = savedUploads();
@@ -1307,8 +1308,46 @@ async function initializeApp() {
       return makeUploadRow(file, saved);
     });
     updateUploadControls();
-    if (uploadQueue.length) void startUpload();
+    if (autoStart && uploadQueue.length) void startUpload();
     return uploadQueue.length > 0;
+  };
+
+  // A received system share is only staged: the text is filled in and files wait
+  // in the upload queue until the user confirms with the existing buttons.
+  const stageSharedContent = async () => {
+    let shared;
+    try {
+      shared = await claimPendingShare();
+    } catch {
+      notice(t("share_target_fallback_body"), true);
+      return;
+    }
+    if (shared.status === "empty" || shared.status === "silent") return;
+    if (shared.status === "expired") {
+      notice(t("share_target_expired"), true);
+      return;
+    }
+    if (shared.status !== "ready") {
+      notice(t("share_target_fallback_body"), true);
+      return;
+    }
+    if (textSubmitting || uploading) {
+      notice(t("share_target_busy"), true);
+      return;
+    }
+    if (shared.text) {
+      $("text-input").value = shared.text;
+      updateCount();
+    }
+    if (shared.files.length) {
+      enqueueFiles(shared.files.map((file) => new File([file.blob], file.name, {
+        type: file.type,
+        lastModified: file.lastModified,
+      })), { autoStart: false });
+    }
+    const oversized = shared.text && new TextEncoder().encode(shared.text).length > session.maxTextBytes;
+    if (oversized) notice(`${t("share_target_received")} ${t("share_target_text_too_large")}`, true);
+    else notice(t("share_target_received"), false, 0);
   };
 
   $("text-form").addEventListener("submit", async (event) => {
@@ -1652,6 +1691,7 @@ async function initializeApp() {
   renderHistory(bootstrap.history);
   notice("");
   schedulePoll();
+  await stageSharedContent();
 }
 
 renderIcons();

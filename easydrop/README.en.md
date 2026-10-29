@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.3.1`
+Current Version: `1.4.0`
 
 EasyDrop is a text and file sharing tool built on Cloudflare Workers, using username and password authentication, a D1 database, and private R2 object storage. Once deployed, computers, phones, and tablets can exchange content across networks via a single HTTPS address.
 
@@ -134,7 +134,24 @@ Hovering or focusing the header QR button displays the site QR code and full URL
 
 Scanning requires standard login. The interface is responsive for desktop and mobile widths, supporting long filename wrapping. For local preview (`127.0.0.1`), the QR code represents the local host only and cannot be accessed from external mobile devices; cross-device use requires deployment to an HTTPS domain.
 
-Includes Web App Manifest, Android maskable icons, Apple Touch Icon, and a Service Worker for standalone window installation. JS/CSS files use content-hashed filenames; the Service Worker caches public assets without intercepting navigation, API, downloads, or user data. Session cookies use `SameSite=Lax`.
+Includes Web App Manifest, Android maskable icons, Apple Touch Icon, and a Service Worker for standalone window installation. JS/CSS files use content-hashed filenames; the Service Worker caches public assets and, apart from the share submission described below, does not intercept navigation, API, downloads, or user data. Session cookies use `SameSite=Lax`.
+
+### Receiving System Shares (Android)
+
+The site declares a Web Share Target, so after installing EasyDrop as a PWA on Android and opening it at least once, EasyDrop appears in the system share sheet. The entry point does not distinguish source apps: browsers, galleries, file managers, notes, and others can share text, links, one or more files, or a mix. iOS/Safari does not support this capability; there is no iOS-specific implementation and existing pages are unaffected.
+
+Opening EasyDrop from a share only stages the content; nothing is saved automatically:
+
+- Title, text, and URL are joined with newlines in that order and filled into the text box; files wait in upload order in the pending queue and do not start uploading.
+- One tap on “Share Text” or “Resume Upload” is required to save. A mixed share confirms each part separately, and tapping one never saves the other. A forged web form or script submission can therefore at most stage content in the editor; it cannot trigger an automatic save, automatic upload, or new server record.
+- The share is staged locally in the browser (a single IndexedDB slot) for at most 10 minutes. If signed out, sign in and the staged share is still available; only then does it wait for confirmation. Nothing is sent to the server, no server-side staging is added, and the payload never enters the Service Worker static cache.
+- Only one share that has not yet been picked up by a page is kept: sharing again replaces staging that has not been received yet (a draft already filled into a page is unaffected). Any signed-in page may claim it when it opens.
+- Unavailable browser storage, an unreadable submission, or a request that does not meet the receive conditions returns a self-contained bilingual explanation page instead of a browser error page or a JSON error.
+- Content above the current text or per-file limit follows the existing rules: text stays in the input box with an editing hint, and files report the failure reason after upload is confirmed.
+- Staged content counts against the browser's local quota. Clearing site data or browser storage cleanup discards an unconfirmed share without an extra warning, so share it again from the source app. Refreshing or closing the page before confirming can also lose the unconfirmed draft and pending list.
+- If the device happens to be offline right after a share is staged, the home page cannot load and the browser may show its own network error page. The content is still local; reopen the site within 10 minutes once the network returns.
+
+Share-sheet availability and update timing are controlled by the browser and operating system, so a fresh deployment may require reopening the PWA once.
 
 ## Architecture & Data Storage
 
@@ -353,6 +370,7 @@ All APIs share origin with the frontend. "Write validation" requires session coo
 | --- | --- | --- | --- |
 | `GET` / `HEAD` | `/`, `/index.html` | None | Application shell |
 | `GET` / `HEAD` | `/login`, `/register`, `/reset-password` | None | Auth pages |
+| `POST` | `/share-target` | None | Android system-share fallback: returns the fixed bilingual page when no Service Worker handles the share; never reads the body or stores content |
 | `GET` | `/api/auth/config` | None | Registration availability check |
 | `POST` | `/api/login` | Same-origin | Authenticate and set session cookie |
 | `POST` | `/api/register` | Same-origin | Register pending user and return recovery code |
@@ -401,6 +419,13 @@ All APIs share origin with the frontend. "Write validation" requires session coo
 | `deploy.sh` | One-command interactive deployment script |
 
 ## Release Notes
+
+### v1.4.0
+
+- Add Android PWA system-share receiving: once installed and opened, any app (browser, gallery, file manager, notes, and others) can share text, links, one or more files, or a mix into EasyDrop through the system share sheet.
+- A share only fills the text box and pending upload queue; one tap on “Share Text” or “Resume Upload” saves it. The two confirmations are independent, and a forged submission cannot cause an automatic save or upload.
+- A single local slot stages the share for 10 minutes, survives signing in afterwards, and is claimed only once across tabs; expiry shows an in-page notice, while storage failures and unreadable submissions use the same offline bilingual explanation page.
+- No server-side staging, new dependencies, database migrations, or authentication changes; iOS/Safari does not support receiving system shares and the added manifest member is inert there.
 
 ### v1.3.1
 

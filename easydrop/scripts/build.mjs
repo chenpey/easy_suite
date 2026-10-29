@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { en, zh } from "../web/i18n.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const { version } = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
@@ -30,6 +31,23 @@ for (const page of ["index.html", "login.html"]) {
   await writeFile(`${root}/dist/${page}`, html);
 }
 
+// The same self-contained page explains every rejected or failed share, both
+// from the service worker (inlined) and from the Worker fallback (served as an
+// asset), so the wording lives in web/i18n.js only. It is intentionally absent
+// from the service worker's static cache and from publicAssets.
+const escapeHtml = (value) => value
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+const fallbackTemplate = await readFile(`${root}/web/share-target-fallback.html`, "utf8");
+const shareFallbackHtml = fallbackTemplate.replace(/\{\{([a-z0-9_]+)_(zh|en)\}\}/g, (match, key, language) => {
+  const dictionary = language === "zh" ? zh : en;
+  if (typeof dictionary[key] !== "string") throw new Error(`Unknown share fallback placeholder ${key}.`);
+  return escapeHtml(dictionary[key]);
+});
+if (/\{\{[^}]*\}\}/.test(shareFallbackHtml)) {
+  throw new Error("Share target fallback page contains an unresolved placeholder.");
+}
+await writeFile(`${root}/dist/share-target-fallback.html`, shareFallbackHtml);
+
 const staticAssets = [
   appAsset,
   styleAsset,
@@ -40,10 +58,18 @@ const staticAssets = [
   "/pwa-512x512.png",
   "/pwa-maskable-512x512.png",
 ];
-const serviceWorker = (await readFile(`${root}/web/sw.js`, "utf8"))
-  .replace("__EASYDROP_CACHE_NAME__", `easydrop-static-v${version}`)
-  .replace("/* __EASYDROP_STATIC_ASSETS__ */ []", JSON.stringify(staticAssets, null, 2));
-await writeFile(`${root}/dist/sw.js`, serviceWorker);
+const serviceWorker = await build({
+  entryPoints: [`${root}/web/sw.js`],
+  bundle: true, minify: true, format: "iife", target: "es2022", write: false,
+  define: {
+    __EASYDROP_CACHE_NAME__: JSON.stringify(`easydrop-static-v${version}`),
+    __EASYDROP_STATIC_ASSETS__: JSON.stringify(staticAssets),
+    __EASYDROP_SHARE_FALLBACK_HTML__: JSON.stringify(shareFallbackHtml),
+  },
+});
+const workerScript = serviceWorker.outputFiles[0]?.contents;
+if (!workerScript) throw new Error("EasyDrop service worker was not generated.");
+await writeFile(`${root}/dist/sw.js`, workerScript);
 
 await copyFile(`${root}/web/favicon.svg`, `${root}/dist/favicon.svg`);
 for (const file of [

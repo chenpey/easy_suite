@@ -9,7 +9,7 @@ Easy Suite 是一个多项目仓库，包含文件分享、笔记、Mac 迁移�
 <!-- versions:start -->
 | 项目 | 当前版本 |
 | --- | --- |
-| [EasyDrop](easydrop/) | `1.3.1` |
+| [EasyDrop](easydrop/) | `1.4.0` |
 | [EasyNote](easynote/) | `1.5.0` |
 | [EasyMac](easymac/) | `0.4.5` |
 | [EasyTest](easytest/) | `0.4.1` |

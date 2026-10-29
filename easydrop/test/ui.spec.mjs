@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import { build } from "esbuild";
 import { createPreview } from "../scripts/preview.mjs";
 
 let preview;
@@ -30,7 +31,8 @@ test("PWA metadata, icons and public-only service worker cache work", async ({ p
   const manifestResponse = await page.request.get(`${preview.url}/manifest.webmanifest`);
   expect(manifestResponse.status()).toBe(200);
   expect(manifestResponse.headers()["content-type"]).toContain("manifest+json");
-  expect(await manifestResponse.json()).toMatchObject({
+  const manifest = await manifestResponse.json();
+  expect(manifest).toMatchObject({
     id: "/",
     name: "EasyDrop",
     start_url: "/",
@@ -38,6 +40,17 @@ test("PWA metadata, icons and public-only service worker cache work", async ({ p
     display: "standalone",
     theme_color: "#0071e3",
     background_color: "#f5f5f7",
+  });
+  expect(manifest.share_target).toEqual({
+    action: "/share-target",
+    method: "POST",
+    enctype: "multipart/form-data",
+    params: {
+      title: "title",
+      text: "text",
+      url: "url",
+      files: [{ name: "files", accept: ["*/*"] }],
+    },
   });
   for (const path of [
     "/pwa-192x192.png",
@@ -71,6 +84,7 @@ test("PWA metadata, icons and public-only service worker cache work", async ({ p
   const hashedAssets = cachedPaths.filter((path) => /^\/assets\/(?:app|style)-[a-f0-9]{12}\.(?:js|css)$/.test(path));
   expect(hashedAssets).toHaveLength(2);
   expect(cachedPaths.some((path) => path.startsWith("/api/"))).toBe(false);
+  expect(cachedPaths.some((path) => path.includes("share-target"))).toBe(false);
   expect(cachedPaths.some((path) => ["/", "/index.html", "/login"].includes(path))).toBe(false);
   await context.setOffline(true);
   try {
@@ -1028,4 +1042,397 @@ test("thirteen records show the total count and two pages", async ({ page, conte
   await expect(page.locator("#history-count")).toHaveText("13");
   await expect(page.locator("#history-page")).toHaveText("第2/2页");
   await expect(page.locator(".history-item")).toHaveCount(3);
+});
+
+
+async function controlledPage(page) {
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) await page.reload();
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+}
+
+async function submitShareForm(page, { title = "", text = "", url = "", files = [], enctype = "multipart/form-data" } = {}) {
+  await page.evaluate((payload) => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.enctype = payload.enctype;
+    form.action = "/share-target";
+    for (const name of ["title", "text", "url"]) {
+      if (!payload[name]) continue;
+      const input = document.createElement("input");
+      input.name = name;
+      input.value = payload[name];
+      form.append(input);
+    }
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.name = "files";
+    fileInput.multiple = true;
+    form.append(fileInput);
+    document.body.append(form);
+    const transfer = new DataTransfer();
+    for (const file of payload.files) transfer.items.add(new File([file.bytes], file.name, { type: file.type }));
+    fileInput.files = transfer.files;
+    form.submit();
+  }, { title, text, url, files, enctype }).catch(() => undefined);
+}
+
+function trackContentWrites(page) {
+  const writes = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (/^\/api\/(?:text|uploads)(?:\/|$)/.test(path)) writes.push(`${request.method()} ${path}`);
+  });
+  return writes;
+}
+
+async function writePendingShare(page, record) {
+  await page.evaluate(async (value) => {
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open("easydrop-share-target", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("shares");
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction("shares", "readwrite");
+        transaction.objectStore("shares").put(value, "pending");
+        transaction.oncomplete = () => { db.close(); resolve(); };
+        transaction.onerror = () => { db.close(); reject(transaction.error); };
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }, record);
+}
+
+async function readPendingShare(page) {
+  return page.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("easydrop-share-target", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("shares");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const value = await new Promise((resolve, reject) => {
+      const transaction = db.transaction("shares", "readonly");
+      const request = transaction.objectStore("shares").get("pending");
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return value;
+  });
+}
+
+test("share target stages text and files until separate user confirmations", async ({ page, context }) => {
+  await loginContext(context);
+  const writes = trackContentWrites(page);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const shareResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === "/share-target" && response.request().method() === "POST");
+  await submitShareForm(page, {
+    title: "shared title",
+    text: "shared body",
+    url: "https://127.0.0.1:9/path",
+    files: [
+      { name: "alpha.txt", type: "text/plain", bytes: "alpha" },
+      { name: "binary.bin", type: "", bytes: new Uint8Array([1, 2, 3]) },
+    ],
+  });
+  const staged = await shareResponse;
+  expect(staged.status()).toBe(303);
+  expect(staged.headers()["location"]).toBe("/");
+  expect(staged.headers()["cache-control"]).toBe("no-store");
+  expect(staged.fromServiceWorker()).toBe(true);
+  await expect(page).toHaveURL(`${preview.url}/`);
+  expect(page.url()).toBe(`${preview.url}/`);
+  await expect(page.locator("#text-input")).toHaveValue("shared title\nshared body\nhttps://127.0.0.1:9/path");
+  await expect(page.locator("#notice")).toHaveText("已接收分享，请确认内容后点击「分享文本」或「继续上传」保存。");
+  await expect(page.locator("#upload-list > li")).toHaveCount(2);
+  expect(await page.locator("#upload-list > li .upload-name").allTextContents()).toEqual([
+    expect.stringContaining("alpha.txt"),
+    expect.stringContaining("binary.bin"),
+  ]);
+  await expect(page.locator("#upload")).toBeVisible();
+  await expect(page.locator("#upload")).toHaveText("继续上传");
+  await expect(page.locator(".history-item")).toHaveCount(0);
+  expect(writes).toEqual([]);
+
+  await page.locator("#text-form button[type=submit]").click();
+  await expect(page.locator(".history-item")).toHaveCount(1);
+  await expect(page.locator(".history-item")).toContainText("shared body");
+  expect(writes).toEqual(["POST /api/text"]);
+
+  await page.locator("#upload").click();
+  await expect(page.locator(".history-item")).toHaveCount(3);
+  await expect(page.locator(".history-item").filter({ hasText: "alpha.txt" })).toHaveCount(1);
+  await expect(page.locator(".history-item").filter({ hasText: "binary.bin" })).toHaveCount(1);
+  expect(writes.filter((entry) => entry === "POST /api/text")).toHaveLength(1);
+  expect(writes.some((entry) => entry.startsWith("POST /api/uploads"))).toBe(true);
+  const alphaId = await page.locator(".history-item").filter({ hasText: "alpha.txt" }).getAttribute("data-id");
+  const alpha = await context.request.get(`${preview.url}/uploads/${alphaId}/alpha.txt`);
+  expect(alpha.status()).toBe(200);
+  expect(await alpha.text()).toBe("alpha");
+  const binaryId = await page.locator(".history-item").filter({ hasText: "binary.bin" }).getAttribute("data-id");
+  const binary = await context.request.get(`${preview.url}/uploads/${binaryId}/binary.bin`);
+  expect(binary.status()).toBe(200);
+  expect([...new Uint8Array(await binary.body())]).toEqual([1, 2, 3]);
+});
+
+test("share target keeps oversized text editable instead of submitting it", async ({ page, context }) => {
+  await loginContext(context);
+  const writes = trackContentWrites(page);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const oversized = "分享".repeat(40000);
+  await submitShareForm(page, { text: oversized });
+  await expect(page.locator("#text-input")).toHaveValue(oversized);
+  await expect(page.locator("#text-form button[type=submit]")).toBeDisabled();
+  await expect(page.locator("#notice")).toContainText("超过当前大小上限");
+  expect(writes).toEqual([]);
+});
+
+test("share target allows file confirmation without submitting shared text", async ({ page, context }) => {
+  await loginContext(context);
+  const writes = trackContentWrites(page);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await submitShareForm(page, { text: "keep me unsent", files: [{ name: "only.bin", type: "application/octet-stream", bytes: "payload" }] });
+  await expect(page.locator("#text-input")).toHaveValue("keep me unsent");
+  await page.locator("#upload").click();
+  await expect(page.locator(".history-item")).toHaveCount(1);
+  await expect(page.locator(".history-item")).toContainText("only.bin");
+  await expect(page.locator("#text-input")).toHaveValue("keep me unsent");
+  expect(writes.some((entry) => entry === "POST /api/text")).toBe(false);
+});
+
+test("share target stages loopback cross-site form content without saving", async ({ page, context }) => {
+  await loginContext(context);
+  const writes = trackContentWrites(page);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const attacker = new URL(preview.url);
+  attacker.hostname = "localhost";
+  await page.route(`${attacker.origin}/share`, (route) => route.fulfill({
+    contentType: "text/html",
+    body: `<form id="planted" method="post" enctype="multipart/form-data" action="${preview.url}/share-target"><input name="text" value="planted text"></form>`,
+  }));
+  await page.goto(`${attacker.origin}/share`);
+  await page.evaluate(() => document.getElementById("planted").submit()).catch(() => undefined);
+  await expect(page.locator("#text-input")).toHaveValue("planted text");
+  await expect(page.locator("#notice")).toContainText("已接收分享");
+  await expect(page.locator(".history-item")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("share target survives sign-out and waits for confirmation after login", async ({ page, context }) => {
+  const headers = await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const writes = trackContentWrites(page);
+  await context.request.post(`${preview.url}/api/logout`, { headers });
+  await page.goto(`${preview.url}/login`);
+  await submitShareForm(page, { text: "after login" });
+  await expect(page).toHaveURL(`${preview.url}/login`);
+  await expect(page.locator("#text-input")).toHaveCount(0);
+  expect(writes).toEqual([]);
+
+  await context.request.post(`${preview.url}/api/login`, {
+    headers: { Origin: preview.url },
+    data: { username: preview.username, password: preview.password },
+  });
+  await page.goto(preview.url);
+  await expect(page.locator("#text-input")).toHaveValue("after login");
+  await expect(page.locator("#notice")).toContainText("已接收分享");
+  expect(writes).toEqual([]);
+  await page.locator("#text-form button[type=submit]").click();
+  await expect(page.locator(".history-item")).toHaveCount(1);
+});
+
+test("share target claims a slot only once across tabs and reloads", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const second = await context.newPage();
+  try {
+    await second.goto(preview.url);
+    await controlledPage(second);
+    await writePendingShare(page, {
+      state: "pending", createdAt: Date.now(), expiresAt: Date.now() + 600000,
+      title: "", text: "single claim", url: "", files: [],
+    });
+    await Promise.all([page.reload(), second.reload()]);
+    await expect.poll(async () => (await page.locator("#text-input").inputValue()) + (await second.locator("#text-input").inputValue()))
+      .toBe("single claim");
+    await page.reload();
+    await expect(page.locator("#text-input")).toHaveValue("");
+  } finally {
+    await second.close();
+  }
+});
+
+test("share target reads the clock inside the storage transaction", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  const bundled = await build({
+    entryPoints: ["web/share-target-store.js"], bundle: true, format: "iife",
+    globalName: "easydropShareStore", target: "es2022", write: false,
+  });
+  await page.evaluate(bundled.outputFiles[0].text);
+  const observed = await page.evaluate(async () => {
+    const store = window.easydropShareStore;
+    const now = Date.now();
+    await store.savePendingShare({
+      state: "pending", createdAt: now, expiresAt: now + 600000,
+      title: "", text: "timing", url: "", files: [],
+    });
+    const realGet = IDBObjectStore.prototype.get;
+    let getSucceeded = false;
+    IDBObjectStore.prototype.get = function patchedGet(...args) {
+      const request = realGet.apply(this, args);
+      request.addEventListener("success", () => { if (args[0] === "pending") getSucceeded = true; });
+      return request;
+    };
+    try {
+      let clockReadAfterSuccess = null;
+      const ready = await store.claimPendingShare(() => {
+        clockReadAfterSuccess = getSucceeded;
+        return Date.now();
+      });
+      await store.savePendingShare({
+        state: "pending", createdAt: now, expiresAt: now + 600000,
+        title: "", text: "late", url: "", files: [],
+      });
+      const expired = await store.claimPendingShare(() => Date.now() + 700000);
+      return {
+        clockReadAfterSuccess,
+        readyStatus: ready.status,
+        readyText: ready.text,
+        expiredStatus: expired.status,
+        expiredText: expired.text,
+      };
+    } finally {
+      IDBObjectStore.prototype.get = realGet;
+    }
+  });
+  expect(observed.clockReadAfterSuccess).toBe(true);
+  expect(observed.readyStatus).toBe("ready");
+  expect(observed.readyText).toBe("timing");
+  expect(observed.expiredStatus).toBe("expired");
+  expect(observed.expiredText).toBeUndefined();
+});
+
+test("share target reports expiry once and keeps an empty inbox silent", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const writes = trackContentWrites(page);
+  await writePendingShare(page, {
+    state: "pending", createdAt: Date.now() - 700000, expiresAt: Date.now() - 100000,
+    title: "", text: "expired share", url: "", files: [],
+  });
+  await page.reload();
+  await expect(page.locator("#notice")).toHaveText("分享内容已过期（有效期为 10 分钟），请从来源应用重新分享。");
+  await expect(page.locator("#text-input")).toHaveValue("");
+  const tombstone = await readPendingShare(page);
+  expect(tombstone).toMatchObject({ state: "expired", notified: true });
+  expect(tombstone.text).toBeUndefined();
+  await page.reload();
+  await expect(page.locator("#notice")).toHaveText("");
+  await expect(page.locator("#text-input")).toHaveValue("");
+  expect(writes).toEqual([]);
+});
+
+test("share target reports expiry in English when the interface is English", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await page.evaluate(() => localStorage.setItem("easydrop-language", "en"));
+  await writePendingShare(page, {
+    state: "pending", createdAt: Date.now() - 700000, expiresAt: Date.now() - 100000,
+    title: "", text: "expired share", url: "", files: [],
+  });
+  await page.reload();
+  await expect(page.locator("#notice")).toHaveText("This share expired after 10 minutes. Please share it again from the source app.");
+  await expect(page.locator("#text-input")).toHaveValue("");
+});
+
+test("share target rejects unreadable and non-navigating submissions with the fallback page", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await submitShareForm(page, { text: "plain text enctype", enctype: "text/plain" });
+  await expect(page.locator("body")).toContainText("无法接收分享");
+  await expect(page.locator("body")).toContainText("Unable to receive share");
+  expect(await readPendingShare(page)).toBeNull();
+
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await submitShareForm(page);
+  await expect(page.locator("body")).toContainText("无法接收分享");
+  expect(await readPendingShare(page)).toBeNull();
+
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await page.evaluate(() => {
+    const body = new FormData();
+    body.append("text", "no-cors text");
+    return fetch("/share-target", { method: "POST", mode: "no-cors", body }).catch(() => undefined);
+  });
+  expect(await readPendingShare(page)).toBeNull();
+  await page.reload();
+  await expect(page.locator("#text-input")).toHaveValue("");
+});
+
+test("share target explains direct visits instead of returning a JSON error", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  await writePendingShare(page, {
+    state: "pending", createdAt: Date.now(), expiresAt: Date.now() + 600000,
+    title: "", text: "kept across a direct visit", url: "", files: [],
+  });
+  const direct = await page.goto(`${preview.url}/share-target`);
+  expect(direct.status()).toBe(200);
+  expect(direct.headers()["cache-control"]).toBe("no-store");
+  await expect(page.locator("body")).toContainText("无法接收分享");
+  await expect(page.locator("body")).toContainText("Unable to receive share");
+  await expect(page.locator('a[href="/"]')).toHaveCount(1);
+  expect((await readPendingShare(page)).text).toBe("kept across a direct visit");
+  await context.setOffline(true);
+  try {
+    await page.goto(`${preview.url}/share-target`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText("无法接收分享");
+    expect((await readPendingShare(page)).text).toBe("kept across a direct visit");
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
+test("share target shows the fallback page when local storage rejects the write", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await controlledPage(page);
+  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent("serviceworker");
+  await worker.evaluate(() => {
+    self.__easydropPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = () => { throw new DOMException("quota", "QuotaExceededError"); };
+  });
+  try {
+    await submitShareForm(page, { text: "quota share" });
+    await expect(page.locator("body")).toContainText("无法接收分享");
+    expect(await readPendingShare(page)).toBeNull();
+  } finally {
+    await worker.evaluate(() => {
+      IDBObjectStore.prototype.put = self.__easydropPut;
+      delete self.__easydropPut;
+    }).catch(() => undefined);
+  }
+});
+
+test("ordinary file selection still uploads without confirmation", async ({ page, context }) => {
+  await loginContext(context);
+  await page.goto(preview.url);
+  await page.locator("#file-input").setInputFiles([{ name: "direct.txt", mimeType: "text/plain", buffer: Buffer.from("direct") }]);
+  await expect(page.locator(".history-item").filter({ hasText: "direct.txt" })).toHaveCount(1);
+  await expect(page.locator("#notice")).toHaveText("上传完成");
 });

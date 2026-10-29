@@ -10,6 +10,19 @@
   "background_color": "#f5f5f7",
   "theme_color": "#0071e3",
   "categories": ["utilities", "productivity"],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        { "name": "files", "accept": ["*/*"] }
+      ]
+    }
+  },
   "icons": [
     {
       "src": "/pwa-192x192.png",

@@ -1181,6 +1181,17 @@ async function route(request, env, ctx, responseState) {
   const method = request.method;
   if (url.protocol !== "https:" && !localHttp(request, env)) throw new HttpError(426, "HTTPS is required.");
 
+  // A share POST that reaches the Worker means no controlling service worker
+  // could stage it locally. Answer with the shared explanation page instead of a
+  // JSON error, without reading the body or touching any session state. The
+  // asset is read with a fresh GET so conditional headers of the share POST can
+  // never turn the page into an empty body.
+  if (method === "POST" && path === "/share-target") {
+    const page = await env.ASSETS.fetch(new Request(new URL("/share-target-fallback.html", url), { method: "GET" }));
+    if (!page.ok) throw new HttpError(503, "Share target fallback page is unavailable.");
+    return new Response(page.body, { status: 200, headers: page.headers });
+  }
+
   if (method === "POST" && path === "/api/login") {
     const result = await login(request, env, config);
     return json(
