@@ -150,7 +150,8 @@ h1, h2, h3, p { margin-top: 0; }
   box-shadow: none;
 }
 .icon-button:hover { color: var(--accent); background: var(--hover); border-color: transparent; }
-.icon-button[data-tooltip]::after {
+.icon-button[data-tooltip]::after,
+.segmented button[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   z-index: 20;
@@ -173,12 +174,17 @@ h1, h2, h3, p { margin-top: 0; }
   transform: translate(-50%, -2px);
   transition: opacity .1s ease, transform .1s ease;
 }
-.icon-button[data-tooltip]:focus-visible::after {
+.segmented button[data-tooltip]::after {
+  top: calc(100% + 10px);
+}
+.icon-button[data-tooltip]:focus-visible::after,
+.segmented button[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
 }
 @media (hover: hover) and (min-width: 641px) {
-  .icon-button[data-tooltip]:hover::after {
+  .icon-button[data-tooltip]:hover::after,
+  .segmented button[data-tooltip]:hover::after {
     opacity: 1;
     transform: translate(-50%, 0);
   }
@@ -594,7 +600,7 @@ nav button.active svg { color: var(--accent); }
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.segmented button { width: 30px; height: 26px; padding: 0; color: var(--muted); background: transparent; border: 0; }
+.segmented button { position: relative; width: 30px; height: 26px; padding: 0; color: var(--muted); background: transparent; border: 0; }
 .segmented button:hover { color: var(--accent); }
 .segmented button[aria-pressed=true] { color: var(--accent); background: var(--elevated); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
 .document-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 0 40px; background: var(--paper); }
@@ -1718,7 +1724,8 @@ dialog.share-management-dialog { width: min(720px, calc(100% - 28px)); }
   .knowledge-panel { width: 210px; min-width: 210px; }
 }
 @media(max-width: 640px) {
-  .icon-button[data-tooltip]::after { display: none; }
+  .icon-button[data-tooltip]::after,
+  .segmented button[data-tooltip]::after { display: none; }
   .app-shell, .sidebar-hidden { display: block; min-height: 0; }
   .note-list-resizer { display: none; }
   .note-list { position: relative; height: 100dvh; border: 0; background: var(--paper); }

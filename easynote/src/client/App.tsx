@@ -2292,9 +2292,9 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         <span className={`save-status ${book.pending.length ? 'pending' : ''}`}><span className="status-dot" />{uploading ? t('uploading_files') : syncing ? t('syncing') : note ? book.status : t('note_workspace')}</span>
         <div className="toolbar-right">
           {note && <><div className="segmented editor-display-mode" role="group" aria-label={t('显示模式')}>
-            <button type="button" title={t('source_mode_title')} aria-label={t('source_mode')} aria-pressed={activeLayout === 'source'} disabled={!!note.deletedAt} onClick={() => chooseMode('source')}><FileText size={16} /></button>
-            <button type="button" title={t('live_mode_title')} aria-label={t('live_mode')} aria-pressed={activeLayout === 'live'} disabled={!!note.deletedAt} onClick={() => chooseMode('live')}><PenLine size={16} /></button>
-            <button type="button" ref={readButton} title={t('read_mode_title')} aria-label={t('read_mode')} aria-pressed={activeLayout === 'read'} onClick={() => chooseMode('read')}><BookOpen size={16} /></button>
+            <button type="button" data-tooltip={t('source_mode_title')} aria-label={t('source_mode')} aria-pressed={activeLayout === 'source'} disabled={!!note.deletedAt} onClick={() => chooseMode('source')}><FileText size={16} /></button>
+            <button type="button" data-tooltip={t('live_mode_title')} aria-label={t('live_mode')} aria-pressed={activeLayout === 'live'} disabled={!!note.deletedAt} onClick={() => chooseMode('live')}><PenLine size={16} /></button>
+            <button type="button" ref={readButton} data-tooltip={t('read_mode_title')} aria-label={t('read_mode')} aria-pressed={activeLayout === 'read'} onClick={() => chooseMode('read')}><BookOpen size={16} /></button>
           </div>
             <IconButton label="插入内部链接" className="icon-button toolbar-link-action" disabled={!!note.deletedAt || !!transfer} onClick={beginLinkInsertion}><Link2 size={17} /></IconButton>
             <IconButton label="大纲与反向链接" className="icon-button toolbar-outline-action" aria-pressed={inspector} onClick={() => setInspector((value) => !value)}><ListTree size={17} /></IconButton>
