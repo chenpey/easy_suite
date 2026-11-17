@@ -3256,6 +3256,65 @@ test('note context menu downloads the note as Markdown or as a ZIP with its file
   expect(bundled).not.toContain('/api/');
 });
 
+test('backup archives bracket relative file links and restore them to canonical URLs', async ({ page }) => {
+  const title = `备份链接-${randomUUID().slice(0, 6)}`;
+  const attachment = '报告 (final).pdf';
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL);
+    (window as unknown as { __blobs: Blob[] }).__blobs = [];
+    URL.createObjectURL = (blob: Blob) => {
+      (window as unknown as { __blobs: Blob[] }).__blobs.push(blob);
+      return create(blob);
+    };
+  });
+  await page.goto('/');
+  await newNote(page, title, '备份链接正文');
+  const image = await page.locator('.document').screenshot({ type: 'png' });
+  await page.locator('input[type=file][accept^="image"]').setInputFiles({ name: '图示 (v2).png', mimeType: 'image/png', buffer: image });
+  await expect(page.getByText('图片已插入', { exact: true })).toBeVisible();
+  await page.locator('input[type=file][accept*="application/pdf"]').setInputFiles({
+    name: attachment, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF'),
+  });
+  await expect(page.getByText('附件已插入', { exact: true })).toBeVisible();
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await page.locator('.account').click();
+  await page.getByRole('button', { name: '导出 ZIP' }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __blobs: Blob[] }).__blobs.length)).toBe(1);
+  const captured = await page.evaluate(async () => Promise.all((window as unknown as { __blobs: Blob[] }).__blobs
+    .map(async (blob) => [...new Uint8Array(await blob.arrayBuffer())])));
+  const archive = unzipSync(new Uint8Array(captured[0]));
+  const manifest = JSON.parse(strFromU8(archive['manifest.json']));
+  const entry = manifest.notes.find((note: { title: string }) => note.title === title);
+  const markdown = strFromU8(archive[entry.path]);
+  expect(markdown).toMatch(/\[报告 \(final\)\.pdf\]\(<\.\.\/files\/[0-9a-f-]{36}-报告 \(final\)\.pdf>\)/);
+  expect(markdown).toMatch(/!\[图示 \(v2\)\.png\]\(<\.\.\/files\/[0-9a-f-]{36}-图示 \(v2\)\.png>\)/);
+
+  // Reimport a renamed copy with bracketed links plus one with the bare links older archives used:
+  // both must come back as a bare canonical URL.
+  const copyTitle = `${title}-导入`;
+  const legacyTitle = `${title}-旧版`;
+  delete archive[entry.path];
+  archive[`notes/${copyTitle}.md`] = strToU8(`导入副本\n\n${markdown}`);
+  archive[`notes/${legacyTitle}.md`] = strToU8(`旧版副本\n\n${markdown.replace(/<(\.\.\/[^>]+)>/g, '$1')}`);
+  manifest.notes = manifest.notes.filter((note: { title: string }) => note.title !== title).concat([
+    { ...entry, id: randomUUID(), title: copyTitle, path: `notes/${copyTitle}.md` },
+    { ...entry, id: randomUUID(), title: legacyTitle, path: `notes/${legacyTitle}.md` },
+  ]);
+  archive['manifest.json'] = strToU8(JSON.stringify(manifest));
+  await page.locator('input[accept=".zip,.md,.markdown,.txt"]')
+    .setInputFiles({ name: 'backup.zip', mimeType: 'application/zip', buffer: Buffer.from(zipSync(archive)) });
+  await expect(page.locator('.toast')).toContainText('已导入 2 篇', { timeout: 30000 });
+  for (const [copy, prefix] of [[copyTitle, '导入副本'], [legacyTitle, '旧版副本']] as const) {
+    const imported = (await (await page.request.get(`/api/notes?q=${encodeURIComponent(copy)}`)).json()).notes
+      .find((note: { title: string }) => note.title === copy);
+    const content = (await (await page.request.get(`/api/notes/${imported.id}`)).json()).note.content;
+    expect(content).toMatch(/\[报告 \(final\)\.pdf\]\(\/api\/files\/[0-9a-f-]{36}\)/);
+    expect(content).toMatch(/!\[图示 \(v2\)\.png\]\(\/api\/images\/[0-9a-f-]{36}\)/);
+    expect(content.startsWith(prefix)).toBe(true);
+    expect(content).not.toContain('<');
+  }
+});
+
 test('downloading a note aborts when a referenced file is missing', async ({ page }) => {
   const missingId = randomUUID();
   const title = `下载缺件-${randomUUID().slice(0, 6)}`;
@@ -3308,7 +3367,7 @@ test('draft export offers an explicit incomplete backup when an attachment is mi
   expect(download.suggestedFilename()).toContain('partial');
   const markdown = strFromU8(archive[manifest.drafts[0].path]);
   expect(markdown).toContain('重要文本');
-  expect(markdown).toContain(`../missing/${missingId}`);
+  expect(markdown).toContain(`(<../missing/${missingId}>)`);
 });
 
 test('a revoked offline session is removed as soon as the device reconnects', async ({ page, context }) => {

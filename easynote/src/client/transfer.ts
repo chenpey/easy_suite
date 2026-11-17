@@ -141,12 +141,13 @@ export async function exportArchive(progress: (text: string) => void): Promise<v
     manifest.files.push({ id, path, mime, filename, sha256: await sha(bytes) });
     progress(`导出文件 ${manifest.files.length}/${storedFiles.size}`);
   }
-  // Keep Markdown readable after extraction; the manifest retains stable file identifiers.
+  // Keep Markdown readable after extraction; the manifest retains stable file identifiers. Angle brackets
+  // keep extracted names containing spaces or parentheses valid as link targets.
   for (const entry of manifest.notes) {
     let content = strFromU8(files[entry.path]);
     for (const stored of manifest.files) {
-      content = content.replaceAll(imagePath(stored.id), `../${stored.path}`)
-        .replaceAll(filePath(stored.id), `../${stored.path}`);
+      content = content.replaceAll(imagePath(stored.id), `<../${stored.path}>`)
+        .replaceAll(filePath(stored.id), `<../${stored.path}>`);
     }
     files[entry.path] = strToU8(content);
   }
@@ -201,12 +202,12 @@ export async function exportLocalDrafts(userId: string, progress: (text: string)
   for (const draft of manifest.drafts) {
     let content = strFromU8(files[draft.path]);
     for (const stored of manifest.files) {
-      content = content.replaceAll(imagePath(stored.id), `../${stored.path}`)
-        .replaceAll(filePath(stored.id), `../${stored.path}`);
+      content = content.replaceAll(imagePath(stored.id), `<../${stored.path}>`)
+        .replaceAll(filePath(stored.id), `<../${stored.path}>`);
     }
     for (const id of missing) {
-      content = content.replaceAll(imagePath(id), `../missing/${id}`)
-        .replaceAll(filePath(id), `../missing/${id}`);
+      content = content.replaceAll(imagePath(id), `<../missing/${id}>`)
+        .replaceAll(filePath(id), `<../missing/${id}>`);
     }
     files[draft.path] = strToU8(content);
   }
@@ -671,7 +672,9 @@ export async function importArchive(
     let content = strFromU8(files[entry.path]);
     for (const stored of manifest.files) {
       const canonical = stored.mime.startsWith('image/') ? imagePath(stored.id) : filePath(stored.id);
-      content = content.replaceAll(`../${stored.path}`, canonical);
+      // Archives written before 1.6.0 used bare relative paths; both forms restore to the canonical URL.
+      content = content.replaceAll(`<../${stored.path}>`, canonical)
+        .replaceAll(`../${stored.path}`, canonical);
     }
     if (storedFileIds(content).some((id) => !seen.has(id))) throw new Error('笔记引用的文件不在备份中。');
     prepared.push({ entry, content });
