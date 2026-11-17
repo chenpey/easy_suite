@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Current Version: `1.5.0`
+Current Version: `1.6.0`
 
 A self-hosted Markdown note-taking application for individuals and small teams. The frontend is React 19 + TypeScript + Vite packaged as an installable PWA. The server is a single Cloudflare Worker serving the API, remote MCP, OAuth and static assets; D1 stores accounts and notes, R2 stores private images and attachments, a Durable Object broadcasts changes, and a Cron trigger cleans up expired data every hour. PDFs are generated structurally with pdfmake and previewed page by page with PDF.js.
 
@@ -308,6 +308,8 @@ Autosave only rewrites the current body, while version slots are consumed by man
 - Before going to production, verify account configuration, backup and restore, and Cloudflare usage on a separate temporary instance.
 
 ## Release Notes
+
+`1.6.0` (2026-11-17): attachments accept ZIP (signature check only, never unpacked) and a note carries at most 10 attachments totalling 100 MiB; notes saved before the caps stay editable because only a growing footprint is rejected. The note context menu downloads the note as Markdown, or as a ZIP with its images and attachments and rewritten relative links.
 
 `1.5.0` (2026-10-25): adds in-editor live preview (WYSIWYG), turns the display switch into Source / Live Preview / Reading and defaults to live preview; Markdown source stays the only content format, rendering failures fall back to source, and no database or content migration is required.
 

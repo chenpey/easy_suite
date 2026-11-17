@@ -2,6 +2,15 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.6.0 (2026-11-17)
+
+- Attachments now accept ZIP: uploads are checked for the PK signature (empty archives included), the server never unpacks them, and reads keep `Content-Disposition: attachment` with `nosniff`; Markdown import and backup restore accept ZIP as well.
+- A note carries at most 10 attachments totalling 100 MiB, while `MAX_ATTACHMENT_BYTES` still limits one attachment to 20 MiB; counts and bytes come from the stored MIME type and size, so referencing an attachment as `/api/images/<id>` cannot dodge them.
+- Notes that predate the caps are only rejected when their attachment footprint grows: over-limit notes stay editable, taggable, movable, archivable and deletable, and older backups still restore.
+- Right-clicking a note offers "Download note": a note without referenced files downloads as `<title>.md`, while a note with images or attachments is streamed into `<title>.zip` with the Markdown at the archive root, the files under `attachments/`, the body links rewritten to those relative paths and names containing spaces or parentheses still resolving.
+- Packaging reuses the local offline cache first and falls back to the network; if any referenced file is unavailable the whole export is cancelled with a count of the missing files instead of producing a partial archive.
+- Attachment types and limits live in `src/shared/types.ts`, shared by the file picker, uploads, backup manifests and server validation. No database migration is required.
+
 ## 1.5.0 (2026-10-25)
 
 - In-editor live preview: the top display switch now offers Source / Live Preview / Reading and defaults to live preview, while Markdown source stays the only content format used for editing, drafts, sync, versions, import/export and the server.
