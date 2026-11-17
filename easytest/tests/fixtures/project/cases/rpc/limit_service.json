@@ -38,7 +38,7 @@
     }
   ],
   "compiled_sha256": "2fdf8ef965136cc90589c550c6fc669460eabdb8cc2ac967135a921d3e9c240b",
-  "compiler_version": "0.4.1",
+  "compiler_version": "0.4.2",
   "schema_version": 1,
   "source": "limit_service.xlsx",
   "source_mode": "xlsx",

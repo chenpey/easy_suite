@@ -2,6 +2,10 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 0.4.6 Release Notes (2026-11-17)
+
+- Streamlined and refined Chinese and English documentation with positive framing.
+
 ## 0.4.5 Release Notes (2026-10-19)
 
 - Fix Gatekeeper quarantine blocking exported migration scripts on a new Mac. The migration ZIP now includes both `EasyMac-Migration.command` and `EasyMac-First-Run.txt`, with a right-click Open path and Terminal first-run instructions.

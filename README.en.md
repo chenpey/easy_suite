@@ -2,103 +2,87 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Easy Suite contains independent tools for file sharing, note-taking, Mac migration, and automated testing. Each project has its own configuration and documentation.
+Easy Suite is a multi-project repository for cross-device file transfer, self-hosted Markdown notes, Mac migration checklists, and table-driven API testing. Each project is independent with its own configuration and documentation.
 
 ## Versions
 
 <!-- versions:start -->
 | Project | Current Version |
 | --- | --- |
-| [EasyDrop](easydrop/) | `1.4.0` |
-| [EasyNote](easynote/) | `1.6.1` |
-| [EasyMac](easymac/) | `0.4.5` |
-| [EasyTest](easytest/) | `0.4.1` |
+| [EasyDrop](easydrop/) | `1.4.1` |
+| [EasyNote](easynote/) | `1.6.2` |
+| [EasyMac](easymac/) | `0.4.6` |
+| [EasyTest](easytest/) | `0.4.2` |
 <!-- versions:end -->
 
 ## Projects
 
 ### [EasyDrop](easydrop/)
 
-EasyDrop is a web-based file transfer service deployed on Cloudflare Workers. After signing in to the same site, users can send text and files between computers, phones, and tablets.
+A web-based text and file transfer hub deployed on Cloudflare Workers for exchanging content across computers, phones, and tablets over HTTPS.
 
-Its main capabilities include isolated multi-user workspaces, admin-controlled registration and account management, chunked concurrent uploads with resume support, client-side WebP thumbnails, time-limited login-free file links, and backoff-assisted history synchronization. D1 stores accounts, text, and upload states; private R2 stores original files and optional thumbnails.
+- **Key Capabilities**: Isolated user spaces, admin account management, chunked concurrent uploads with resume support, client-side WebP thumbnails, time-limited public download links, Android PWA system share target, and cross-device history sync.
+- **Tech Stack**: JavaScript, Cloudflare Workers, D1, R2.
+- **Run & Deploy**: Run `npm ci && npm run setup && npm run dev` locally, or `bash deploy.sh` for production.
 
-Tech Stack: JavaScript, Cloudflare Workers, D1, R2.
-
-For local development, navigate into the directory and run `npm ci`, `npm run setup`, and `npm run dev`. For production deployment, run `bash deploy.sh`, which uses an interactive API Token flow to create or reuse Worker, D1, private R2, and public access endpoints.
-
-See [EasyDrop README](easydrop/README.md) for details.
+See [EasyDrop README](easydrop/README.en.md) for details.
 
 ### [EasyNote](easynote/)
 
-EasyNote is a self-hosted web application for writing, organizing, searching, and sharing Markdown notes across devices. It is designed for individuals and small teams, with a separate data space for every account.
+A self-hosted Markdown note application for individuals and small teams, with an isolated workspace per account.
 
-Its main capabilities include autosave, mixed folder-and-note browsing, breadcrumb navigation and desktop drag-and-drop organization, manual ordering, a task center, Obsidian/Markdown import, PDF export with page-by-page preview, time-limited or permanent read-only sharing, private images, full-text search, trash, version history, a complete offline notebook, and concurrent conflict protection. Administrators can manage users and approve registrations, while notes, attachments, offline caches, and AI tokens remain isolated by user.
+- **Key Capabilities**: CodeMirror 6 live preview alongside source and reading modes, autosave, folders and manual ordering, task center, Obsidian/Markdown import and export, paginated PDF export, time-limited or permanent read-only sharing, private images and attachments, full-text search, version history, offline notebook, three-way conflict merge, and remote MCP integration.
+- **Tech Stack**: React, TypeScript, CodeMirror, pdfmake, PDF.js, Cloudflare Workers, D1, R2, Durable Object.
+- **Run & Deploy**: Run `bash dev.sh` locally, or `bash deploy.sh` for production.
 
-Tech Stack: React, TypeScript, CodeMirror, pdfmake, PDF.js, Cloudflare Workers, D1, R2.
-
-For local development, navigate into the directory and run `bash dev.sh`. For production deployment, run `bash deploy.sh`, which uses an interactive Cloudflare API Token to automatically discover accounts and create or reuse Worker, D1, private R2, and public access endpoints (supporting `workers.dev` or automatic custom domain binding). Remote deployment and maintenance use a scoped Cloudflare custom API Token read invisibly from the terminal on each run, lifetime limited to the current process. Personal instances with under 1,000 notes typically fit within Workers, D1, and R2 free tiers.
-
-See [EasyNote README](easynote/README.md) for details.
+See [EasyNote README](easynote/README.en.md) for details.
 
 ### [EasyMac](easymac/)
 
-EasyMac is a migration inventory tool that runs on an old Mac. It helps users choose which software to carry over and generates a reviewable installation script for the new Mac; EasyMac itself does not install software.
+A migration inventory tool that runs on an old Mac to scan installed software and generate a reviewable installation script for a new Mac.
 
-Its main capabilities include scanning Homebrew, Mac App Store, and standard applications, searching and filtering migration items, and previewing and exporting the installation script. It uses a terminal-free local launcher and local web page, requires no Xcode, developer account, or additional runtime, and never uploads the scanned inventory.
+- **Key Capabilities**: Scans Homebrew (Casks and Formulae), Mac App Store apps, standard apps, and web apps; supports search, filtering, and script export via a lightweight local launcher and web UI.
+- **Download**: [EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
+- **Tech Stack**: AppleScript, Zsh, HTML, CSS, JavaScript.
 
-Release Download: [EasyMac Latest](https://github.com/chenpey/easy_suite/releases/tag/easymac-latest)
-
-Tech Stack: AppleScript, Zsh, HTML, CSS, JavaScript.
-
-See [EasyMac README](easymac/README.md) for details.
+See [EasyMac README](easymac/README.en.md) for details.
 
 ### [EasyTest](easytest/)
 
-EasyTest is a Python tool for testing APIs and business workflows. Testers author cases in Excel, which the framework compiles into deterministic JSON and runs through the CLI, pytest, or a Notebook.
+An Excel-driven Python testing framework for APIs and business workflows that compiles XLSX workbooks into deterministic JSON and executes them via CLI, pytest, or Notebook.
 
-Its main capabilities include HTTP, RPC, database, UI, and business workflow orchestration, shared Excel data sets for data-driven tests, whole-suite static preflight, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, and self-contained HTML/PDF reports.
-
-Tech Stack: Python 3.12/3.13, pytest, openpyxl, SQLite.
-
-For local development, navigate into the directory and run `uv sync` and `uv run pytest`. Create a project with `uv run easytest init ../my-tests`.
+- **Key Capabilities**: HTTP, RPC, Database, UI, and scenario orchestration, shared data-driven sets, static preflight checks, offline mocks, file and SQLite snapshots, external screenshot storage, concurrent baseline protection, and self-contained HTML/PDF reports.
+- **Tech Stack**: Python 3.12/3.13, pytest, openpyxl, SQLite.
+- **Quick Start**: Run `uv sync && uv run pytest`, or `uv run easytest init ../my-tests` to scaffold a new project.
 
 See [EasyTest README](easytest/README.md) for details.
 
-## Usage
+## Requirements
 
-The projects are independent; run commands within their respective project directories unless stated otherwise:
+Run project commands inside each project directory:
 
-- EasyDrop and EasyNote require Node.js 22 or later.
-- EasyMac requires macOS 13 or later. After unzipping the release package, complete the one-time authorization command in Terminal per `首次使用.txt` to open, and double-click `EasyMac.app` directly thereafter.
-- EasyTest requires Python 3.12 or 3.13; `uv` is recommended for environment management.
-
-Refer to each project's README for specific startup, testing, deployment, configuration, and security boundaries.
+- **EasyDrop / EasyNote**: Node.js 22+
+- **EasyMac**: macOS 13+ (unzip the release package, run the one-time authorization command from `首次使用.txt` in Terminal, then double-click `EasyMac.app` directly)
+- **EasyTest**: Python 3.12 / 3.13 with `uv`
 
 ## Version Management
 
-Each project declares its version source and the files that follow it in its own `version.config.json`: EasyDrop and EasyNote use `package.json`, EasyMac uses the `VERSION` file, and EasyTest uses `pyproject.toml`. The root [`versions.json`](versions.json) and the version tables are generated — do not edit them by hand. When preparing to commit functional updates, run in the repository root:
+Each project declares its version source and sync targets in `<project>/version.config.json`. Root [`versions.json`](versions.json) and version tables are generated automatically. To bump and verify versions from the repository root:
 
 ```bash
-node scripts/version.mjs bump easynote patch
-# or: node scripts/version.mjs bump easymac minor
-# or: node scripts/version.mjs bump easytest patch
+node scripts/version.mjs bump <project> patch   # or minor / major
 node scripts/version.mjs check
 ```
 
-The script synchronizes each project's declared files and then regenerates the root version tables; adding or removing a project only adds or removes a directory with its `version.config.json`, never a root script. `patch` is suited for backwards-compatible fixes, `minor` for new features, and `major` for breaking changes. Follow up with a versioned commit message, e.g., `发布：EasyMac v0.1.0`.
-
 ## Clean Reset
 
-Each project owns its reset script; run the command inside the project directory:
+Run reset scripts inside each project directory:
 
 ```bash
-cd easynote && bash reset.sh --local
-cd easynote && bash reset.sh --remote
+cd easynote && bash reset.sh --local    # Reset local state (keeps .dev.vars)
+cd easynote && bash reset.sh --remote   # Reset remote Worker, D1, and R2
 cd easydrop && bash reset.sh --local
 cd easydrop && bash reset.sh --remote
 ```
 
-Local mode deletes `.wrangler/state` for that project, preserves local administrator configurations in `.dev.vars`, and prompts to clear browser site data. Remote mode reads the project's `wrangler.deploy.json`, prompts for full confirmation text and an invisible Cloudflare API Token, then deletes the Worker, empties and recreates the R2 bucket, and rebuilds the D1 schema. Once completed, run `bash deploy.sh` in the project directory to redeploy.
-
-Remote cleanup requires all objects in R2 to be tracked by the application. If orphaned objects exist, the script stops when deleting the bucket; perform **Empty Bucket** on that bucket in Cloudflare Dashboard first, then rerun the cleanup command.
+Run `bash deploy.sh` in the project directory afterwards to redeploy.

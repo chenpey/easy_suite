@@ -2,6 +2,10 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.6.2 (2026-11-17)
+
+- Streamlined and refined Chinese and English README and topic docs with positive framing.
+
 ## 1.6.1 (2026-11-17)
 
 - Fixed broken links in exported backups when a filename contains spaces or parentheses: `exportArchive` and `exportLocalDrafts` now write pointy-bracket destinations (`<../files/<id>-name>`, `<../missing/<id>>`), so the extracted Markdown opens in any reader.

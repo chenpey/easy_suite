@@ -2,25 +2,25 @@
 
 [简体中文](AI_INTEGRATION.md) | [English](AI_INTEGRATION.en.md)
 
-EasyNote exposes a remote Streamable HTTP MCP server at `/mcp` after deployment. Users do not need to download source code, install Node.js, or run a local bridge:
+EasyNote exposes a remote Streamable HTTP MCP server at `/mcp`, allowing AI clients to connect directly over HTTPS:
 
 ```text
-AI Client → https://EasyNote-Domain/mcp → D1 / R2
+AI Client → https://your-easynote-domain/mcp → D1 / R2
 ```
 
-## Creating a Token
+## Create a Token
 
-Log in to EasyNote, open "Settings", and create a token under "AI Integration":
+Sign in to EasyNote and open **Settings → AI Access** to create a token:
 
-- Name: Displayed in the token list and version history, e.g. "My Codex".
-- Permissions: Select "Read & Write" if AI needs to modify notes; select "Read-Only" for search and retrieval only.
-- Expiration: 30, 90, 365 days, or permanent.
+- **Name**: Displayed in the token list and note version history (e.g., `My Codex`).
+- **Scope**: Choose **Read-only** or **Read & Write**.
+- **Expiration**: 30, 90, 365 days, or permanent (up to 10 active tokens per account, revocable anytime).
 
-Copy the `enai_...` token immediately after creation. Plaintext tokens are displayed only once.
+Copy the `enai_...` token immediately upon creation.
 
-## Connecting Codex
+## Connect Codex
 
-After generating a token, click "Copy Codex Configuration" and add the snippet to `~/.codex/config.toml`:
+Click **Copy Codex Config** and add it to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.easynote]
@@ -28,82 +28,43 @@ url = "https://your-easynote-domain/mcp"
 http_headers = { Authorization = "Bearer enai_..." }
 ```
 
-Restart Codex and verify the connection with `/mcp`. On Codex Desktop, you can also add the same Streamable HTTP URL under "Settings → MCP servers".
-
-To avoid storing tokens directly in configuration files, set an environment variable first:
-
-```bash
-export EASYNOTE_TOKEN='enai_...'
-```
-
-Then replace `http_headers` with:
+To use an environment variable, run `export EASYNOTE_TOKEN='enai_...'` and reference the variable name:
 
 ```toml
+[mcp_servers.easynote]
+url = "https://your-easynote-domain/mcp"
 bearer_token_env_var = "EASYNOTE_TOKEN"
 ```
 
-`bearer_token_env_var` must be the name of the environment variable, not the `enai_...` token itself. Direct configuration stores plaintext tokens in `config.toml`; do not share or commit this file.
+Restart Codex and verify with `/mcp`. In Codex Desktop, add the same URL under **Settings → MCP servers**.
 
-## MCP Tools
+## Connect ChatGPT Web
 
-| Tool | Permission | Purpose |
+Add an MCP app in ChatGPT with:
+
+- **Server URL**: `https://your-easynote-domain/mcp`
+- **Authentication**: OAuth (Dynamic Client Registration + PKCE S256)
+
+Authorize via the EasyNote login page to issue a revocable "ChatGPT" token (1-hour access token, 30-day rotating refresh token). OAuth endpoints: `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, and `/oauth/token`.
+
+## MCP Tools & Resources
+
+| Tool | Scope | Purpose |
 | --- | --- | --- |
-| `easynote_search_notes` | Read-only | Searches both active and archived notes by default, returning matched context, character offsets, and pagination |
-| `easynote_list_recent` | Read-only | Lists recently updated notes |
-| `easynote_read_note` | Read-only | Reads a complete note in segments |
-| `easynote_read_notes` | Read-only | Batch reads up to 20 notes |
-| `easynote_connection_status` | Read-only | Verifies account, token name, and permissions |
-| `easynote_note_stats` | Read-only | Provides exact counts for active, archived, trash, and total notes |
-| `easynote_create_note` | Read-write | Creates a new note |
-| `easynote_update_note` | Read-write | Updates a note |
-| `easynote_archive_note` | Read-write | Archives or unarchives a note |
-| `easynote_trash_note` | Read-write | Moves a note to trash |
+| `easynote_search_notes` | Read | Search active and archived notes with snippets, offsets, and pagination |
+| `easynote_list_recent` | Read | List recent notes |
+| `easynote_read_note` | Read | Read a full note or slice by offset |
+| `easynote_read_notes` | Read | Batch read up to 20 notes |
+| `easynote_connection_status` | Read | Verify account, token name, and permissions |
+| `easynote_note_stats` | Read | Exact counts across active, archived, trash, and total notes |
+| `easynote_create_note` | Read & Write | Create a note |
+| `easynote_update_note` | Read & Write | Update a note (requires `expected_revision`) |
+| `easynote_archive_note` | Read & Write | Archive or unarchive a note |
+| `easynote_trash_note` | Read & Write | Move a note to trash |
 
-Read-only tokens do not expose mutating tools. Permanent deletion, account management, token management, and file uploads remain exclusively in the EasyNote web application.
+- **Resources**: Read any note as `text/markdown` via `easynote://notes/{id}.md` (lists up to 100 recently updated notes).
+- **Best Practices**: Use `easynote_note_stats` for counts; read slices with `startOffset` or batch with `easynote_read_notes`; fetch the latest `revision` before writing; keep titles plain text and start body headings at `##`. AI writes are recorded as `AI: <Token Name>`.
 
-## MCP Resources
+## Verification & Status Codes
 
-Each note can be read as `text/markdown` via `easynote://notes/{id}.md`. The Resource list is intended for browsing the most recently updated active and archived notes (up to 100); searches still span the entire knowledge base.
-
-## Best Practices
-
-```text
-Call easynote_search_notes first when retrieving knowledge; default view=any ensures archived notes are included.
-Call easynote_note_stats for note counts; never extrapolate from paginated search results or Resource counts.
-Search hits provide startOffset and endOffset; pass startOffset to easynote_read_note to read only the relevant section.
-Prefer easynote_read_notes when fetching multiple note bodies.
-Call easynote_read_note before updating to get the latest revision to use as expected_revision.
-Stop and re-read the note if a 409 Conflict occurs.
-Omit '#' from titles; start top-level sections in the body with '##'.
-Use easynote_trash_note for deletion; permanent removal is confirmed by users in the web app.
-```
-
-## Connecting ChatGPT on the Web
-
-ChatGPT on the web authenticates with OAuth and cannot use a static token. In ChatGPT's MCP app settings, add:
-
-- Server URL: `https://your-easynote-domain/mcp`
-- Authentication: OAuth (automatic client registration, PKCE)
-
-ChatGPT opens EasyNote's consent page. Sign in and choose read-only or read-write access. Each authorization creates one "ChatGPT" token, listed under "Settings → AI Integration", and it can be revoked at any time. Access tokens last 1 hour, refresh tokens last 30 days and rotate on every refresh. Reusing an old refresh token revokes that authorization.
-
-OAuth endpoints: `/.well-known/oauth-protected-resource/mcp`, `/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize`, `/oauth/token`. HTTPS only.
-
-
-## Security Boundaries
-
-- `/mcp` strictly requires HTTPS (except loopback addresses during local development).
-- Every MCP request verifies an independent Bearer token, expiration, revocation status, account status, and permissions.
-- AI modifications enter standard version history, tagged as `AI: <token_name>`.
-- Cross-origin browser requests are rejected.
-- Each account holds at most 10 active tokens; tokens can be revoked at any time in Settings.
-
-## Troubleshooting
-
-- `401`: Token is invalid, expired, or revoked.
-- `403`: Read-only token attempted a write, or request is not HTTPS.
-- `409`: Note revision changed; re-read and retry.
-- `405`: Incorrect MCP URL or client did not send Streamable HTTP POST.
-- Missing tools: Ensure the URL ends with `/mcp` and restart Codex.
-
-`npm run test:ai` tests search, read, write, Resources, permission isolation, and revision conflicts using a real Streamable HTTP MCP client.
+Run `npm run test:ai` to verify search, read, write, resources, scope isolation, and revision conflicts with a real Streamable HTTP MCP client. Status codes: `401` (invalid/expired token), `403` (insufficient scope or HTTPS required), `405` (use Streamable HTTP POST on `/mcp`), `409` (revision conflict; re-read before retrying).
