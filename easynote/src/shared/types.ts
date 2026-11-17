@@ -183,6 +183,24 @@ export function sameNoteInput(left: NoteInput, right: NoteInput): boolean {
 
 export const imagePath = (id: string) => `/api/images/${id}`;
 export const filePath = (id: string) => `/api/files/${id}`;
+// Every accepted attachment type, keyed by the extension the client infers when a browser sends no usable MIME.
+export const ATTACHMENT_MIMES: Record<string, string> = {
+  pdf: 'application/pdf',
+  md: 'text/markdown',
+  markdown: 'text/markdown',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  json: 'application/json',
+  zip: 'application/zip',
+};
+export const attachmentExtensions = Object.keys(ATTACHMENT_MIMES);
+export const attachmentMimes = [...new Set(Object.values(ATTACHMENT_MIMES))];
+export function attachmentMime(filename: string, declared = ''): string | null {
+  if (attachmentMimes.includes(declared)) return declared;
+  return ATTACHMENT_MIMES[filename.toLocaleLowerCase('en-US').split('.').pop() ?? ''] ?? null;
+}
+export const MAX_NOTE_ATTACHMENTS = 10;
+export const MAX_NOTE_ATTACHMENT_BYTES = 100 * 1024 ** 2;
 export const idPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const fingerprintPattern = /^[a-f0-9]{64}$/;
 
@@ -192,12 +210,24 @@ export async function noteFingerprint(title: string, content: string): Promise<s
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+// Keeps the image/file distinction, because the two kinds are read from different API routes.
+export function storedFileRefs(content: string): Array<{ id: string; kind: 'image' | 'file' }> {
+  const refs = new Map<string, 'image' | 'file'>();
+  for (const match of content.matchAll(/\/api\/(images|files)\/([0-9a-f-]{36})(?![0-9a-f-])/gi)) {
+    if (idPattern.test(match[2])) refs.set(match[2], match[1].toLocaleLowerCase('en-US') === 'images' ? 'image' : 'file');
+  }
+  return [...refs].map(([id, kind]) => ({ id, kind }));
+}
+
 export function storedFileIds(content: string): string[] {
-  return [...new Set([...content.matchAll(/\/api\/(?:images|files)\/([0-9a-f-]{36})(?![0-9a-f-])/gi)]
-    .map((match) => match[1]).filter((id) => idPattern.test(id)))];
+  return storedFileRefs(content).map((ref) => ref.id);
 }
 
 export const imageIds = storedFileIds;
+
+export function noteAttachmentIds(content: string): string[] {
+  return storedFileRefs(content).filter((ref) => ref.kind === 'file').map((ref) => ref.id);
+}
 
 export function noteLinkIds(content: string): string[] {
   return [...new Set([...content.matchAll(/\[\[([0-9a-f-]{36})\|[^\]\r\n]{1,256}\]\]/gi)]

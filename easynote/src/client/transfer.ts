@@ -1,7 +1,7 @@
-import { zip, unzip, strToU8, strFromU8 } from 'fflate';
-import { filePath, folderDepth, idPattern, imagePath, MAX_FOLDER_DEPTH, MAX_FOLDERS, validPosition, noteFingerprint, storedFileIds, type ClientConfig } from '../shared/types';
+import { zip, unzip, strToU8, strFromU8, Zip, ZipPassThrough } from 'fflate';
+import { attachmentMimes, ATTACHMENT_MIMES, filePath, folderDepth, idPattern, imagePath, MAX_FOLDER_DEPTH, MAX_FOLDERS, validPosition, noteFingerprint, storedFileIds, storedFileRefs, type ClientConfig } from '../shared/types';
 import { api, uploadAttachment, uploadImage } from './api';
-import { loadCachedFile, loadDrafts } from './drafts';
+import { loadCachedFile, loadDrafts, loadMirroredNote } from './drafts';
 
 const MAX_ARCHIVE_BYTES = 64 * 1024 ** 2;
 const MAX_ENTRIES = 1200;
@@ -11,14 +11,6 @@ const NOTE_PATH = /^notes\/[^<>:"/\\|?*\u0000-\u001f]+\.md$/;
 const FILE_PATH = /^files\/[0-9a-f-]{36}-[^<>:"/\\|?*\u0000-\u001f]+$/i;
 const EXTERNAL_NOTE = /\.(?:md|markdown|txt)$/i;
 const IMAGE_MIMES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-const ATTACHMENT_MIMES: Record<string, string> = {
-  pdf: 'application/pdf',
-  md: 'text/markdown',
-  markdown: 'text/markdown',
-  txt: 'text/plain',
-  csv: 'text/csv',
-  json: 'application/json',
-};
 // v3 adds the manual order key; a v2 archive stays readable and just restores as position 0.
 interface Manifest {
   format: 'easynote';
@@ -88,13 +80,17 @@ function responseFilename(response: Response, fallback: string): string {
   try { return encoded ? decodeURIComponent(encoded) : fallback; } catch { return fallback; }
 }
 
-function download(name: string, bytes: Uint8Array): void {
-  const href = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'application/zip' }));
+function saveBlob(name: string, blob: Blob): void {
+  const href = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = href;
   link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(href), 10000);
+}
+
+function download(name: string, bytes: Uint8Array): void {
+  saveBlob(name, new Blob([new Uint8Array(bytes)], { type: 'application/zip' }));
 }
 
 export async function exportArchive(progress: (text: string) => void): Promise<void> {
@@ -220,6 +216,88 @@ export async function exportLocalDrafts(userId: string, progress: (text: string)
     zip(files, { level: 0 }, (error, data) => error ? reject(error) : resolve(data)));
   download(`easynote-local-drafts-${missing.length ? 'partial-' : ''}${new Date().toISOString().slice(0, 10)}.zip`, bytes);
   return drafts.size;
+}
+
+async function readNoteFile(ref: { id: string; kind: 'image' | 'file' }, userId: string): Promise<{ blob: Blob; filename: string } | null> {
+  const cached = userId ? await loadCachedFile(userId, ref.id) : null;
+  if (cached) return cached;
+  let response: Response;
+  try { response = await fetch(ref.kind === 'image' ? imagePath(ref.id) : filePath(ref.id)); } catch { return null; }
+  if (!response.ok) return null;
+  return { blob: await response.blob(), filename: responseFilename(response, ref.id) };
+}
+
+// Streams one note plus its referenced files into a ZIP through pass-through entries, so no file is read
+// twice; the emitted chunks are still held for the final Blob, peaking near the archive size.
+async function zipNote(files: Array<{ path: string; data: string | Blob }>): Promise<Blob> {
+  const parts: BlobPart[] = [];
+  return new Promise<Blob>((resolve, reject) => {
+    const archive = new Zip((error, chunk, final) => {
+      if (error) reject(error);
+      else {
+        parts.push(chunk as unknown as BlobPart);
+        if (final) resolve(new Blob(parts, { type: 'application/zip' }));
+      }
+    });
+    void (async () => {
+      for (const entry of files) {
+        const file = new ZipPassThrough(entry.path);
+        archive.add(file);
+        if (typeof entry.data === 'string') {
+          file.push(strToU8(entry.data), true);
+          continue;
+        }
+        const reader = entry.data.stream().getReader();
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          file.push(next.value, false);
+        }
+        file.push(new Uint8Array(0), true);
+      }
+      archive.end();
+    })().catch(reject);
+  });
+}
+
+// Downloads one note as Markdown, or as a ZIP beside its images and attachments when it references any.
+export async function exportNote(noteId: string, userId: string, progress: (text: string) => void): Promise<void> {
+  let note = userId ? (await loadDrafts(userId)).get(noteId)?.note ?? null : null;
+  if (!note) {
+    try { note = (await api.note(noteId)).note; }
+    catch (error) {
+      note = userId ? await loadMirroredNote(userId, noteId) : null;
+      if (!note) throw error;
+    }
+  }
+  const name = noteExportPath(note.title, new Set()).replace(/^notes\//, '');
+  const refs = storedFileRefs(note.content);
+  if (!refs.length) {
+    saveBlob(name, new Blob([note.content], { type: 'text/markdown;charset=utf-8' }));
+    return;
+  }
+  const stored: Array<{ id: string; path: string; blob: Blob }> = [];
+  const missing: string[] = [];
+  for (const [index, ref] of refs.entries()) {
+    const found = await readNoteFile(ref, userId);
+    if (found) {
+      stored.push({ id: ref.id, path: `attachments/${ref.id.slice(0, 8)}-${safeFilename(found.filename)}`, blob: found.blob });
+    } else {
+      missing.push(ref.id);
+    }
+    progress(`正在打包附件 ${index + 1}/${refs.length}`);
+  }
+  if (missing.length) throw new Error(`有 ${missing.length} 个附件无法获取，已取消下载。`);
+  let content = note.content;
+  // Angle brackets keep names with spaces or parentheses valid as Markdown link targets.
+  for (const entry of stored) {
+    content = content.replaceAll(imagePath(entry.id), `<${entry.path}>`).replaceAll(filePath(entry.id), `<${entry.path}>`);
+  }
+  const blob = await zipNote([
+    { path: name, data: content },
+    ...stored.map((entry) => ({ path: entry.path, data: entry.blob })),
+  ]);
+  saveBlob(`${name.replace(/\.md$/, '')}.zip`, blob);
 }
 
 async function unpack(file: File): Promise<Record<string, Uint8Array>> {
@@ -565,7 +643,7 @@ export async function importArchive(
         typeof entry.path !== 'string' || entry.path.length > 240 || !FILE_PATH.test(entry.path) || !entry.path.startsWith(`files/${entry.id}-`) ||
         !files[entry.path] ||
         typeof entry.filename !== 'string' || !entry.filename || entry.filename.length > 180 || /[/\\\u0000-\u001f]/.test(entry.filename) ||
-        !['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json'].includes(entry.mime) ||
+        !attachmentMimes.concat(['image/jpeg', 'image/png', 'image/webp']).includes(entry.mime) ||
         files[entry.path].length > (entry.mime.startsWith('image/') ? config.maxImageBytes : config.maxAttachmentBytes) ||
         await sha(files[entry.path]) !== entry.sha256) {
       throw new Error('文件缺失、重复或校验失败。');

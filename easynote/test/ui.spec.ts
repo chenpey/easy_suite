@@ -3203,6 +3203,75 @@ test('popout keeps the latest draft when the main view switches notes', async ({
   await popup.close();
 });
 
+// The bytes come from the Blob handed to the browser, because some sandboxes cancel file downloads outright.
+test('note context menu downloads the note as Markdown or as a ZIP with its files', async ({ page }) => {
+  const title = `下载笔记-${randomUUID().slice(0, 6)}`;
+  const body = '# 标题\n\n纯文本正文';
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL);
+    (window as unknown as { __blobs: Blob[] }).__blobs = [];
+    URL.createObjectURL = (blob: Blob) => {
+      (window as unknown as { __blobs: Blob[] }).__blobs.push(blob);
+      return create(blob);
+    };
+  });
+  await page.goto('/');
+  await newNote(page, title, body);
+  await page.locator('.note-row').filter({ hasText: title }).first().click({ button: 'right' });
+  const plainDownload = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: '下载笔记', exact: true }).click();
+  expect((await plainDownload).suggestedFilename()).toBe(`${title}.md`);
+  await expect(page.getByRole('status')).toHaveText('笔记已下载');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __blobs: Blob[] }).__blobs.length)).toBe(1);
+
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00]);
+  const image = await page.locator('.document').screenshot({ type: 'png' });
+  await page.locator('input[type=file][accept^="image"]').setInputFiles({ name: '下载图片.png', mimeType: 'image/png', buffer: image });
+  await expect(page.getByText('图片已插入', { exact: true })).toBeVisible();
+  await page.locator('input[type=file][accept*="application/zip"]').setInputFiles({ name: '打包 附件 (final).zip', mimeType: 'application/zip', buffer: zip });
+  await expect(page.getByText('附件已插入', { exact: true })).toBeVisible();
+  await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
+  await page.locator('.note-row').filter({ hasText: title }).first().click({ button: 'right' });
+  const bundleDownload = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: '下载笔记', exact: true }).click();
+  expect((await bundleDownload).suggestedFilename()).toBe(`${title}.zip`);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __blobs: Blob[] }).__blobs.length)).toBe(2);
+
+  const captured = await page.evaluate(async () => Promise.all((window as unknown as { __blobs: Blob[] }).__blobs
+    .map(async (blob) => ({ type: blob.type, bytes: [...new Uint8Array(await blob.arrayBuffer())] }))));
+  expect(captured[0].type).toContain('text/markdown');
+  expect(Buffer.from(captured[0].bytes).toString()).toBe(body);
+  expect(captured[1].type).toBe('application/zip');
+  const archive = unzipSync(new Uint8Array(captured[1].bytes));
+  expect(Object.keys(archive)).toContain(`${title}.md`);
+  const imagePath = Object.keys(archive).find((path) => path.endsWith('-下载图片.png'));
+  const zipPath = Object.keys(archive).find((path) => path.endsWith('-打包 附件 (final).zip'));
+  expect(imagePath).toMatch(/^attachments\/[0-9a-f]{8}-下载图片\.png$/);
+  expect(zipPath).toMatch(/^attachments\/[0-9a-f]{8}-打包 附件 \(final\)\.zip$/);
+  expect(Buffer.from(archive[zipPath!])).toEqual(zip);
+  expect(Buffer.from(archive[imagePath!])).toEqual(image);
+  const bundled = strFromU8(archive[`${title}.md`]);
+  expect(bundled).toContain(`![下载图片.png](<${imagePath}>)`);
+  expect(bundled).toContain(`[打包 附件 (final).zip](<${zipPath}>)`);
+  expect(bundled).not.toContain('/api/');
+});
+
+test('downloading a note aborts when a referenced file is missing', async ({ page }) => {
+  const missingId = randomUUID();
+  const title = `下载缺件-${randomUUID().slice(0, 6)}`;
+  await page.goto('/');
+  await page.getByRole('button', { name: '新建笔记', exact: true }).first().click();
+  await page.getByRole('textbox', { name: '笔记标题' }).fill(title);
+  await page.getByRole('textbox', { name: '笔记正文' }).fill(`缺件正文\n\n![缺失附件](/api/images/${missingId})`);
+  await expect(page.getByText('待处理草稿', { exact: true })).toBeVisible();
+  let downloads = 0;
+  page.on('download', () => { downloads++; });
+  await page.locator('.note-row').filter({ hasText: title }).first().click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '下载笔记', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('有 1 个附件无法获取，已取消下载。');
+  expect(downloads).toBe(0);
+});
+
 test('draft export offers an explicit incomplete backup when an attachment is missing', async ({ page }) => {
   const missingId = randomUUID();
   await page.goto('/');

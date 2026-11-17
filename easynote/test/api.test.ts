@@ -500,21 +500,61 @@ test('validation rejects malformed notes, missing images and oversized content',
   assert.equal((await save(randomUUID(), 0, { content: `![missing](/api/images/${randomUUID()})` })).status, 409);
 });
 
-test('a note can reference the documented maximum of 80 stored files', async () => {
-  const ids = Array.from({ length: 80 }, () => randomUUID());
+test('a note references at most 80 stored files and 10 attachments within 100 MiB', async () => {
   const now = Date.now();
-  await instance.db.prepare(`INSERT INTO images
-    (id,user_id,filename,mime,size,width,height,sha256,status,created_at,last_used_at)
-    SELECT value,?,value||'.txt','text/plain',1,0,0,?,'ready',?,? FROM json_each(?)`)
-    .bind(testUserId, '0'.repeat(64), now, now, JSON.stringify(ids)).run();
+  const seed = (files: Array<{ id: string; mime: string; extension: string; size?: number }>) =>
+    instance.db.batch(files.map((file) => instance.db.prepare(`INSERT INTO images
+      (id,user_id,filename,mime,size,width,height,sha256,status,created_at,last_used_at)
+      VALUES (?,?,?,?,?,0,0,?,'ready',?,?)`)
+      .bind(file.id, testUserId, `${file.id}${file.extension}`, file.mime, file.size ?? 1, '0'.repeat(64), now, now)));
+  const attachments = Array.from({ length: 10 }, () => ({ id: randomUUID(), mime: 'text/plain', extension: '.txt' }));
+  const images = Array.from({ length: 70 }, () => ({ id: randomUUID(), mime: 'image/png', extension: '.png' }));
+  await seed([...attachments, ...images]);
   const id = randomUUID();
   const response = await save(id, 0, {
-    content: ids.map((fileId) => `[附件](/api/files/${fileId})`).join('\n'),
+    content: [...attachments.map((file) => `[附件](/api/files/${file.id})`),
+      ...images.map((file) => `![](/api/images/${file.id})`)].join('\n'),
   });
   assert.equal(response.status, 201, await response.clone().text());
   const refs = await instance.db.prepare('SELECT COUNT(*) AS count FROM image_refs WHERE note_id=?')
     .bind(id).first<{ count: number }>();
   assert.equal(refs?.count, 80);
+
+  // The eleventh attachment is rejected, and so is a note whose attachments exceed 100 MiB in total.
+  const extra = { id: randomUUID(), mime: 'text/plain', extension: '.txt' };
+  const big = [{ id: randomUUID(), mime: 'text/plain', extension: '.txt', size: 60_000_000 },
+    { id: randomUUID(), mime: 'application/pdf', extension: '.pdf', size: 60_000_000 }];
+  await seed([extra]);
+  await seed(big);
+  const tooMany = await save(randomUUID(), 0, {
+    content: [...attachments, extra].map((file) => `[附件](/api/files/${file.id})`).join('\n'),
+  });
+  assert.equal(tooMany.status, 400, await tooMany.clone().text());
+  const tooLarge = await save(randomUUID(), 0, {
+    content: [...attachments.slice(0, 8), ...big].map((file) => `[附件](/api/files/${file.id})`).join('\n'),
+  });
+  assert.equal(tooLarge.status, 400, await tooLarge.clone().text());
+
+  // Attachments referenced through the image route still count: the cap reads the stored MIME type.
+  const disguised = Array.from({ length: 11 }, () => ({ id: randomUUID(), mime: 'text/plain', extension: '.txt' }));
+  await seed(disguised);
+  const viaImages = await save(randomUUID(), 0, {
+    content: disguised.map((file) => `![](/api/images/${file.id})`).join('\n'),
+  });
+  assert.equal(viaImages.status, 400, await viaImages.clone().text());
+
+  // A note that predates the cap stays editable: only a growing footprint is rejected.
+  const grandfathered = await create({
+    content: attachments.map((file) => `[附件](/api/files/${file.id})`).join('\n'),
+  });
+  const withExtra = `${grandfathered.content}\n[附件](/api/files/${extra.id})`;
+  await instance.db.prepare('UPDATE notes SET content=? WHERE id=?').bind(withExtra, grandfathered.id).run();
+  const pinned = await save(grandfathered.id, grandfathered.revision, { content: withExtra, pinned: true });
+  assert.equal(pinned.status, 200, await pinned.clone().text());
+  const grown = await save(grandfathered.id, grandfathered.revision + 1, {
+    content: `${withExtra}\n[附件](/api/files/${big[0].id})`, pinned: true,
+  });
+  assert.equal(grown.status, 400, await grown.clone().text());
 });
 
 test('private images validate media type, have no public cache, and survive history references', async () => {
@@ -894,6 +934,27 @@ test('private PDF and text attachments are validated and downloaded safely', asy
     body: Buffer.from('not a pdf'),
   });
   assert.equal(invalid.status, 415);
+
+  const zipId = randomUUID();
+  const uploadZip = (id: string, name: string, body: Buffer) => instance.runtime.dispatchFetch(`${origin}/api/files/${id}`, {
+    method: 'PUT',
+    headers: {
+      Origin: origin,
+      Cookie: `__Host-easynote=${testToken}`,
+      'X-CSRF-Token': testCsrf,
+      'Content-Type': 'application/zip',
+      'X-Filename': encodeURIComponent(name),
+    },
+    body,
+  });
+  const archive = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from('\x14\x00\x00\x00\x08\x00')]);
+  assert.equal((await uploadZip(zipId, '打包.zip', archive)).status, 201);
+  const zipDownload = await request(`/api/files/${zipId}`);
+  assert.equal(zipDownload.status, 200);
+  assert.equal(zipDownload.headers.get('Content-Type'), 'application/zip');
+  assert.equal((await uploadZip(randomUUID(), '空.zip', Buffer.concat([Buffer.from('PK'), Buffer.from([0x05, 0x06, 0x00, 0x00])]))).status, 201);
+  assert.equal((await uploadZip(randomUUID(), '伪造.zip', Buffer.from('not a zip'))).status, 415);
+  assert.equal((await uploadZip(randomUUID(), '伪签名.zip', Buffer.concat([Buffer.from('PK'), Buffer.from([0x03, 0x05])]))).status, 415);
 });
 
 test('folders enforce five levels, ownership, and empty-only deletion', async () => {

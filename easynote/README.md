@@ -22,6 +22,8 @@
 - 大纲、反向链接与稳定内部链接 `[[笔记 UUID|显示标题]]`，目标改名后链接依然有效；正文中单独成段写 `[TOC]`（前后留空行）生成可点击的笔记目录，预览、分享与 PDF 一致。
 - KaTeX 行内与块级公式；Pele 渲染流程图、脑图、时序图等图表，跟随深浅主题即时换色；预览或分享页中可将单张图表另存为 SVG / PNG，优先使用 SVG（矢量、清晰、体积小），PNG 便于粘贴到不支持 SVG 的软件。
 - 历史版本：手动保存与 AI 写入生成快照（默认保留 20 份），可查看并恢复；恢复前自动快照当前内容。
+- 私有图片与附件：图片限 JPEG / PNG / WebP，附件限 PDF、Markdown、TXT、CSV、JSON 与 ZIP；ZIP 只校验文件头、不解包，单个附件 20 MiB，单篇最多 10 个附件且合计不超过 100 MiB。
+- 笔记右键「下载笔记」：没有引用文件时直接导出 `<标题>.md`；有图片或附件时打包 `<标题>.zip`，笔记位于包根、文件位于 `attachments/`，正文链接同步改写为包内相对路径，优先复用本机离线缓存。
 - 多端协同：Durable Object WebSocket 推送账号级变更信号，客户端增量拉取权威数据，前台 30 秒轮询兜底。
 
 **组织与检索**
@@ -184,7 +186,7 @@ bash dev.sh
 | `OAUTH_CLIENT_IP_LIMIT` / `OAUTH_CLIENT_GLOBAL_LIMIT` | 20 / 200 | OAuth 客户端注册限流 |
 | `ALLOW_LOCAL_HTTP` | false | 本地命令的环回 HTTP 开关 |
 
-标题 256 字符、标签最多 20 个且每个 40 字符、单篇最多引用 80 个私有文件，这些校验位于 `src/worker/notes.ts`。客户端成功提示时长由 `src/client/feedbackConfig.ts` 的 `SUCCESS_FEEDBACK_DURATION_MS` 控制（默认 2000 毫秒）。
+标题 256 字符、标签最多 20 个且每个 40 字符、单篇最多引用 80 个私有文件（其中附件最多 10 个、合计不超过 100 MiB），这些校验位于 `src/worker/notes.ts`；可上传的附件格式与扩展名集中在 `src/shared/types.ts` 的 `ATTACHMENT_MIMES`。客户端成功提示时长由 `src/client/feedbackConfig.ts` 的 `SUCCESS_FEEDBACK_DURATION_MS` 控制（默认 2000 毫秒）。
 
 ## API
 

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Archive, ArchiveRestore, ArrowLeft, ArrowUpDown, BookOpen, Check, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Clock, Command, Copy, Download, ExternalLink, FileText, Folder as FolderIcon, FolderInput, FolderOpen, FolderPlus, GitMerge, History, ImagePlus, Keyboard, Link2, ListTree, LoaderCircle, LogOut, Maximize2, Menu, Minimize2, Moon, MoreHorizontal, Paperclip, PanelLeftClose, PanelLeftOpen, Pencil, Pin, Plus, Printer, RefreshCw, Save, Search, Settings, Share2, ShieldCheck, Square, Sun, Tag, Tags, Trash2, Upload, Users, WifiOff, X, RotateCcw, PenLine } from 'lucide-react';
-import { MAX_FOLDER_DEPTH, type Folder, type ManagedNoteShare, type Note, type NoteInput, type NoteSummary, type NoteTask, type Session, type SharedNote, type Version } from '../shared/types';
+import { attachmentExtensions, attachmentMimes, MAX_FOLDER_DEPTH, MAX_NOTE_ATTACHMENTS, noteAttachmentIds, type Folder, type ManagedNoteShare, type Note, type NoteInput, type NoteSummary, type NoteTask, type Session, type SharedNote, type Version } from '../shared/types';
 import { compareFolders, mixFolderEntries } from '../shared/order';
 import { api, setSession, setUnauthorizedHandler, uploadAttachment, uploadImage } from './api';
 import { AccountSecurity } from './AccountSecurity';
@@ -23,7 +23,7 @@ import {
   type PdfExportOptions,
 } from './pdf';
 import { useNotebook } from './useNotebook';
-import { exportArchive, exportLocalDrafts, importExternalFiles, MissingCachedFilesError } from './transfer';
+import { exportArchive, exportLocalDrafts, exportNote, importExternalFiles, MissingCachedFilesError } from './transfer';
 import type { NoteConflictField } from './merge';
 import { dateLocale, setUiLanguage, t, translate, uiLanguage } from './i18n';
 
@@ -1028,6 +1028,8 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     pendingInsertion.current = null;
     setUploading(true);
     try {
+      const added = noteAttachmentIds(target.content).length + files.filter((file) => !file.type.startsWith('image/')).length;
+      if (added > MAX_NOTE_ATTACHMENTS) throw new Error(t('单篇笔记最多 {0} 个附件。', MAX_NOTE_ATTACHMENTS));
       for (const file of files) {
         const label = file.name.replace(/[\[\]\\\r\n]/g, '');
         const stored = file.type.startsWith('image/')
@@ -1599,6 +1601,10 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     ensureEditingMode();
     // Focusing keeps the selection the editor already had; jumping to 0 would drop it.
     requestAnimationFrame(() => editor.current?.focus());
+  });
+  const contextDownload = (noteId: string) => void run(async () => {
+    await exportNote(noteId, session.user?.id ?? '', (text) => showNotice(text));
+    showNotice(t('笔记已下载'));
   });
   const contextTrash = (noteId: string, trashed: boolean) => {
     const ids = [noteId];
@@ -2493,7 +2499,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
             pendingInsertion.current = editor.current?.markInsertion() ?? null;
             imageInput.current?.click();
           }}><ImagePlus size={19} /></IconButton>
-          <input hidden ref={attachmentInput} type="file" accept=".pdf,.md,.txt,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json" multiple onChange={(e) => void insertFiles(Array.from(e.target.files ?? []))} />
+          <input hidden ref={attachmentInput} type="file" accept={[...attachmentExtensions.map((extension) => `.${extension}`), ...attachmentMimes].join(',')} multiple onChange={(e) => void insertFiles(Array.from(e.target.files ?? []))} />
           <input hidden ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => void insertFiles(Array.from(e.target.files ?? []))} />
         </footer>
       </> : <div className="workspace-empty"><PenLine size={36} /><h2>{t('你的笔记')}</h2><button className="primary" disabled={book.loading || !!transfer} onClick={() => void createNote()}><Plus size={16} />{t('新建笔记')}</button></div>}
@@ -2905,6 +2911,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
         onContextMenu={(event) => event.preventDefault()}>
         <button role="menuitem" onClick={() => { closeNoteMenu(); contextCopy(noteContextMenu.noteId); }}><Copy size={15} />{t('复制笔记')}</button>
         <button role="menuitem" onClick={() => { closeNoteMenu(); contextEdit(noteContextMenu.noteId); }}><Pencil size={15} />{t('编辑笔记')}</button>
+        <button role="menuitem" onClick={() => { closeNoteMenu(); contextDownload(noteContextMenu.noteId); }}><Download size={15} />{t('下载笔记')}</button>
         <button role="menuitem" onClick={() => { closeNoteMenu(); setMoveNoteIds([noteContextMenu.noteId]); }}><FolderInput size={15} />{t('移动笔记')}</button>
         <button role="menuitem" className="danger" onClick={() => { closeNoteMenu(); contextTrash(noteContextMenu.noteId, noteContextMenu.trashed); }}>
           {noteContextMenu.trashed ? <RotateCcw size={15} /> : <Trash2 size={15} />}{noteContextMenu.trashed ? t('恢复') : t('delete')}

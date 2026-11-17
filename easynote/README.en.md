@@ -22,6 +22,8 @@ A self-hosted Markdown note-taking application for individuals and small teams. 
 - Outline, backlinks and stable internal links `[[note UUID|display title]]` that keep working after the target is renamed; a `[TOC]` paragraph of its own (surrounded by blank lines) builds a clickable note contents that matches preview, shares and PDF.
 - KaTeX inline and block math; Pele renders flowcharts, mind maps, sequence diagrams and more, recolouring instantly with the light/dark theme. Save an individual diagram as SVG or PNG from preview or a share page; prefer SVG for vector clarity and smaller files, or PNG for apps that do not support SVG.
 - Version history: manual saves and AI writes create snapshots (20 kept by default) that can be inspected and restored; restoring snapshots the current content first.
+- Private images and attachments: images are limited to JPEG / PNG / WebP, attachments to PDF, Markdown, TXT, CSV, JSON and ZIP; a ZIP is checked for its file signature only and never unpacked, one attachment is capped at 20 MiB, and a note carries at most 10 attachments totalling 100 MiB.
+- Right-clicking a note offers "Download note": a note without referenced files downloads as `<title>.md`, while a note with images or attachments is packaged as `<title>.zip` with the Markdown at the archive root, the files under `attachments/` and the body links rewritten to those relative paths, reusing the local offline cache first.
 - Multi-device collaboration: a Durable Object WebSocket pushes account-level change signals, the client pulls authoritative data incrementally, and a 30-second foreground poll covers gaps.
 
 **Organisation and search**
@@ -184,7 +186,7 @@ Server parameters are declared in `wrangler.json` under `vars` and validated for
 | `OAUTH_CLIENT_IP_LIMIT` / `OAUTH_CLIENT_GLOBAL_LIMIT` | 20 / 200 | OAuth client registration rate limits |
 | `ALLOW_LOCAL_HTTP` | false | Loopback HTTP switch for local commands |
 
-Titles are limited to 256 characters, tags to 20 per note and 40 characters each, and a note may reference up to 80 private files; those rules live in `src/worker/notes.ts`. The client success-toast duration is `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts` (2000 milliseconds by default).
+Titles are limited to 256 characters, tags to 20 per note and 40 characters each, and a note may reference up to 80 private files (at most 10 of them attachments totalling 100 MiB); those rules live in `src/worker/notes.ts`, while the accepted attachment types and extensions live in `ATTACHMENT_MIMES` in `src/shared/types.ts`. The client success-toast duration is `SUCCESS_FEEDBACK_DURATION_MS` in `src/client/feedbackConfig.ts` (2000 milliseconds by default).
 
 ## API
 

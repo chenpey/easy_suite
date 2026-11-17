@@ -59,12 +59,18 @@ export async function imageRoutes(request: Request, env: Env, user: Identity, pa
       const header = new TextDecoder().decode(bytes.slice(0, 5));
       const trailer = new TextDecoder().decode(bytes.slice(Math.max(0, bytes.length - 2048)));
       if (header !== '%PDF-' || !trailer.includes('%%EOF')) throw new ApiError(415, 'Invalid PDF file.');
+    } else if (mime === 'application/zip') {
+      const [a, b, c, d] = bytes.slice(0, 4);
+      // Only the local-file and empty-archive signatures are accepted; the archive is never unpacked.
+      if (a !== 0x50 || b !== 0x4b || !(c === 0x03 && d === 0x04 || c === 0x05 && d === 0x06)) {
+        throw new ApiError(415, 'Invalid ZIP file.');
+      }
     } else if (textTypes.has(mime)) {
       let text = '';
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw new ApiError(415, 'Text attachments must use UTF-8.'); }
       if (text.includes('\0')) throw new ApiError(415, 'Text attachment contains invalid bytes.');
     } else {
-      throw new ApiError(415, 'Only PDF, Markdown, plain text, CSV and JSON attachments are supported.');
+      throw new ApiError(415, 'Only PDF, Markdown, plain text, CSV, JSON and ZIP attachments are supported.');
     }
   }
   let filename: string;

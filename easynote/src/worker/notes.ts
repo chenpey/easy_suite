@@ -2,6 +2,8 @@ import {
   fingerprintPattern,
   idPattern,
   validPosition,
+  MAX_NOTE_ATTACHMENTS,
+  MAX_NOTE_ATTACHMENT_BYTES,
   noteFingerprint,
   noteInput,
   sameNoteInput,
@@ -53,6 +55,15 @@ async function loadBlank(env: Env, userId: string, folderId: string | null): Pro
 
 const folderExists = (env: Env, userId: string, folderId: string) =>
   env.DB.prepare('SELECT id FROM folders WHERE id=? AND user_id=?').bind(folderId, userId).first();
+
+// Attachment size comes from the stored row, so the URL kind a client writes cannot dodge the per-note caps.
+async function attachmentFootprint(env: Env, userId: string, idsJson: string): Promise<{ count: number; total: number }> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(size),0) AS total FROM images
+    WHERE user_id=? AND status='ready' AND mime NOT LIKE 'image/%'
+    AND id IN (SELECT value FROM json_each(?))`)
+    .bind(userId, idsJson).first<{ count: number; total: number }>();
+  return { count: row?.count ?? 0, total: row?.total ?? 0 };
+}
 
 function isBlank(input: NoteInput): boolean {
   return !input.title && !input.content && !input.tags.length && !input.archived && input.deletedAt === null;
@@ -165,6 +176,18 @@ export async function saveNote(request: Request, env: Env, user: Identity, id: s
   const ids = storedFileIds(normalized.content);
   if (ids.length > 80) throw new ApiError(400, 'A note can reference at most 80 stored files.');
   const idsJson = JSON.stringify(ids);
+  const attachments = ids.length ? await attachmentFootprint(env, user.id, idsJson) : { count: 0, total: 0 };
+  if (attachments.count > MAX_NOTE_ATTACHMENTS || attachments.total > MAX_NOTE_ATTACHMENT_BYTES) {
+    // Notes saved before these caps existed may already exceed them, so only a growing footprint is rejected;
+    // otherwise a metadata-only save (trash, move, tag) would become impossible.
+    const previous = current ? await attachmentFootprint(env, user.id, JSON.stringify(storedFileIds(current.content))) : { count: 0, total: 0 };
+    if (attachments.count > MAX_NOTE_ATTACHMENTS && attachments.count > previous.count) {
+      throw new ApiError(400, `A note can carry at most ${MAX_NOTE_ATTACHMENTS} attachments.`);
+    }
+    if (attachments.total > MAX_NOTE_ATTACHMENT_BYTES && attachments.total > previous.total) {
+      throw new ApiError(400, `A note can carry at most ${MAX_NOTE_ATTACHMENT_BYTES / 1024 ** 2} MiB of attachments.`);
+    }
+  }
   const readyCondition = ids.length
     ? `(SELECT COUNT(*) FROM images WHERE user_id=? AND status='ready'
         AND id IN (SELECT value FROM json_each(?)))=?`

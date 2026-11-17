@@ -15,6 +15,7 @@ import type {
   UserAccount,
   Version,
 } from '../shared/types';
+import { attachmentMime } from '../shared/types';
 
 export class NetworkError extends Error {}
 
@@ -207,11 +208,8 @@ export async function uploadImage(file: File, maxBytes: number, maxPixels: numbe
 }
 
 export async function uploadAttachment(file: File, maxBytes: number): Promise<StoredFile> {
-  const allowed = new Set(['application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json']);
-  const extension = file.name.toLocaleLowerCase().split('.').pop() ?? '';
-  const inferred = ({ pdf: 'application/pdf', md: 'text/markdown', txt: 'text/plain', csv: 'text/csv', json: 'application/json' } as Record<string, string>)[extension];
-  const mime = allowed.has(file.type) ? file.type : inferred;
-  if (!mime) throw new Error('仅支持 PDF、Markdown、TXT、CSV 和 JSON 附件。');
+  const mime = attachmentMime(file.name, file.type);
+  if (!mime) throw new Error('仅支持 PDF、Markdown、TXT、CSV、JSON 和 ZIP 附件。');
   const normalized = file.type === mime ? file : new File([file], file.name, { type: mime });
   if (normalized.size > maxBytes) throw new Error(`附件不能超过 ${Math.round(maxBytes / 1024 ** 2)} MiB。`);
   return uploadStoredFile(normalized, 'file', maxBytes);
