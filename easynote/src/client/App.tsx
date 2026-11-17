@@ -23,6 +23,15 @@ import {
   type PdfExportOptions,
 } from './pdf';
 import { useNotebook } from './useNotebook';
+import {
+  claimPendingShare,
+  composeNote,
+  pendingRecord,
+  readPendingShare,
+  savePendingShare,
+  type SharedContent,
+  type SharedFile,
+} from './shareTarget';
 import { exportArchive, exportLocalDrafts, exportNote, importExternalFiles, MissingCachedFilesError } from './transfer';
 import type { NoteConflictField } from './merge';
 import { dateLocale, setUiLanguage, t, translate, uiLanguage } from './i18n';
@@ -1020,23 +1029,26 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
     ensureEditingMode();
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.note-title')?.focus());
   });
+  // Uploads one file and returns the markdown that references it; shared and picked files share this rule.
+  const storeFile = async (file: File) => {
+    const label = file.name.replace(/[\[\]\\\r\n]/g, '');
+    const stored = file.type.startsWith('image/')
+      ? await uploadImage(file, session.config.maxImageBytes, session.config.maxImagePixels)
+      : await uploadAttachment(file, session.config.maxAttachmentBytes);
+    return file.type.startsWith('image/') ? `![${label}](${stored.url})` : `[${label}](${stored.url})`;
+  };
   const insertFiles = async (files: File[], insertion?: string) => {
     if (!note || uploading) return;
     if (!book.online || session.offline) { book.setError(t('附件需要联网上传。')); return; }
-    const target = note;
     const marker = insertion ?? pendingInsertion.current ?? editor.current?.markInsertion();
     pendingInsertion.current = null;
     setUploading(true);
     try {
-      const added = noteAttachmentIds(target.content).length + files.filter((file) => !file.type.startsWith('image/')).length;
+      const added = noteAttachmentIds(note.content).length + files.filter((file) => !file.type.startsWith('image/')).length;
       if (added > MAX_NOTE_ATTACHMENTS) throw new Error(t('单篇笔记最多 {0} 个附件。', MAX_NOTE_ATTACHMENTS));
       for (const file of files) {
-        const label = file.name.replace(/[\[\]\\\r\n]/g, '');
-        const stored = file.type.startsWith('image/')
-          ? await uploadImage(file, session.config.maxImageBytes, session.config.maxImagePixels)
-          : await uploadAttachment(file, session.config.maxAttachmentBytes);
-        const markdown = file.type.startsWith('image/') ? `![${label}](${stored.url})` : `[${label}](${stored.url})`;
-        if (!marker || !editor.current?.insertAt(marker, markdown)) book.append(target, markdown);
+        const markdown = await storeFile(file);
+        if (!marker || !editor.current?.insertAt(marker, markdown)) book.append(note, markdown);
       }
       const onlyImages = files.every((file) => file.type.startsWith('image/'));
       showNotice(onlyImages ? t('图片已插入') : files.length === 1 ? t('附件已插入') : t('已插入 {0} 个文件', files.length));
@@ -1048,6 +1060,82 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       if (attachmentInput.current) attachmentInput.current.value = '';
     }
   };
+  // A system share waits in the service worker's local slot until one app start imports it; the note is
+  // created as a normal draft, so the user's own autosave saves it like any other edit.
+  // idle → running while the slot is read, done once this start has claimed it; connectivity changes can
+  // re-run the effect, and a second concurrent read must never claim or notify twice.
+  const shareImport = useRef<'idle' | 'running' | 'done'>('idle');
+  useEffect(() => {
+    if (shareImport.current !== 'idle' || book.loading) return;
+    shareImport.current = 'running';
+    void (async () => {
+      // Peeking only decides whether this launch may import at all: files need the network, so they wait
+      // for the next online start instead of being dropped. Claiming below is what hands the share over.
+      const pending = await readPendingShare();
+      // Only the device or the cached session being offline postpones a share with files. The library's own
+      // online flag flips after any failed request, and a retried upload is a better answer than a deferral.
+      if (pending.status === 'ready' && pending.files.length && (session.offline || !navigator.onLine)) {
+        shareImport.current = 'idle';
+        showNotice(t('share_target_offline_pending'));
+        return;
+      }
+      // One readwrite transaction, so a second tab or window can never import the same share twice.
+      const claimed = await claimPendingShare();
+      shareImport.current = 'done';
+      if (claimed.status === 'empty') return;
+      if (claimed.status !== 'ready') {
+        if (claimed.status === 'expired') showNotice(t('share_target_expired'));
+        return;
+      }
+      const shared = composeNote(claimed);
+      // The claimed share exists only in this closure, so anything EasyNote could not store goes back to the
+      // slot for the next start. Files upload before the note exists, so a failed import leaves no empty note.
+      const restore = (content: SharedContent) => savePendingShare(pendingRecord(content, claimed.expiresAt));
+      const markdown: string[] = [];
+      const failed: SharedFile[] = [];
+      let skipped = claimed.skipped;
+      let attachments = 0;
+      if (claimed.files.length) setUploading(true);
+      try {
+        for (const entry of claimed.files) {
+          const file = new File([entry.blob], entry.name, { type: entry.type, lastModified: entry.lastModified });
+          const isImage = file.type.startsWith('image/');
+          // A file EasyNote can never store would otherwise be retried on every start until the slot expires,
+          // and it must not use up one of this note's attachment slots either.
+          if (file.size > (isImage ? session.config.maxImageBytes : session.config.maxAttachmentBytes)) { skipped++; continue; }
+          if (!isImage) {
+            attachments += 1;
+            if (attachments > MAX_NOTE_ATTACHMENTS) { skipped++; continue; }
+          }
+          try { markdown.push(await storeFile(file)); } catch { failed.push(entry); }
+        }
+      } finally { setUploading(false); }
+      // Only the files wait for another try; this share's text is imported right here.
+      if (failed.length) await restore({ title: '', text: '', url: '', files: failed, skipped: 0 });
+      const content = [shared.content, ...markdown].filter(Boolean).join('\n\n');
+      if (shared.title || content) {
+        try {
+          await book.create({ folderId: book.folder, title: shared.title, content });
+        } catch (error) {
+          await restore({ title: claimed.title, text: claimed.text, url: claimed.url, files: claimed.files, skipped });
+          throw error;
+        }
+        setMobileNoteActions(false);
+        setMobileNote(true);
+        ensureEditingMode();
+      }
+      showNotice([
+        shared.title || content ? t('share_target_received') : '',
+        skipped ? t('share_target_files_skipped', skipped) : '',
+        failed.length ? t('share_target_files_failed', failed.length) : '',
+      ].filter(Boolean).join(' '));
+    })().catch((error: unknown) => {
+      shareImport.current = 'done';
+      book.setError(String(error));
+    });
+    // Only library readiness and connectivity decide when a staged share may be imported.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book.loading, book.online, session.offline]);
   const chooseView = (view: string, tag = '') => {
     book.setView(view);
     book.setTag(tag);
@@ -2552,6 +2640,7 @@ function Notebook({ session, installApp, logout }: { session: Session; installAp
       <div className="mobile-action-list">
         <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void syncNow(); }}><Save size={18} />{t('sync_and_save_version')}</button>
         <button disabled={disabled} onClick={() => { setMobileNoteActions(false); void contextCopy(note.id); }}><Copy size={18} />{t('复制笔记')}</button>
+        <button disabled={disabled} onClick={() => { setMobileNoteActions(false); contextDownload(note.id); }}><Download size={18} />{t('下载笔记')}</button>
         <button disabled={disabled || !!note.deletedAt} onClick={() => { setMobileNoteActions(false); setMoveNoteIds([note.id]); }}><FolderInput size={18} />{t('移动笔记')}</button>
         <button disabled={!!note.deletedAt || !!transfer} onClick={() => { setMobileNoteActions(false); beginLinkInsertion(); }}><Link2 size={18} />{t('insert_internal_link')}</button>
         <button onClick={() => { setMobileNoteActions(false); setInspector((value) => !value); }}><ListTree size={18} />{t('outline_and_links')}</button>

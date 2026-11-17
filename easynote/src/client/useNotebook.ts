@@ -708,7 +708,10 @@ export function useNotebook(session: Session) {
   };
 
   const create = (input: Partial<NoteInput> = {}): Promise<Note> => {
-    if (createInFlight.current) return createInFlight.current;
+    // Only a plain "new note" request joins a create already in flight. A caller that brings its own
+    // content (a received system share) must get its own note, never that request's result.
+    const onlyFolder = Object.keys(input).every((key) => key === 'folderId');
+    if (onlyFolder && createInFlight.current) return createInFlight.current;
     const operation = (async () => {
       // Blank notes are reused per folder only, so the new note keeps the requested placement.
       const wantedFolder = input.folderId ?? null;
@@ -718,7 +721,7 @@ export function useNotebook(session: Session) {
         setView('all'); setQuery(''); setTag(''); show(value);
         return value;
       };
-      if (Object.keys(input).every((key) => key === 'folderId')) {
+      if (onlyFolder) {
         const fullNotes = [
           ...mirror.current.values(),
           ...(current.current ? [current.current] : []),
@@ -750,10 +753,14 @@ export function useNotebook(session: Session) {
       edit({}, newNote);
       return newNote;
     })();
-    createInFlight.current = operation;
-    void operation.finally(() => {
-      if (createInFlight.current === operation) createInFlight.current = null;
-    }).catch(() => undefined);
+    // Only plain new-note requests are deduplicated: a later click must never receive a note another
+    // caller created with its own content.
+    if (onlyFolder) {
+      createInFlight.current = operation;
+      void operation.finally(() => {
+        if (createInFlight.current === operation) createInFlight.current = null;
+      }).catch(() => undefined);
+    }
     return operation;
   };
 

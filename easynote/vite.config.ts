@@ -14,6 +14,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'script-defer',
       includeAssets: ['apple-touch-icon.png'],
+      // Receiving a system share means intercepting the share target POST, which the generated worker
+      // cannot do, so the worker is written by hand in src/client/sw.ts.
+      strategies: 'injectManifest',
+      srcDir: 'src/client',
+      filename: 'sw.ts',
       manifest: {
         id: '/',
         name: 'EasyNote',
@@ -26,16 +31,29 @@ export default defineConfig({
         background_color: '#ffffff',
         theme_color: '#0071e3',
         categories: ['productivity'],
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [{
+              name: 'files',
+              accept: ['image/jpeg', 'image/png', 'image/webp', 'text/plain', 'text/markdown'],
+            }],
+          },
+        },
         icons: [
           { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
-        // Explicit injection disables the plugin's autoUpdate defaults; preserve immediate takeover.
-        skipWaiting: true,
-        clientsClaim: true,
+      injectManifest: {
+        // public/registerSW.js registers the worker as a classic script.
+        rollupFormat: 'iife',
         globPatterns: [
           '**/*.{html,css,svg}',
           'registerSW.js',
@@ -44,23 +62,6 @@ export default defineConfig({
           'assets/*.js',
         ],
         globIgnores: ['assets/pdfmake-*.js', 'assets/pdfjs-*.js'],
-        runtimeCaching: [{
-          urlPattern: /\/(?:assets\/(?:pdfmake|pdfjs|pdf\.worker)[^/]*\.(?:js|mjs)|fonts\/NotoSansSC-(?:Regular|Bold)\.otf)$/,
-          handler: 'CacheFirst',
-          options: {
-            cacheName: 'easynote-pdf-v1',
-            cacheableResponse: { statuses: [0, 200] },
-          },
-        }],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [
-          /^\/api\//,
-          /^\/share\//,
-          /^\/oauth\//,
-          /^\/\.well-known\//,
-          /^\/mcp/,
-        ],
-        cleanupOutdatedCaches: true,
       },
     }),
   ],

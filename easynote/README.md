@@ -9,10 +9,10 @@
 ## 核心能力
 
 - **笔记与编辑**：CodeMirror 6 支持「源码 / 即时渲染 / 阅读」三态（默认即时渲染），停止输入 500 ms 自动保存；支持置顶、归档、标签、回收站、大纲、反向链接、内部链接 `[[UUID|标题]]`、`[TOC]` 目录、KaTeX 公式、Mermaid/Pele 图表（支持另存 SVG/PNG）、版本历史（默认保留 20 份）及多端 WebSocket 增量同步。
-- **图片与附件**：支持私有图片（JPEG / PNG / WebP，最大 8 MiB）与附件（PDF / Markdown / TXT / CSV / JSON / ZIP，单个最大 20 MiB，单篇最多 10 个且合计不超过 100 MiB），右键「下载笔记」可导出 `.md` 或含 `attachments/` 的 `.zip`。
+- **图片与附件**：支持私有图片（JPEG / PNG / WebP，最大 8 MiB）与附件（PDF / Markdown / TXT / CSV / JSON / ZIP，单个最大 20 MiB，单篇最多 10 个且合计不超过 100 MiB），右键菜单与移动端「笔记操作」里的「下载笔记」可导出 `.md` 或含 `attachments/` 的 `.zip`。
 - **组织与检索**：支持最多 5 层目录、拖放及 `Alt+↑/↓` 手动排序、全局搜索 `Cmd/Ctrl+K`、命令面板 `Cmd/Ctrl+O` 与任务中心（聚合未完成 TODO）。
 - **分享与 AI 接入**：支持 1 小时至永久的只读分享链接；内置 `/mcp` 远程 Streamable HTTP MCP 与 OAuth（PKCE S256），支持 Codex、ChatGPT 等客户端检索与受控写入。
-- **离线与 PWA**：支持离线冷启动与独立窗口；IndexedDB 离线笔记库自动镜像正文与私有文件，恢复网络后按 `operationId` 幂等提交与三方合并。
+- **离线与 PWA**：支持离线冷启动与独立窗口；IndexedDB 离线笔记库自动镜像正文与私有文件，恢复网络后按 `operationId` 幂等提交与三方合并。安装后在 Android / Chrome 的系统分享面板可直接分享文字、网页链接与图片：服务端只接收正文与标题，分享内容先暂存在浏览器本地，打开 EasyNote 后落成一篇新笔记（链接存为 Markdown 链接，图片按普通上传插入）；带文件的分享在离线时保留到下次联网打开，iOS / Safari 不支持接收系统分享。
 - **账号与导入导出**：支持多用户隔离、管理员审批注册、恢复代码、ZIP v3 / Obsidian / Markdown 导入导出、逐页预览 PDF 导出、`backup.sh` 灾备与 `restore.sh` 恢复。
 
 ## 架构

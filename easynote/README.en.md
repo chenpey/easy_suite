@@ -9,10 +9,10 @@ A self-hosted Markdown note application for individuals and small teams. The fro
 ## Key Capabilities
 
 - **Writing & Editing**: CodeMirror 6 with three modes (Source / Live Preview / Reading, Live Preview by default), 500 ms autosave, pinning, archiving, tags, trash, outline, backlinks, stable internal links `[[UUID|Title]]`, `[TOC]`, KaTeX math, Mermaid/Pele diagrams (exportable as SVG/PNG), version history (20 snapshots kept by default), and multi-device WebSocket sync.
-- **Images & Attachments**: Private images (JPEG / PNG / WebP, up to 8 MiB) and attachments (PDF / Markdown / TXT / CSV / JSON / ZIP, up to 20 MiB each, 10 files / 100 MiB per note); right-click "Download Note" exports `.md` or `.zip` with `attachments/`.
+- **Images & Attachments**: Private images (JPEG / PNG / WebP, up to 8 MiB) and attachments (PDF / Markdown / TXT / CSV / JSON / ZIP, up to 20 MiB each, 10 files / 100 MiB per note); "Download Note" in the right-click menu or the mobile note actions exports `.md` or `.zip` with `attachments/`.
 - **Organization & Search**: Up to 5 folder levels, drag-and-drop and `Alt+↑/↓` manual ordering, global search (`Cmd/Ctrl+K`), quick open (`Cmd/Ctrl+O`), and Task Center (aggregating open TODOs).
 - **Sharing & AI Integration**: Time-limited (1 hour to permanent) read-only share links; remote Streamable HTTP MCP at `/mcp` with OAuth (PKCE S256) for Codex, ChatGPT, and other MCP clients.
-- **Offline & PWA**: Standalone installable PWA with cold-start offline support; per-account IndexedDB mirrors notes and private files for offline editing and idempotent three-way merge upon reconnect.
+- **Offline & PWA**: Standalone installable PWA with cold-start offline support; per-account IndexedDB mirrors notes and private files for offline editing and idempotent three-way merge upon reconnect. Once installed, Android / Chrome can share text, page links, and images straight from the system share sheet: the share is staged in browser storage, then saved as a new note when EasyNote opens (links become Markdown links, images go through the normal upload). Shares that carry files wait until the next online start; iOS / Safari cannot receive system shares.
 - **Accounts & Ops**: Multi-tenant isolation, admin-approved registration, recovery codes, ZIP v3 / Obsidian / Markdown import & export, paginated PDF export, `backup.sh`, and `restore.sh`.
 
 ## Architecture

@@ -372,7 +372,13 @@ test('PWA metadata, install action, app-shell cache and API exclusion work', asy
     name: 'EasyNote', start_url: '/', scope: '/', display: 'standalone',
     theme_color: '#0071e3', background_color: '#ffffff',
   });
-  expect(manifest).not.toHaveProperty('share_target');
+  expect(manifest.share_target).toEqual({
+    action: '/share-target', method: 'POST', enctype: 'multipart/form-data',
+    params: {
+      title: 'title', text: 'text', url: 'url',
+      files: [{ name: 'files', accept: ['image/jpeg', 'image/png', 'image/webp', 'text/plain', 'text/markdown'] }],
+    },
+  });
   expect(manifest.icons).toEqual(expect.arrayContaining([
     expect.objectContaining({ sizes: '192x192', type: 'image/png', purpose: 'any' }),
     expect.objectContaining({ sizes: '512x512', type: 'image/png', purpose: 'any' }),
@@ -420,6 +426,225 @@ test('PWA metadata, install action, app-shell cache and API exclusion work', asy
   await expect(page.getByRole('heading', { name: 'EasyNote' })).toBeVisible();
   await context.setOffline(false);
 });
+
+test('system share of a page link becomes a new note and reports unsupported files', async ({ page }) => {
+  await page.goto('/');
+  const title = `分享文章-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, {
+    title,
+    url: 'https://example.com/article',
+    files: [{ name: 'share.pdf', type: 'application/pdf', bytes: [37, 80, 68, 70] }],
+  });
+  await expect(page.getByRole('textbox', { name: '笔记标题' })).toHaveValue(title);
+  await expectNotice(page, '已接收分享内容并新建笔记。 已跳过 1 个不支持的文件。');
+  await expect.poll(async () => {
+    const list = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+    return list.notes.length;
+  }).toBe(1);
+  const list = await (await page.request.get(`/api/notes?q=${encodeURIComponent(title)}`)).json();
+  const note = await (await page.request.get(`/api/notes/${list.notes[0].id}`)).json();
+  expect(note.note.content).toBe(`[${title}](https://example.com/article)`);
+});
+
+test('system share of an image uploads it into the new note', async ({ page }) => {
+  await page.goto('/');
+  const marker = `分享图片-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, { text: marker, files: [{ name: '分享图片.png', type: 'image/png', bytes: await pngBytes(page) }] });
+  // The text is autosaved first; the uploaded image reaches the same note afterwards.
+  await expect.poll(async () => await noteContent(page, marker), { timeout: 20_000 }).toContain('/api/images/');
+  const content = await noteContent(page, marker);
+  expect(content.startsWith(`${marker}\n\n![`)).toBe(true);
+  const image = /!\[[^\]]*\]\(\/api\/images\/([0-9a-f-]{36})\)/.exec(content);
+  expect(image).not.toBeNull();
+  const stored = await page.request.get(`/api/images/${image?.[1]}`);
+  expect(stored.status()).toBe(200);
+  expect(stored.headers()['content-type']).toContain('image/png');
+});
+
+test('shares without a payload fall back to the explanation page and expired shares notify once', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  // A scripted POST is not a share navigation, so the service worker explains it instead of staging it.
+  const fallback = await page.evaluate(() => fetch('/share-target', { method: 'POST', body: 'text=nothing' })
+    .then((response) => response.text()));
+  expect(fallback).toContain('无法接收分享');
+  // A plain navigation carries no share either, and this page runs no app that could claim one.
+  await page.goto('/share-target');
+  await expect(page.getByRole('heading', { name: /无法接收分享/ })).toBeVisible();
+
+  const marker = `过期分享-${randomUUID().slice(0, 6)}`;
+  // The 10-minute window is real time, so the only way to reach the expired branch is to stage an old
+  // record in the same shape src/client/shareTarget.ts writes, while no app instance is running.
+  await page.evaluate(async (text) => {
+    const db: IDBDatabase = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('easynote-share-target', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('pending');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('pending', 'readwrite');
+      transaction.objectStore('pending').put({
+        state: 'pending', expiresAt: Date.now() - 1, title: '', text, url: '', files: [], skipped: 0,
+      }, 'pending');
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+    db.close();
+  }, marker);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expectNotice(page, '分享内容已过期（有效期为 10 分钟），请从来源应用重新分享。');
+  await expect(page.getByText(marker, { exact: false })).toHaveCount(0);
+  // The expired share is gone, so a later start stays silent.
+  await page.reload();
+  await expect(page.getByRole('button', { name: '新建笔记', exact: true }).first()).toBeVisible();
+  await expect(page.getByText('分享内容已过期（有效期为 10 分钟），请从来源应用重新分享。', { exact: true })).toBeHidden();
+});
+
+test('a shared file that cannot be stored is reported and kept for another try without an empty note', async ({ page }) => {
+  await page.goto('/');
+  const count = async () => (await (await page.request.get('/api/notes?view=all')).json()).notes.length;
+  const before = await count();
+  // Declared as PNG with bytes the server rejects, so the upload fails for a reason a retry cannot fix.
+  await submitShare(page, { files: [{ name: 'broken.png', type: 'image/png', bytes: [137, 80, 78, 71] }] });
+  await expectNotice(page, '有 1 个文件上传失败。');
+  expect(await count()).toBe(before);
+  // The file is offered again on the next start, so the share is not lost with the failed attempt.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectNotice(page, '有 1 个文件上传失败。');
+});
+
+test('a text-only share is imported even while offline', async ({ page, context }) => {
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
+  const marker = `离线文本-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, { text: marker });
+  await expectNotice(page, '已接收分享内容并新建笔记。');
+  await expect(page.getByRole('textbox', { name: '笔记正文' })).toContainText(marker);
+  await context.setOffline(false);
+});
+
+test('a share with files waits for the next online start instead of dropping the file', async ({ page, context }) => {
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
+  const marker = `离线分享-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, { text: marker, files: [{ name: '离线图片.png', type: 'image/png', bytes: await pngBytes(page) }] });
+  await expectNotice(page, '已接收分享内容，联网后打开 EasyNote 会自动导入为新笔记。');
+  await context.setOffline(false);
+  await page.reload();
+  await expect.poll(async () => (await noteContent(page, marker)).includes('/api/images/'), { timeout: 20_000 }).toBe(true);
+});
+
+test('a shared link that is not http(s) stays plain text and an over-long title is cut cleanly', async ({ page }) => {
+  await page.goto('/');
+  const marker = `危险链接-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, { title: marker, url: 'javascript:alert(1)' });
+  await expect.poll(async () => await noteContent(page, marker)).toContain('javascript:alert(1)');
+  // No Markdown link is generated, so the renderer never receives a javascript: target from a share.
+  expect(await noteContent(page, marker)).toBe('javascript:alert(1)');
+
+  // The server caps titles at 256 UTF-16 code units; the emoji straddles that cut and must be dropped whole.
+  const marker2 = `标题截断-${randomUUID().slice(0, 6)}`;
+  await submitShare(page, { title: `${'a'.repeat(255)}😀b`, text: marker2 });
+  await expect.poll(async () => {
+    const list = await (await page.request.get(`/api/notes?q=${encodeURIComponent(marker2)}`)).json();
+    return list.notes.length ? list.notes[0].title : '';
+  }).toBe('a'.repeat(255));
+});
+
+test('an oversized shared attachment does not use up the attachment slots of the note', async ({ page }) => {
+  await page.goto('/');
+  const marker = `附件配额-${randomUUID().slice(0, 6)}`;
+  // One file over the 20 MiB attachment limit ahead of ten files that fit into the ten attachment slots.
+  await submitShare(page, {
+    text: marker,
+    files: [
+      { name: 'too-big.txt', type: 'text/plain', size: 21 * 1024 * 1024 },
+      ...Array.from({ length: 10 }, (_, index) => ({ name: `note-${index}.txt`, type: 'text/plain', bytes: [104, 105] })),
+    ],
+  });
+  // Ten attachments upload one by one, so the note needs longer than the default poll timeout to settle.
+  await expect.poll(async () => (await noteContent(page, marker)).match(/\]\(\/api\/files\//g)?.length ?? 0, { timeout: 30_000 })
+    .toBe(10);
+  expect(await noteContent(page, marker)).not.toContain('too-big.txt');
+  await expectNotice(page, '已跳过 1 个不支持的文件。');
+});
+
+// A system share arrives as a multipart form POST navigation, which only the service worker can answer.
+async function submitShare(page: Page, fields: {
+  title?: string;
+  text?: string;
+  url?: string;
+  files?: { name: string; type: string; bytes?: number[]; size?: number }[];
+}) {
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await page.evaluate((data) => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.enctype = 'multipart/form-data';
+    form.action = '/share-target';
+    for (const name of ['title', 'text', 'url'] as const) {
+      const value = data[name];
+      if (!value) continue;
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+    if (data.files?.length) {
+      const transfer = new DataTransfer();
+      for (const file of data.files) {
+        const bytes = new Uint8Array(file.size ?? file.bytes!.length);
+        if (file.bytes) bytes.set(file.bytes);
+        transfer.items.add(new File([bytes], file.name, { type: file.type }));
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.name = 'files';
+      input.multiple = true;
+      input.files = transfer.files;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    // The submit navigates away and destroys this context.
+    form.submit();
+  }, fields).catch(() => undefined);
+}
+
+// The success toast is gone two seconds after the import, and a reload can resolve after it faded, so the
+// notice is polled by text instead of a visibility snapshot.
+async function expectNotice(page: Page, text: string) {
+  await expect.poll(async () => {
+    try {
+      return (await page.locator('[role=status]').allTextContents()).join(' | ');
+    } catch {
+      // The navigation that carries a share can still be tearing down the page being polled.
+      return '';
+    }
+  }, { timeout: 15_000 }).toContain(text);
+}
+
+async function noteContent(page: Page, query: string) {
+  const list = await (await page.request.get(`/api/notes?q=${encodeURIComponent(query)}`)).json();
+  if (list.notes.length !== 1) return '';
+  return (await (await page.request.get(`/api/notes/${list.notes[0].id}`)).json()).note.content as string;
+}
+
+async function pngBytes(page: Page) {
+  return await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 6;
+    canvas.height = 6;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#0071e3';
+    context.fillRect(0, 0, 6, 6);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    return Array.from(new Uint8Array(await blob!.arrayBuffer()));
+  });
+}
 
 test('offline library is enabled by default and an explicit opt-out persists', async ({ page }) => {
   await page.goto('/');
@@ -1610,6 +1835,9 @@ test('mobile navigation, pin, archive, trash and restore remain usable without o
   const syncVersion = actions.getByRole('button', { name: '同步并更新历史版本', exact: true });
   await expect(syncVersion).toBeVisible();
   expect(await syncVersion.evaluate((button) => button.scrollWidth <= button.clientWidth)).toBe(true);
+  const download = actions.getByRole('button', { name: '下载笔记', exact: true });
+  await expect(download).toBeVisible();
+  await expect(download).toBeEnabled();
   await actions.screenshot({ path: 'test-results/mobile-note-actions.png' });
   await actions.getByRole('button', { name: '置顶', exact: true }).click();
   await expect(page.getByText('已保存到云端', { exact: true })).toBeVisible();
@@ -6970,3 +7198,4 @@ test('account security changes the password and logs out every device', async ({
   await page.getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('heading', { name: '全部笔记' })).toBeVisible();
 });
+
