@@ -2,6 +2,12 @@
 
 Full release history. The latest release is summarized in the [README](README.md).
 
+## 1.6.1 (2026-11-17)
+
+- Fixed broken links in exported backups when a filename contains spaces or parentheses: `exportArchive` and `exportLocalDrafts` now write pointy-bracket destinations (`<../files/<id>-name>`, `<../missing/<id>>`), so the extracted Markdown opens in any reader.
+- Backup import accepts both the bracketed form and the bare relative paths written before 1.6.0, restoring either to `/api/files|images/<id>` without leaving angle brackets in the note body.
+- Added regressions for bracketed image and attachment links plus both archive generations on import; note download and attachment limits are unchanged and no database migration is required.
+
 ## 1.6.0 (2026-11-17)
 
 - Attachments now accept ZIP: uploads are checked for the PK signature (empty archives included), the server never unpacks them, and reads keep `Content-Disposition: attachment` with `nosniff`; Markdown import and backup restore accept ZIP as well.
